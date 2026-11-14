@@ -1,0 +1,18 @@
+{
+  "onedrive_remote": "onedrive:",
+  "rclone_config": "/secrets/rclone.conf",
+  "mirror_dir": "/data/mirror",
+  "repository_dir": "/data/restic-repo",
+  "password_file": "/secrets/restic-password",
+  "lock_file": "/secrets/backup.lock",
+  "log_file": null,
+  "required_mountpoint": "/data",
+  "keep_daily": 14,
+  "keep_weekly": 8,
+  "keep_monthly": 12,
+  "max_delete": 100,
+  "transfers": 4,
+  "checkers": 8,
+  "allow_empty_source": false
+}
+

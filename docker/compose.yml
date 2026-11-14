@@ -1,0 +1,18 @@
+services:
+  onedrive-backup:
+    image: ${ONEDRIVE_IMAGE:-vasilyvz/onedrive-backup:0.2.0}
+    container_name: onedrive-backup
+    restart: unless-stopped
+    user: "1000:1000"
+    ports:
+      - "${ONEDRIVE_PORT:-8050}:8050"
+    volumes:
+      - /etc/onedrive-backup:/config:ro
+      - /srv/backup/onedrive:/data:rw
+    networks:
+      smart-assistant:
+        aliases: [onedrive-backup]
+    security_opt: [no-new-privileges:true]
+networks:
+  smart-assistant:
+    external: true

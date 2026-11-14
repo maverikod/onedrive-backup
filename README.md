@@ -122,3 +122,68 @@ sh -n packaging/postinst packaging/prerm packaging/postrm packaging/onedrive-bac
 ```
 
 Интеграционные тесты используют поддельные `rclone`/`restic`, не требуют Microsoft 365 и не затрагивают настоящий сервер бэкапов. Проверка пакета включает `dpkg-deb --info`, `--contents`, распаковку пакета и smoke-тест скрипта.
+
+## MCP Proxy Adapter API (production only, 0.2.0)
+
+The production image uses `mcp-proxy-adapter` with mandatory mutual TLS, server-side
+CA and CRL verification, and listens on internal port **8050**. The host wrapper
+maps port **8050:8050** and connects the service to the `smart-assistant` Docker
+network, using the DNS alias `onedrive-backup`. It registers with MCP Proxy
+at `https://mcp-proxy:3004/register` under server id `onedrive-backup-vvz`.
+There is no development instance.
+
+Two bind mounts are used:
+- `/etc/onedrive-backup:/config:ro` — configuration and mTLS certificates.
+- `/srv/backup/onedrive:/data:rw` — mirror, restic repository and staged exports.
+
+For deployment, create a **project-root** `.env` with Docker Hub credentials.
+`docker/deploy.sh` stores a root-only copy in
+`/var/lib/onedrive-backup/credentials/.env`, using mode 0600, and writes only
+`ONEDRIVE_CREDENTIALS_FILE=/var/lib/onedrive-backup/credentials/.env`
+plus public run parameters in `/etc/default/onedrive-backup`. The image and
+the Git repository never contain the credentials.
+
+The **operator must provide**:
+`/etc/onedrive-backup/certs/server.crt`,
+`/etc/onedrive-backup/certs/server.key`,
+`/etc/onedrive-backup/certs/ca.crt` and
+`/etc/onedrive-backup/certs/ca.crl`.
+Client certificates and keys are supplied to the Python client separately.
+Server startup fails closed when certificates or the backup mount are absent.
+
+Production deployment after `./build.sh`:
+
+```bash
+sudo bash docker/deploy.sh
+sudo systemctl status onedrive-backup-api.service
+sudo onedrive-backup-docker ports
+```
+
+### Read-only backup API
+
+- `GET /api/v1/health` — service liveness.
+- `GET /api/v1/snapshots?limit=100` — available restic snapshots.
+- `GET /api/v1/snapshots/{snapshot_id}/files?prefix=&offset=0&limit=1000` — file tree.
+- `POST /api/v1/exports` — stage one file or an entire snapshot archive (JSON body
+  `{"snapshot_id":"...","file_path":"Documents/file.txt"}`; omit file_path for archive).
+- `GET /api/v1/exports/{export_id}/status` — size, digest, filename and expiration.
+- `GET /api/v1/exports/{export_id}` — streamed download, HTTP range support.
+- `DELETE /api/v1/exports/{export_id}` — remove decrypted export file.
+
+JSON-RPC command equivalents: `backup_snapshots`, `backup_list_files`,
+`backup_prepare_download`, `backup_download_status`, `backup_delete_export`.
+The generic adapter filesystem-transfer and administrative RPC commands are not
+exposed to clients. An export is bounded by size and expires after 24 hours.
+The client downloads into a temporary file, verifies SHA-256, and renames
+atomically.
+
+The separately published (when PyPI credentials are present)
+`onedrive-backup-client` package implements the **entire backup REST API**.
+Run `onedrive-backup-client --help` for the CLI (commands: health, snapshots,
+files, prepare, status, fetch, delete, download). Its `client.json` specifies
+the server URL, CA, CRL, client certificate and key. The client validates TLS
+hostnames and certificate revocation.
+
+Microsoft 365 authorization is intentionally deferred. The backup
+service can be deployed and tested for API connectivity without Microsoft
+credentials, but listing real restic snapshots requires an initialized repo.

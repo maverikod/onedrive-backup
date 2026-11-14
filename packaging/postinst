@@ -1,19 +1,30 @@
 #!/bin/sh
-set -e
-case "$1" in
-  configure)
-    if ! id -u onedrive-backup >/dev/null 2>&1; then
-      adduser --system --group --home /var/lib/onedrive-backup --no-create-home --shell /usr/sbin/nologin onedrive-backup
+set -eu
+if [ "$1" = configure ]; then
+  if ! id onedrive-backup >/dev/null 2>&1; then
+    adduser --system --group --home /var/lib/onedrive-backup \
+      --no-create-home --shell /usr/sbin/nologin onedrive-backup
+  fi
+  install -d -m 0700 -o onedrive-backup -g onedrive-backup \
+    /var/lib/onedrive-backup /var/lib/onedrive-backup/secrets
+  install -d -m 0700 -o root -g root /var/lib/onedrive-backup/credentials
+  install -d -m 0750 -o root -g onedrive-backup \
+    /etc/onedrive-backup /etc/onedrive-backup/certs
+  for f in /etc/onedrive-backup/server.json /etc/onedrive-backup/backup.json; do
+    if [ -f "$f" ]; then
+      chown root:onedrive-backup "$f"
+      chmod 0640 "$f"
     fi
-    install -d -m 0700 -o onedrive-backup -g onedrive-backup /var/lib/onedrive-backup
-    if [ -f /etc/onedrive-backup/config.json ]; then
-      chown root:onedrive-backup /etc/onedrive-backup/config.json
-      chmod 0640 /etc/onedrive-backup/config.json
-    fi
-    if [ -d /run/systemd/system ]; then
-      systemctl daemon-reload || true
-    fi
-    # Do NOT enable/start timer before OAuth, restic password, mount and init.
-    ;;
-esac
+  done
+  if [ -f /etc/default/onedrive-backup ]; then
+    chmod 0644 /etc/default/onedrive-backup
+    chown root:root /etc/default/onedrive-backup
+  fi
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+  fi
+  # Intentional: service/timer stay disabled pending production CA/CRL,
+  # server certificate, client certificate and data mount.
+fi
 exit 0
+

@@ -1,0 +1,73 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8050,
+    "protocol": "mtls",
+    "servername": "onedrive-backup",
+    "advertised_host": "onedrive-backup",
+    "ssl": {
+      "cert": "/config/certs/server.crt",
+      "key": "/config/certs/server.key",
+      "ca": "/config/certs/ca.crt",
+      "crl": "/config/certs/ca.crl",
+      "dnscheck": false,
+      "check_hostname": null
+    },
+    "log_dir": "/data/logs",
+    "debug": false,
+    "log_level": "INFO"
+  },
+  "client": {
+    "enabled": false,
+    "protocol": "http",
+    "ssl": null
+  },
+  "registration": {
+    "enabled": true,
+    "protocol": "mtls",
+    "register_url": "https://mcp-proxy:3004/register",
+    "unregister_url": "https://mcp-proxy:3004/unregister",
+    "heartbeat_interval": 30,
+    "ssl": {
+      "cert": "/config/certs/client.crt",
+      "key": "/config/certs/client.key",
+      "ca": "/config/certs/ca.crt",
+      "crl": "/config/certs/ca.crl",
+      "dnscheck": true,
+      "check_hostname": true
+    },
+    "server_id": "onedrive-backup",
+    "server_name": "OneDrive Backup API",
+    "instance_uuid": "a192596f-5e64-4bbe-8cdf-1146e0598243",
+    "auto_on_startup": true,
+    "auto_on_shutdown": true,
+    "heartbeat": {
+      "url": "https://mcp-proxy:3004/proxy/heartbeat",
+      "interval": 30
+    }
+  },
+  "server_validation": {
+    "enabled": false,
+    "protocol": "mtls",
+    "ssl": null,
+    "timeout": 10,
+    "use_token": false,
+    "use_roles": false,
+    "tokens": {},
+    "roles": {},
+    "auth_header": "X-API-Key",
+    "roles_header": "X-Roles",
+    "health_path": "/health",
+    "check_hostname": false
+  },
+  "auth": {
+    "use_token": false,
+    "use_roles": false,
+    "tokens": {},
+    "roles": {}
+  },
+  "queue_manager": {
+    "enabled": false,
+    "in_memory": true
+  }
+}

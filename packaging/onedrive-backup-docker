@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if [ -r /etc/default/onedrive-backup ]; then
+  . /etc/default/onedrive-backup
+fi
+exec /usr/lib/onedrive-backup/docker-run.sh "${1:-status}"

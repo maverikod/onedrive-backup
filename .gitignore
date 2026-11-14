@@ -20,3 +20,21 @@ versions/
 .trees/
 .terminals/
 .mcp_terminal/
+/.terminals/
+/.mcp_terminal/
+
+# Release process and secrets
+.env.*
+!.env.example
+.build-venv/
+.release-dist/
+*.whl
+*.tar.gz
+
+# Release helpers and export scratch
+.build-venv/
+.test-run/
+*.whl
+*.tar.gz
+credentials/
+config/certs/

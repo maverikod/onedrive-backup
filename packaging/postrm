@@ -1,11 +1,12 @@
 #!/bin/sh
-set -e
+set -eu
 case "$1" in
-  remove|purge)
+  remove|purge|disappear)
     if [ -d /run/systemd/system ]; then
       systemctl daemon-reload || true
     fi
     ;;
 esac
-# Preserve OAuth tokens, restic key, and all backed-up data for manual recovery.
+# Backups, encryption passwords, OAuth credentials and certs are preserved.
 exit 0
+
