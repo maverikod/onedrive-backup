@@ -8,6 +8,55 @@ from typing import Any
 
 
 REFERENCE: dict[str, dict[str, Any]] = {
+    "help": {
+        "detailed_description": (
+            "Discover all live registered MCP commands, or inspect the "
+            "complete schema and canonical metadata of one named command. "
+            "This command is read-only and does not expose credentials."
+        ),
+        "parameters": {
+            "cmdname": (
+                "Optional registered command name; omit to list all commands."
+            ),
+        },
+        "return_value": {
+            "success": {
+                "description": "The current command listing or detail.",
+                "data": {
+                    "commands": "Registered command names and summaries.",
+                    "metadata": "Named command schema and full metadata.",
+                },
+                "example": {"commands": {}},
+            },
+            "error": {
+                "description": "The named command does not exist.",
+                "code": "COMMAND_NOT_FOUND | VALIDATION_ERROR",
+                "message": "Explanation of the missing or invalid command.",
+            },
+        },
+        "usage_examples": [
+            {
+                "description": "List registered commands",
+                "command": {},
+                "explanation": "Find command names from the live registry.",
+            },
+            {
+                "description": "Inspect info",
+                "command": {"cmdname": "info"},
+                "explanation": "Obtain the info schema and detailed metadata.",
+            },
+        ],
+        "error_cases": {
+            "COMMAND_NOT_FOUND": {
+                "description": "Unknown command name.",
+                "solution": "Read the current help listing.",
+            },
+        },
+        "best_practices": [
+            "Discover command names before making an API call.",
+            "Read info for the installation and operational chapters.",
+        ],
+    },
     "backup_snapshots": {
         "detailed_description": (
             "List real, encrypted restic snapshots tagged onedrive from the "
