@@ -240,7 +240,7 @@ def make_app(config_path: str | Path):
     app = create_app(
         title="OneDrive Backup API",
         description="Read-only backup browse/export over mTLS",
-        version="0.3.3",
+        version="0.3.4",
         app_config=config,
         config_path=str(config_path),
     )
