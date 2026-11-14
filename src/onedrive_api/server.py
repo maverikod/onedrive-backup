@@ -32,6 +32,19 @@ def _register_commands() -> None:
     from .command_reference import command_metadata_for
     from .info_command import InfoCommand
 
+    class BackupHelpCommand(HelpCommand):
+        """Describe registered commands with the canonical metadata."""
+
+        category = "documentation"
+        version = "0.3.4"
+        author = "OneDrive Backup maintainers"
+        email = "maintainers@example.org"
+
+        @classmethod
+        def metadata(cls) -> dict[str, Any]:
+            """Return the full help command reference metadata."""
+            return command_metadata_for(cls)
+
     class CatalogCommand(Command):
         category = "backup"
         version = "0.3.4"
@@ -188,7 +201,7 @@ def _register_commands() -> None:
 
     registry.clear()
     for cls in (
-        HelpCommand,
+        BackupHelpCommand,
         InfoCommand,
         BackupSnapshots,
         BackupListFiles,
