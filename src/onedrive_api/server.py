@@ -29,7 +29,7 @@ def _register_commands() -> None:
     from mcp_proxy_adapter.commands.command_registry import registry
     from mcp_proxy_adapter.commands.help_command import HelpCommand
     from mcp_proxy_adapter.commands.result import CommandResult, ErrorResult
-    from .command_reference import command_metadata_for
+    from .command_reference import REFERENCE, command_metadata_for
     from .info_command import InfoCommand
 
     class BackupHelpCommand(HelpCommand):
@@ -56,6 +56,17 @@ def _register_commands() -> None:
             """Return detailed descriptions shared by help and info."""
             return command_metadata_for(cls)
 
+        @classmethod
+        def _schema_with_descriptions(cls, schema: dict) -> dict:
+            """Populate schema descriptions using the canonical reference."""
+            descriptions = REFERENCE.get(cls.name, {}).get("parameters", {})
+            for name, spec in schema.get("properties", {}).items():
+                if isinstance(spec, dict):
+                    spec["description"] = descriptions.get(
+                        name, spec.get("description", "")
+                    )
+            return schema
+
         @staticmethod
         async def apply(call, **kwargs: Any):
             try:
@@ -77,7 +88,7 @@ def _register_commands() -> None:
 
         @classmethod
         def get_schema(cls) -> dict:
-            return {
+            schema = {
                 "type": "object",
                 "properties": {
                     "limit": {
@@ -89,6 +100,7 @@ def _register_commands() -> None:
                 },
                 "additionalProperties": False,
             }
+            return cls._schema_with_descriptions(schema)
 
     class BackupListFiles(CatalogCommand):
         name = "backup_list_files"
@@ -112,7 +124,7 @@ def _register_commands() -> None:
 
         @classmethod
         def get_schema(cls) -> dict:
-            return {
+            schema = {
                 "type": "object",
                 "properties": {
                     "snapshot_id": {"type": "string"},
@@ -128,6 +140,7 @@ def _register_commands() -> None:
                 "required": ["snapshot_id"],
                 "additionalProperties": False,
             }
+            return cls._schema_with_descriptions(schema)
 
     class BackupPrepareDownload(CatalogCommand):
         name = "backup_prepare_download"
@@ -147,7 +160,7 @@ def _register_commands() -> None:
 
         @classmethod
         def get_schema(cls) -> dict:
-            return {
+            schema = {
                 "type": "object",
                 "properties": {
                     "snapshot_id": {"type": "string"},
@@ -156,6 +169,7 @@ def _register_commands() -> None:
                 "required": ["snapshot_id"],
                 "additionalProperties": False,
             }
+            return cls._schema_with_descriptions(schema)
 
     class BackupDownloadStatus(CatalogCommand):
         name = "backup_download_status"
@@ -171,12 +185,13 @@ def _register_commands() -> None:
 
         @classmethod
         def get_schema(cls) -> dict:
-            return {
+            schema = {
                 "type": "object",
                 "properties": {"export_id": {"type": "string"}},
                 "required": ["export_id"],
                 "additionalProperties": False,
             }
+            return cls._schema_with_descriptions(schema)
 
     class BackupDeleteExport(CatalogCommand):
         name = "backup_delete_export"
@@ -192,12 +207,13 @@ def _register_commands() -> None:
 
         @classmethod
         def get_schema(cls) -> dict:
-            return {
+            schema = {
                 "type": "object",
                 "properties": {"export_id": {"type": "string"}},
                 "required": ["export_id"],
                 "additionalProperties": False,
             }
+            return cls._schema_with_descriptions(schema)
 
     registry.clear()
     for cls in (
