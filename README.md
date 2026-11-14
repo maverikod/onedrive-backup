@@ -6,9 +6,9 @@
 
 ```bash
 ./build.sh
-# dist/onedrive-backup_0.1.0_all.deb
-sha256sum -c dist/onedrive-backup_0.1.0_all.deb.sha256
-dpkg-deb --info dist/onedrive-backup_0.1.0_all.deb
+# dist/onedrive-backup_0.1.1_all.deb
+sha256sum -c dist/onedrive-backup_0.1.1_all.deb.sha256
+dpkg-deb --info dist/onedrive-backup_0.1.1_all.deb
 ```
 
 Требуется `dpkg-deb` (пакет `dpkg`), Python 3.9+, Bash. Для сборки `root` не нужен благодаря `dpkg-deb --root-owner-group`.
@@ -16,7 +16,7 @@ dpkg-deb --info dist/onedrive-backup_0.1.0_all.deb
 ## Установка на сервер Ubuntu/Debian
 
 ```bash
-sudo apt install ./dist/onedrive-backup_0.1.0_all.deb
+sudo apt install ./dist/onedrive-backup_0.1.1_all.deb
 # Если переносили .deb на отдельный сервер, укажите путь к файлу там.
 ```
 
@@ -115,7 +115,7 @@ sudo -u onedrive-backup -H env \
 ## Разработка и тестирование
 
 ```bash
-python3 -m unittest discover -s tests -v
+TMPDIR="$PWD" python3 -m unittest discover -s tests -v
 bash -n scripts/build-deb.sh
 sh -n packaging/postinst packaging/prerm packaging/postrm packaging/onedrive-backup
 ./build.sh

@@ -6,6 +6,7 @@ if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+~.-][a-zA-Z0-9.]+)?$ ]]; then
   echo "Invalid version in VERSION" >&2; exit 2
 fi
 for tool in dpkg-deb install mktemp; do command -v "$tool" >/dev/null || { echo "Missing: $tool" >&2; exit 2; }; done
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1794614400}"
 BUILD="$(mktemp -d)"
 trap 'rm -rf "$BUILD"' EXIT
 STAGE="$BUILD/onedrive-backup"
