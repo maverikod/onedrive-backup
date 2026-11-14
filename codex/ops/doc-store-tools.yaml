@@ -20,7 +20,7 @@ meta:
 blocks:
   discover:
     commands: [help, info, health]
-    rule: discover the server through `list_servers` on the proxy; do not hardcode a URL
+    rule: discover the server through `list_servers` on the proxy; do not hardcode a URL; documents of the work go ONLY to the PRODUCTION entry `doc-store-vvz`, never `doc-store-vvz-dev` (only the target under test of the doc-store project itself)
   projects:
     commands: [entity_list, entity_get, entity_create]
     rule: >-

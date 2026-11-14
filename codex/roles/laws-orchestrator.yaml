@@ -413,8 +413,10 @@ laws:
     Analysis Server is unreachable, or refuses a write the unit cannot correct after one `help`
     check, the agent stops and the session model asks the user to confirm `no_logger_mode`; the
     file exchange exists ONLY inside that mode. The exchange always goes to the PRODUCTION AI
-    Logger; a DEV installation of the logger takes only DEV servers and the models they call
-    (`dev_prod_instances`) and is never the exchange channel.
+    Logger, its sessions are issued by the PRODUCTION Code Analysis Server, and tasks, reports,
+    bugs and documents go to the PRODUCTION Plan Manager and doc-store — never a `-dev` entry
+    (`ops/logger-exchange.yaml` `production_services`); a DEV installation of the logger takes
+    only DEV servers and the models they call and is never the exchange channel.
   no_logger_mode: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: the logger is unavailable, the user answers the
     question to enable `no_logger_mode` / "Режим без логгера", and every later task while it remains

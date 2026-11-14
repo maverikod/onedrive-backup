@@ -7,7 +7,7 @@
 # read from fresh command-specific `help` is unavailable, and inventing a command name is a
 # defect, not an attempt.
 
-template_version: v1.7.82
+template_version: v1.7.84
 
 purpose: >-
   The Code Analysis Server is the authoritative surface for the registered server-side project:
@@ -22,7 +22,10 @@ call_shape:
   server_id: >-
     the LIVE registry id from `list_servers` — a short or remembered name yields SERVER_NOT_FOUND,
     and `copy_number` can change after a backend restart, so verify both rather than reusing them
-    from memory.
+    from memory. It is ALWAYS the PRODUCTION Code Analysis Server, `code-analysis-server-vvz`, with
+    its database of the working projects; `code-analysis-server-vvz-dev` (or any `-dev` entry) is
+    never used for the work — only as the target under test of the code-analyzis project itself
+    (`ops/logger-exchange.yaml` `production_services`).
   project_binding: >-
     take `project_id` from `list_projects`; never pass a host `root_dir`, and never take the id
     from a repository's `projectid` file — its `id`/`iddev` identify the code's production and dev

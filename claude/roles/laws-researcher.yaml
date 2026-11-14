@@ -10,7 +10,9 @@ laws:
     the user's explicit command, except the mandatory `cas`+`local` exchange of `two_site_sync`.
     A merge into `main` and a push of `main` happen ONLY with the user's explicit permission, and
     only after a new version is released (version bump, build, deploy) and the FULL pipeline run
-    on that deployed version is GREEN.
+    on that deployed version is GREEN. For a `dev_prod` service the user's production command is
+    that permission: the DEV-proven working branch is merged into `main`, `main` is pushed, and
+    production is built from `main` (`dev_prod_instances`).
   cas_search_first: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: step 0 of every researcher, coder and tester unit
     of a project registered on the Code Analysis Server, before any edit] MUST: read

@@ -46,7 +46,7 @@ variables:
   autonomy: false         # false (default) | true. The GATE on the `prompt_development` mode. Declared
                           # per PROJECT in this bundle; lifts the discipline for THIS project only and
                           # only for prompt authoring. Only the user sets it. See `autonomy_mode`.
-  dev_prod: true         # false (default) | true. true = the project has a server or a database and runs
+  dev_prod: false         # false (default) | true. true = the project has a server or a database and runs
                           # separate DEV and PRODUCTION installations; see `dev_prod_instances`. Only the user sets it.
 
 laws:
@@ -406,7 +406,9 @@ laws:
     the user's explicit command, except the mandatory `cas`+`local` exchange of `two_site_sync`.
     A merge into `main` and a push of `main` happen ONLY with the user's explicit permission, and
     only after a new version is released (version bump, build, deploy) and the FULL pipeline run
-    on that deployed version is GREEN.
+    on that deployed version is GREEN. For a `dev_prod` service the user's production command is
+    that permission: the DEV-proven working branch is merged into `main`, `main` is pushed, and
+    production is built from `main` (`dev_prod_instances`).
   server_branches_are_mirrors: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any push or site-to-site synchronisation] Push and synchronisation happen ONLY on
     the user's explicit command, with one standing exception: the mandatory `cas`+`local` exchange
@@ -754,8 +756,9 @@ laws:
   single_build_and_publication_flow: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any build, test deployment or package publication]
     Use only the project-root `build.sh` from the authoritative working checkout and branch:
-    `local` under file_access local, `cas` under file_access cas; never from a linked git
-    worktree or detached HEAD. Every build pass that uploads anything takes a NEW version — the
+    `local` under file_access local, `cas` under file_access cas — the production pass
+    (`build.sh --dev no`) from that same checkout switched to `main` (`dev_prod_instances`); never
+    from a linked git worktree or detached HEAD. Every build pass that uploads anything takes a NEW version — the
     previous one plus exactly one, never a gap: Docker Hub and PyPI never take the same version
     twice, so a fix after RED is the next candidate, and only a pass that failed before any upload
     retries its version. Image tag, Debian installation package, responding server and client
@@ -825,22 +828,28 @@ laws:
     suffix is ALWAYS `-dev` — never `dev`, `_dev` or `.dev0` — and labels the ARTEFACTS (image tag,
     Debian package name, client distribution name) only; the code — the
     server's response, the client's `_version.py` — carries the bare `<version>`. `build.sh --dev no`
-    is the PRODUCTION pass and runs ONLY on the user's explicit command: from the commit of the DEV
-    version the command names — by default the last one whose full DEV pipeline is GREEN — it
-    REBUILDS everything WITHOUT `-dev` under that same version number: the image `<image>:<version>`
+    is the PRODUCTION pass and runs ONLY on the user's explicit command, in this order: (a) the
+    working branch (`local` under file_access local, `cas` under cas), at the DEV version the command
+    names — by default the last one whose full DEV pipeline is GREEN — is merged into `main` with
+    everything on it and `main` is pushed; (b) the authoritative checkout is switched to `main`; (c)
+    `build.sh --dev no` runs there and REBUILDS everything WITHOUT `-dev` under that same version number: the image `<image>:<version>`
     pushed to Docker Hub, the production Debian package `<svc>-docker`, the client `<client>`
     `<version>` published to PyPI — the Docker Hub push and the client publication UNCONDITIONALLY
     and MANDATORILY, as in every build pass — every fleet client the project depends on taken as
     the last PRODUCTION `<client>` published on PyPI. PRODUCTION carries NO `-dev` anywhere: the package
     `<svc>-docker`, and, once it is installed, the production container, unit, settings file
     `/etc/default/<svc>`, directories `/etc/<svc>`, `/var/lib/<svc>`, `/var/log/<svc>`, `/opt/<svc>`,
-    ports, database and certificates, with settings pointing at the PRODUCTION services of the
-    fleet. The same invocation then DEPLOYS production, proves health, the expected version and
+    ports, database and certificates. EVERY setting of a production server points at PRODUCTION
+    servers only — logger, Code Analysis Server, Plan Manager, doc-store and every other fleet
+    service it calls; a production settings file, config template or environment that names a
+    `-dev` (or legacy `dev` / `_dev`) endpoint is a DEFECT, and `build.sh --dev no` refuses to deploy
+    it. The same invocation then DEPLOYS production, proves health, the expected version and
     registration under `id`, and RUNS THE FULL PIPELINE against production in production mode — the
     only check that ever targets production: the pipeline targets DEV by default and accepts the
     production target only when `build.sh --dev no` invokes it after the production deploy. A RED
     production pipeline is reported at once with its exact output; the previous image and spec stay
-    on the host for rollback (`service_packaging_standard`). (3) PORTS: every port of the dev installation, the database container's
+    on the host for rollback (`service_packaging_standard`). (d) Afterwards the checkout returns to
+    the working branch. (3) PORTS: every port of the dev installation, the database container's
     included, is the production port + 20000 when that stays within the valid port range (≤
     65535), otherwise the production port + 10000; when that too leaves the range, the DEV pass of
     `build.sh` refuses with an error and nothing is deployed — no other port is picked. (4)
@@ -858,8 +867,8 @@ laws:
     `/opt/<svc>` -> `/opt/<svc>-dev`; DEV never reads or writes a production directory. (6)
     PRODUCTION IS BUILT, DEPLOYED AND CHECKED ONLY ON THE USER'S EXPLICIT COMMAND — never
     automatically, never as a step of another task, never because a full DEV pipeline is GREEN. A
-    production rollout is
-    not a merge or push of `main`, which keeps its own permission rule. (7) THE WORK IS SEPARATED
+    production command is also the user's permission for `main`: it merges the working branch into
+    `main`, pushes `main` and builds production from `main` — nothing else touches `main`. (7) THE WORK IS SEPARATED
     FROM THE TEST SERVERS: the WORK goes to PRODUCTION — every model log of the development process
     (the session of `logger_exchange`, every task, answer and agent message), the exchange with the
     user, every document and every report are written to the PRODUCTION AI Logger, doc-store and
@@ -897,8 +906,11 @@ laws:
     the check results. The project's OWN client is never taken from PyPI — it is the one from the
     project's own code (`single_build_and_publication_flow`). REGISTRATION OF THE WORK GOES TO
     PRODUCTION: tasks, TODOs, plans and steps, reports, bugs and their fixes in the Plan Manager,
-    documents in the doc-store, and the AI Logger exchange are written to the PRODUCTION
-    installations; only the traffic of the thing under test reaches DEV. The production pass
+    documents in the doc-store, the AI Logger exchange, and the Code Analysis Server with its
+    database of the working projects are the PRODUCTION installations (`ailogger`,
+    `ai-formforge`, `doc-store-vvz`, `code-analysis-server-vvz`), never a `-dev` entry; only the
+    traffic of the thing under test reaches DEV — the DEV variant is used ONLY to test new
+    capabilities and to run pipelines. The production pass
     (`build.sh --dev no`) is the one exception: it builds with the last PRODUCTION `<client>` of
     every fleet dependency and its full pipeline runs against the PRODUCTION services. See `ops/delivery.yaml` `fleet_dev_dependencies`.
   deployed_pipeline_green_is_done: >-
@@ -961,8 +973,10 @@ laws:
     Analysis Server is unreachable, or refuses a write the unit cannot correct after one `help`
     check, the agent stops and the session model asks the user to confirm `no_logger_mode`; the
     file exchange exists ONLY inside that mode. The exchange always goes to the PRODUCTION AI
-    Logger; a DEV installation of the logger takes only DEV servers and the models they call
-    (`dev_prod_instances`) and is never the exchange channel.
+    Logger, its sessions are issued by the PRODUCTION Code Analysis Server, and tasks, reports,
+    bugs and documents go to the PRODUCTION Plan Manager and doc-store — never a `-dev` entry
+    (`ops/logger-exchange.yaml` `production_services`); a DEV installation of the logger takes
+    only DEV servers and the models they call and is never the exchange channel.
   no_logger_mode: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: the logger is unavailable, the user answers the
     question to enable `no_logger_mode` / "Режим без логгера", and every later task while it remains

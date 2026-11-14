@@ -11,7 +11,7 @@ are forbidden until a current event selects them. An extra startup read is a con
 
 # onedrive-backup - Claude operating contract
 
-**Prompts template:** `claude-prompts-v1` rev **1.7.82** (2026-11-14)
+**Prompts template:** `claude-prompts-v1` rev **1.7.84** (2026-11-14)
 
 This file is the entrypoint and is loaded automatically at session start.
 
@@ -63,7 +63,7 @@ These are PROHIBITIONS. You have NO discretion over them. You are NOT the except
     per session — `laws.logger_exchange`. Files only in the user-confirmed `no_logger_mode`.
 13. NEVER write a Plan Manager report outside `researcher` and `plan_todo_api_researcher`.
 14. NEVER write or unfreeze a plan unless the user declared `planning` or the external interface changes; all other work runs on a TODO tree — `laws.todo_tree_work`.
-15. With `dev_prod: true`, NEVER develop or test against production or its database: work runs in DEV — `build.sh` (default `--dev yes`) builds, publishes with the `-dev` suffix and deploys DEV itself, under `iddev`, with its own Debian package, `-dev` host directories, its own database and certificates generated from the project's CA; production is rebuilt without `-dev`, deployed and checked by one full pipeline ONLY on the user's command (`build.sh --dev no`); the work's model logs, the exchange with the user, documents and reports go to production, and the DEV logger takes only DEV servers and the models they call — `laws.dev_prod_instances`.
+15. With `dev_prod: true`, NEVER develop or test against production or its database: work runs in DEV — `build.sh` (default `--dev yes`) builds, publishes with the `-dev` suffix and deploys DEV itself, under `iddev`, with its own Debian package, `-dev` host directories, its own database and certificates generated from the project's CA; production happens ONLY on the user's command: everything is merged into `main` and `main` pushed, the checkout switched to `main`, `build.sh --dev no` rebuilds without `-dev` and deploys, one full pipeline runs against production; the work's model logs, the exchange with the user, documents and reports go to production, and the DEV logger takes only DEV servers and the models they call — `laws.dev_prod_instances`.
 16. NEVER test a development against a production service of the fleet: another fleet service is used only through its DEV server and the last `<client>-dev` published on PyPI (the local checkout is compared and a newer unpublished version is reported); tasks, TODOs, reports, bugs and documents are registered in production — `laws.fleet_dev_dependencies`.
 
 ## Orchestrator boundary
@@ -119,3 +119,17 @@ Use the `claude/` bundle as the authoritative Claude contract for this project.
 Do not read the other runtime's prompt files unless the task explicitly requires cross-checking them.
 
 <!-- project-specific sections (kept across template versions; edit here) -->
+## OneDrive Backup — project and code standards
+- Production-only service, no dev instance and no insecure HTTP fallback.
+- One source of version: VERSION. Docker image, Debian package and client must use the identical release version.
+- CAS project ID: f6130c8b-1fde-4a35-bdae-e857dfbd6555. Git remote: git@github.com:maverikod/onedrive-backup.git, branch cas.
+- Inspect changes before writing. Git staging/commit/push only via CAS Git commands.
+- The single authoritative verification entrypoint is python -m pipeline. After image build, run python -m pipeline smoke_mtls.
+- Release entrypoint build.sh: tests, client wheel/sdist, Docker image, versioned Debian package, Docker Hub, PyPI if authorized or local wheel.
+- Production deploy entrypoint docker/deploy.sh. Never launch an insecure service when certificates or backup mount are unavailable.
+- The local .env is ignored by Git and Docker. Deployment copies it to /var/lib/onedrive-backup/credentials/.env on HOST (0600). The public /etc/default/onedrive-backup contains only its pathname and nonsecret options.
+- mTLS uses trusted CA and one server/client certificate pair; revocation policy is managed by MCP Proxy. FastAPI is restricted to the internal Docker network. Real certificates are never committed or included in build artifacts.
+- Proxy registration is automatic using mcp-proxy:3004 on smart-assistant. Data volume /srv/backup/onedrive must be backed by mounted /srv/backup.
+- The remote API permits read-only browsing and bounded temporary exports identified by opaque IDs; no arbitrary file downloads or adapter admin RPCs.
+- Python client exposes the complete application REST surface and verifies downloaded file size and SHA256 before atomically replacing the output.
+- Stop on test errors and report them. All deployments are fail-closed.

@@ -49,7 +49,7 @@ variables:
   autonomy: false         # false (default) | true. The GATE on the `prompt_development` mode. Declared
                           # per PROJECT in this bundle; lifts the discipline for THIS project only and
                           # only for prompt authoring. Only the user sets it. See `autonomy_mode`.
-  dev_prod: true         # false (default) | true. true = the project has a server or a database and runs
+  dev_prod: false         # false (default) | true. true = the project has a server or a database and runs
                           # separate DEV and PRODUCTION installations; see `dev_prod_instances`. Only the user sets it.
 
 laws:
@@ -291,8 +291,10 @@ laws:
     Analysis Server is unreachable, or refuses a write the unit cannot correct after one `help`
     check, the agent stops and the session model asks the user to confirm `no_logger_mode`; the
     file exchange exists ONLY inside that mode. The exchange always goes to the PRODUCTION AI
-    Logger; a DEV installation of the logger takes only DEV servers and the models they call
-    (`dev_prod_instances`) and is never the exchange channel.
+    Logger, its sessions are issued by the PRODUCTION Code Analysis Server, and tasks, reports,
+    bugs and documents go to the PRODUCTION Plan Manager and doc-store — never a `-dev` entry
+    (`ops/logger-exchange.yaml` `production_services`); a DEV installation of the logger takes
+    only DEV servers and the models they call and is never the exchange channel.
   agent_report_in_planner: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: the end of a `researcher` or
     `plan_todo_api_researcher` unit] ONLY these two roles write a report, and they write it into

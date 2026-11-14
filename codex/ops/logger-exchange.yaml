@@ -1,6 +1,6 @@
 # onedrive-backup — AI Logger exchange card for Codex
 # EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
-template_version: v1.7.82
+template_version: v1.7.84
 # Read by EVERY launched agent — every `dispatch_*` event lists it — and by the orchestrator through
 # `agent_dispatch`. It is complete on its own: a role that reads no law excerpt needs nothing else to
 # take its task from the logger and to answer through it. `laws.logger_exchange` points here.
@@ -10,6 +10,7 @@ absolute_prohibitions:
   - NEVER pass a task or an answer through a file unless the user has enabled `no_logger_mode` — no task-prompt file, no answer file, no report file, no scratch copy, nothing in a log directory. An unavailable logger does not enable that mode; only the user's confirmation does.
   - NEVER open, close or replace a logger session unless you are the session model; use the `logger_session` your launch prompt names, and pass that same id to every unit you launch.
   - NEVER write a report into the Plan Manager unless your role is `researcher` or `plan_todo_api_researcher`.
+  - NEVER write the work into a DEV installation — no `-dev` logger, Plan Manager, doc-store or Code Analysis Server; only the PRODUCTION ids of `production_services`.
 
 purpose: >-
   The AI Logger is the main exchange channel of the contract. Every role writes and reads it: the
@@ -20,8 +21,34 @@ purpose: >-
 
 call_shape:
   proxy_tool: "the MCP Proxy `call_server` tool exactly as this session lists it — `mcp__codex_apps__mcp_proxy_call_server` where the Codex apps bridge registers it; never guess a tool name the session does not list"
-  logger: "`server_id: ailogger`, `copy_number: 1`; on SERVER_NOT_FOUND re-read `list_servers` for the live id and copy, never retry the same call; it is ALWAYS the PRODUCTION AI Logger — a DEV installation of the logger takes only DEV servers and the models they call and is never the exchange channel (`laws.dev_prod_instances`)"
-  session_issuer: "the Code Analysis Server — the live `code-analysis-server*` id from `list_servers`; the logger opens no session whose id that server did not issue"
+  logger: "`server_id: ailogger`, `copy_number: 1`; on SERVER_NOT_FOUND re-read `list_servers` for the live PRODUCTION entry and its copy (`production_services.not_found`), never retry the same call; it is ALWAYS the PRODUCTION AI Logger — a DEV installation of the logger takes only DEV servers and the models they call and is never the exchange channel (`laws.dev_prod_instances`)"
+  session_issuer: "the PRODUCTION Code Analysis Server — `code-analysis-server-vvz` (its live copy from `list_servers`), never `code-analysis-server-vvz-dev` or any other `-dev` entry; the logger opens no session whose id that server did not issue"
+
+production_services:
+  rule: >-
+    The WORK always goes to the PRODUCTION installations of the fleet services: the logger
+    session, every task, answer and child dispatch, TODOs, plans, steps, reports, bugs, documents,
+    and the Code Analysis Server with its database of the working projects (`list_projects`,
+    files, indexes, git). NEVER a server id or URL that carries the DEV postfix — `-dev` or the
+    legacy `dev` / `_dev` forms, e.g. `ailogger-dev`, `ai-formforgedev`, `doc-store-vvz-dev`,
+    `code-analysis-server-vvz-dev`.
+  ids:
+    ai_logger: ailogger
+    plan_manager: ai-formforge
+    doc_store: doc-store-vvz
+    code_analysis: code-analysis-server-vvz
+  not_found: >-
+    On SERVER_NOT_FOUND re-read `list_servers` and take the PRODUCTION entry of the same service
+    (its `copy_number` may change); when only a DEV entry is listed, STOP and report the exact
+    listing — never fall back to DEV.
+  dev_only_as_target: >-
+    The DEV variant is used ONLY to test new capabilities and to run pipelines. A DEV id is called
+    only as the thing UNDER TEST — by the pipeline, examples and checks of the
+    project that owns it or depends on it (`laws.fleet_dev_dependencies`) — never for the work
+    itself.
+  production_settings: >-
+    Every setting of a PRODUCTION server points at PRODUCTION servers only; a production
+    configuration naming a `-dev` endpoint is a DEFECT (`laws.dev_prod_instances`).
 
 session:
   owner: the session model — the orchestrator, or the single model while `stupid_mode` is enabled
