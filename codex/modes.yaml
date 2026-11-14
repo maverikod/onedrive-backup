@@ -1,0 +1,128 @@
+# onedrive-backup — event-loaded mode semantics for Codex
+
+# EVENT-LOADED CARD. It is forbidden at orchestrator startup. `roles/triggers.yaml` is the sole
+# startup registry and activates this file only for the central `declared_mode` event. This card
+# contains mode semantics and no routing directives.
+
+header_rule: >-
+  The central event registry alone selects every contract read. This card defines behavior after
+  its `declared_mode` event selects it and never activates another file. Modes add constraints;
+  they do not replace common laws. `prompt_development` exists only where
+  `laws.variables.autonomy` is `true`. `stupid_mode` changes state only on an explicit user
+  command, and `no_logger_mode` only on the user's explicit confirmation after a reported logger
+  outage. Ordinary replies carry no fixed contract or mode prologue.
+
+modes:
+  planning:
+    description: >-
+      Authoring, verifying, freezing, or operating a structured planning runtime
+      (requirements hierarchy, execution records, review gates, and planning artifacts). Declared
+      ONLY by the user's command; a code change, a bug, a TODO or a matrix change never implies it.
+      Decomposition ends in the external-contour order of `laws.external_contour_first`.
+    model_policy: >-
+      While writing a plan, the orchestrator owns HRS/MRS and plan common and launches planner_g
+      only. Each planner_g writes and gates G common and launches planner_t only; each planner_t
+      writes and gates T common and launches planner_a only. planner_a is terminal. Every child
+      receives only its parent-common link and prompt text specific to that step. This hierarchy
+      applies only to plan authoring.
+    constraints:
+      - the owner chain, context partition and common gate are the highest-priority plan-authoring rule — `laws.planning_context_isolation`
+      - no more than one plan tree open at a time; the live gate is read before every mutation — `laws.one_open_tree`, `ops/planning-runtime.yaml` `gate_first`
+      - every statement about plan state cites a live readback — `laws.source_freshness`
+      - a launch carries one step in `strict` isolation, or one sibling batch under one parent in `relaxed` — `variables.step_isolation`, `laws.step_isolation`
+  plan_todo_repair:
+    gate: explicit user activation for one exact plan-check root TODO; never inferred from RED or an open queue
+    description: >-
+      Post-audit autonomous TODO repair inside planning. The orchestrator classifies and closes
+      stale or duplicate findings, directly repairs only bounded local defects, sends unknown
+      external-API questions to the dedicated researcher first, and delegates every overflow.
+    lifetime: exits when the root queue is terminal, the user stops it, or consolidated user decisions remain
+    authority: exactly `ops/plan-todo-repair.yaml`; no general planning or implementation authority is added
+    constraints: [one mutable successor, monotonic token and mutation budgets, one child at a time, no per-item confirmation, no freeze or commit]
+  analysis:
+    description: >-
+      Read-only inspection of code, docs, tests, interfaces, and repository structure.
+    model_policy: >-
+      Research and inspection always run in agents on the cheapest capable named tier. The
+      orchestrator does not inspect product sources or repeat their work.
+  prompt_development:
+    gate: >-
+      DECLARABLE ONLY where `laws.variables.autonomy` is `true` in THIS project's own bundle. If
+      the variable is absent or `false`, this mode DOES NOT EXIST for this project: declaring it,
+      assuming it, or inheriting it from another repository, a parent directory, an earlier
+      session, or an agent prompt is a contract violation, not a shortcut. Only the user sets the
+      variable.
+    description: >-
+      Authoring and revising PROMPT TEXT in a project whose deliverable is prompt text — contract
+      templates, prompt packages, project-bound bundles. Prompt text is not software that builds,
+      runs or ships, so the discipline written for product work has no referent and is lifted for
+      that work. It is NOT lifted for anything else the repository contains: its scripts, its
+      tooling and its releases run under `planning` and `refactoring` as written.
+    lifts: what `laws.autonomy_mode` names, and nothing else
+    never_lifts: what `laws.autonomy_mode` names as never lifted
+    model_policy: >-
+      No tier assignment and no verification ladder. Choose whatever model and effort the task
+      warrants, delegate only when it genuinely helps, and say what you did.
+  stupid_mode:
+    display_name: "Режим тупого"
+    gate: >-
+      DECLARABLE ONLY after the user explicitly enables this mode. Codex may not infer activation
+      from impatience, cost, task size, an unavailable agent, or its own preference. Once enabled,
+      it remains enabled across later tasks until the user explicitly disables it. Both runtime
+      contracts carry this mode with the same latch semantics.
+    state:
+      default: disabled when the current session contains no explicit user enable command
+      enable: only an explicit user command can transition the mode from disabled to enabled
+      persist: enabled across task boundaries, retries, failures, pauses, and context compaction
+      disable: only an explicit user command can transition the mode from enabled to disabled
+      ambiguity: keep the current state and ask; never infer a transition
+    description: >-
+      One-model execution. The current Codex model carries every applicable stage serially in
+      this session. It may inspect, plan, author checks, implement, diagnose, deploy and report,
+      but it never launches or calls another language model and never asks a model to verify an
+      artifact. Execution by the project's real `pipeline` is the only acceptance verdict.
+    model_policy: >-
+      Keep the model that owns the current session. Do not route by tier, launch subagents,
+      delegate, or invoke a model-backed verifier through another tool. See `laws.stupid_mode`.
+    constraints:
+      - every role stage runs serially in the current session; a role name never causes an agent launch
+      - the current model maintains the same immutable completion checklist without handing it to another model
+      - the same model may author `pipeline/checks/` in the tester stage and product code in the coder stage
+      - a bug check is fixed by the demonstrated live RED before implementation and is never weakened to obtain GREEN
+      - only the named real-target check and the required final full `pipeline` may accept code
+      - plans, documentation and other non-executable artifacts receive no model certification; report their evidence and leave acceptance to the user
+    overrides: what `laws.stupid_mode` names, and nothing else
+  no_logger_mode:
+    display_name: "Режим без логгера"
+    gate: >-
+      DECLARABLE ONLY after the session model has reported a logger or session-issuer failure with
+      its exact error and the user has explicitly confirmed this mode. Codex may not infer
+      activation from the outage itself, a timeout, cost or haste. Once enabled, it remains enabled
+      across later tasks until the user explicitly disables it.
+    state:
+      default: disabled when the current session contains no explicit user confirmation
+      enable: only the user's explicit confirmation, offered only after a reported logger outage
+      persist: enabled across task boundaries, retries, failures, pauses, and context compaction
+      disable: only an explicit user command; the mode's files are then imported into the logger
+      ambiguity: keep the current state and ask; never infer a transition
+    description: >-
+      File exchange in place of the AI Logger: task prompts and answers travel as the files named in
+      `ops/logger-exchange.yaml` `no_logger_mode`. Nothing else changes.
+    model_policy: unchanged — the current mode's routing applies
+    overrides: what `laws.no_logger_mode` names, and nothing else
+  refactoring:
+    description: >-
+      The DEFAULT mode: every code change, bug fix, cleanup and verification the user has not put
+      under `planning`. Work runs on a TODO tree (`laws.todo_tree_work`): one root TODO, the header
+      of the action plan, under the bug, the TODO or the project; one child TODO per step, resolved
+      as soon as the step is accepted; the checklist in the task message marks completion. The plan
+      is neither read nor written. Only a change of the external interface changes the matrix, and
+      only then does this mode touch the plan (`laws.external_surface_change_requires_matrix_revision`):
+      unfreeze without asking, analyse HRS and MRS, HRS options to the user for permission, MRS and
+      concepts, the matrix, then the user's permission and the freeze, then pipeline RED and code
+      (`laws.external_api_change_pipeline_first`); no G/T/A step is written. A bug fix follows
+      `laws.bugfix_acceptance_cycle`; a new project or contour follows `laws.external_contour_first`.
+    model_policy: >-
+      `coder` and every other unit run on the tier `ops/model-selection.yaml` `agent_launch`
+      assigns, named explicitly at launch with the immutable checklist. No model review occurs
+      before pipeline RED; a correction's rank follows `laws.cheapest_capable_model` (one rank up only on the second failure of an item on a rank) and GREEN is mechanical acceptance.

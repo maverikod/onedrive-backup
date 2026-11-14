@@ -1,0 +1,18 @@
+# Claude local tools guidance
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+# Every `applies_after_event_selection` condition constrains an already selected card and grants no read.
+
+rules:
+  - prefer the dedicated tools over shell equivalents; use Glob for file discovery and Grep for content search
+  - fall back to `rg` through Bash only when a search needs flags the Grep tool does not expose
+  - issue independent reads and searches as parallel tool calls in a single message
+  - read a file region with Read (`offset`/`limit`) instead of piping it through the shell
+  - keep shell commands simple and inspectable, and use Bash for repository inspection and verification
+  - request escalation only when sandbox limits block required work
+  - read all `agent_reads` in one parallel batch; search with `output_mode: count` or `files_with_matches` before `content`; Read a region with `offset`/`limit`; never re-read an unchanged file — `laws.context_economy`
+
+patterns:
+  repository_scan: "Glob(pattern=\"<glob>\", path=\"<path>\")"
+  text_search: "Grep(pattern=\"<pattern>\", path=\"<path>\", output_mode=\"content\", -n=true)"
+  targeted_read: "Read(file_path=\"<file>\", offset=<start>, limit=<count>)"
+  shell_fallback: "rg -n \"<pattern>\" <path>"

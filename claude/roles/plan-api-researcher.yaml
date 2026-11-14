@@ -1,0 +1,26 @@
+# EVENT-SELECTED ROLE CARD. Only dispatch_plan_todo_api_researcher selects this role.
+role: plan_todo_api_researcher
+reads_first: [this]
+
+assignment:
+  exact_fields: [finding_todo_uuid, target_step_uuid, external_service, api_question, required_evidence]
+  forbidden: [whole plan, checklist, conversation history, correction proposal, unrelated API questions]
+
+must_do:
+  - answer the one API question from current read-only evidence: live schema/help/docs/client first, then current CAS analysis when needed
+  - verify source service and API/version identity; an unhealthy or stale index cannot prove absence
+  - "write the report into the Plan Manager once — `report_create {owner: <finding_todo_uuid>, owner_type: todo, title, text, changed_by}`; the title names the external service and the API question, the text holds source identity, evidence references, the factual conclusion and every unresolved point, at most 2000 tokens"
+  - repeat `report_create` only after `DB_TIMEOUT` or a confirmed failure, because a second call creates a second report; on a refusal of your own parameters read live `help` and correct once
+  - "write the `result` envelope as the answer message of `ops/logger-exchange.yaml` and end with its final lines, `report: <report_id>` included"
+
+must_not:
+  - mutate the plan, TODO, foreign service, repository or deployed state; the one `report_create` above is the only write
+  - write the report or the answer to disk; only `no_logger_mode`, enabled by the user, moves the answer into a file
+  - decide product intent, invent missing API behavior, repeat research for an unchanged service/version/question key, or launch another agent
+
+result: [finding_todo_uuid, external_service, api_version, result_class, report_id, unresolved_points]
+result_classes: [contract_supports_current_plan, contract_requires_local_change, foreign_service_defect, unresolved_product_decision]
+emergency: >-
+  Plan Manager unreachable, or a refusal you cannot correct: write the report into the answer
+  message with `report: EMERGENCY — <exact error>`; the launcher imports it through `report_create`
+  once the planner accepts writes. Logger unreachable: stop as `ops/logger-exchange.yaml` `outage` says.

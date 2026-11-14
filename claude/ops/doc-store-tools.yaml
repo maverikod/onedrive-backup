@@ -1,0 +1,72 @@
+# onedrive-backup — documentation server capability card for Claude (doc-store through MCP Proxy)
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+# Every `applies_after_event_selection` condition constrains an already selected card and grants no read.
+#
+# The central `documentation_store` event is the only route that activates this card before a
+# documentation read or write. The admitted set is written down here so an assigned agent does
+# not rediscover it through live `help` on every call.
+
+meta:
+  proxy_tool: "the MCP Proxy `call_server` tool exactly as this session lists it — `mcp__proxy-lan__call_server` on the fleet workstation; load a deferred tool with ToolSearch `select:<name>` before the first call, and never guess a tool name the session does not list"
+  server_id: doc-store-vvz
+  call_shape: "call_server(server_id=\"doc-store-vvz\", copy_number=1, command=\"<name>\", params={...})"
+  help: "call `help` with `{\"cmdname\": \"<name>\"}` before the first use of a command in a session; the live help wins over this card when they differ"
+  queue: >-
+    Ingestion commands are queued (`x-use-queue`): a result that returns a `job_id` or a pending
+    state is polled with `queue_get_job_status` until `completed`, and the INNER ingestion status
+    is checked — a completed job can still carry `status: failed` inside. Never treat the queue
+    acknowledgement as the write.
+
+blocks:
+  discover:
+    commands: [help, info, health]
+    rule: discover the server through `list_servers` on the proxy; do not hardcode a URL
+  projects:
+    commands: [entity_list, entity_get, entity_create]
+    rule: >-
+      documents are bound to a doc-store PROJECT (`entity_type: projects`); list before creating,
+      and create one only when the home project has none. The doc-store project id is a doc-store
+      identity, not the CAS project id.
+  read:
+    commands: [document_get, source_file_reconstruct, chapter_text_get, paragraph_get_by_number, entity_list]
+    rule: >-
+      tags and project bindings live in `block_meta` of DOCUMENTS; to find documents by tag list
+      `entity_type: documents` and filter `block_meta.tags` locally — `chunk_query_search` with a
+      tag filter returns chunks of one document, not the document set
+  search:
+    commands: [chunk_query_search, semantic_relations]
+    rule: "send a canonical ChunkQuery; for semantic search set hybrid_search true and bm25_weight 0"
+  write:
+    commands: [document_create, document_update, document_rebind, semantic_chunk_metadata_update]
+    procedure:
+      - "`document_create` with a locally generated UUID4 `document_id`, a stable `source_version_id`, `chunking_strategy: paragraph` and the text as `raw_text`; poll the queue to completion"
+      - "compare `received_verification_phrase` (`rx1:<bytes>:<sha256 prefix>`) with the local byte count and sha256 before treating the write as received"
+      - "`document_rebind` with the project binding and `document_properties` — at least `tags`, `label`, `title`, `document_kind`, `source_path`, `sha256` — so the document is findable"
+      - "readback with `document_get`: `body_sha256` equals the local sha256 and `block_meta.tags` holds the tags"
+    known_defects:
+      - "`document_update` resets `block_meta.project` and empties `tags`: every text update is followed by a `document_rebind` and a readback (bug 77648851 in plan manager)"
+      - "the chunker rejects any blank-line-delimited block over 10000 characters under every chunking strategy, and any text under 15 characters (bug 3b6eed07); split such a source on natural boundaries into parts with `part`, `parts_total` and `whole_file_sha256` in `document_properties`, and never alter the text to fit"
+  temporary_document_cleanup:
+    commands: [document_delete]
+    rule: >-
+      An agent may delete only a disposable temporary document that this same agent created for
+      the current task. It must have the exact `document_id` and successful creation evidence,
+      read back that ID and its project before deletion, and confirm the document is still
+      temporary rather than a retained source. Delete only that one ID, then verify
+      `document_get` returns NOT_FOUND. A tag, title, project binding or another agent's report
+      does not prove ownership. Never delete a pre-existing, user-owned or other-agent document,
+      or one whose creation or temporary purpose cannot be proved. No bulk cleanup.
+  administration_is_out_of_contract:
+    never: [entity_hard_delete, entity_soft_delete, embeddings_rebuild, chunk_version_delete, corpus_audit]
+    rule: a broken server side is registered as a bug against the doc-store project, never repaired as a side effect
+
+tags:
+  convention: >-
+    A note written for the prompt factory carries the tag "Для промптов"; an accepted or proposed
+    standard carries "Стандарты"; a stored prompt file carries "Промпты" plus its runtime
+    (`claude` | `codex`) and `template`. Tags go in `document_properties.tags` at rebind.
+
+errors:
+  invalid_params: read `help` for the command, correct once if the error names a parameter, otherwise escalate
+  chunker_internal_error: not a transport failure — see `known_defects`; report the job id and the inner error verbatim
+  not_found: a `document_get` NOT_FOUND after a failed ingestion means no row was created; a new attempt uses a new UUID

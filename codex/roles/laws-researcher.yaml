@@ -1,0 +1,26 @@
+# GENERATED ROLE EXCERPT of roles/laws.yaml for the `researcher` stage — never edit; change
+# laws.yaml or laws-roles.yaml and regenerate. Read together with roles/laws-common.yaml;
+# every `[APPLIES AFTER THIS CARD IS EVENT-SELECTED: ...]` condition keeps its meaning here.
+laws:
+  branch_discipline: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any branch, merge, or release action] `main` is production and never work in
+    progress. Under `local`, local branches are authoritative; under `cas`, CAS branches are
+    authoritative. Prepare and verify work on the active site. NEVER edit `main` directly or
+    rewrite published history. Push, promotion and every site-to-site synchronisation wait for
+    the user's explicit command, except the mandatory `cas`+`local` exchange of `two_site_sync`.
+    A merge into `main` and a push of `main` happen ONLY with the user's explicit permission, and
+    only after a new version is released (version bump, build, deploy) and the FULL pipeline run
+    on that deployed version is GREEN.
+  cas_search_first: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: step 0 of every researcher, coder and tester unit
+    of a project registered on the Code Analysis Server, before any edit] MUST: read
+    `ops/cas-tools.yaml`, which every such dispatch assigns, and run the bounded search of its
+    `cas_search_first` block through MCP Proxy for an existing implementation of what the task
+    touches, duplicates, usages and callers, and unwired code. Reuse or wire existing code instead
+    of writing a new copy. The search counts only on an index that the current block's
+    `two_site_sync` has settled; a search on a not-yet-indexed state is a stale result, not
+    evidence. A CAS hit is a claim until it is confirmed against the work site. The return lists
+    the CAS commands used and what they found; a return without that list is incomplete. Step 0
+    is a few targeted queries, NEVER a full analysis: `comprehensive_analysis` runs once per block,
+    after the exchange. When CAS cannot answer, the return states the exact error: under `local`
+    the unit continues on local tools, under `cas` it stops (`cas_mode`).

@@ -1,0 +1,31 @@
+# G/T/A plan-context boundary
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` or the direct G/T owner contract
+# selects this file. It grants no other read.
+
+rules:
+  - this is the highest-priority boundary while writing G, T or A plan steps
+  - contract/system instructions are not plan context and do not expand the two-item payload
+  - live Plan Manager readback is the only plan-state truth
+
+zones:
+  G: {assignment: one G only, common_parent: plan, child_level: 3, may_launch: T only}
+  T: {assignment: one T only, common_parent: immediate G, child_level: 4, may_launch: A only}
+  A: {assignment: one A only, common_parent: immediate T, child_level: 5, may_launch: none}
+
+relaxed_isolation:
+  variable: "`variables.step_isolation` in roles/laws.yaml; only the user changes it"
+  strict: one step per launch, as the zones above state
+  relaxed: one launch may carry all selected siblings of one level under one direct parent, with the same parent-common link plus one specific prompt per step; the batch never spans two parents or two levels and adds no context beyond that common — `laws.step_isolation`
+
+payload:
+  admitted: [verified immediate-parent common link, prompt text specific only to the assigned step]
+  forbidden: [copied common prose, receipt, verification evidence, HRS, MRS, full plan, step tree, branch dump or prompt, global checklist, conversation history, sibling output, another assignment]
+
+child_read_boundary: >-
+  Read only the linked common and the one step-specific prompt. Never reconstruct the plan with
+  broad discovery or fetch an ancestor, sibling or descendant outside the assignment. Escalate
+  missing information to the direct parent.
+
+failure: >-
+  Missing, stale, ambiguous, leaking or unverified common, a level mismatch, more than one assigned
+  step, or any extra plan-context item is exact RED and blocks mutation or dispatch.

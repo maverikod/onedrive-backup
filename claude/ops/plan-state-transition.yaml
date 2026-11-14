@@ -1,0 +1,24 @@
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+# Mechanical Plan Manager state transition. No other manual is in this agent's read set.
+prompt_envelope:
+  exact_keys: [operation, plan_uuid, expected_revision_uuid, user_authorization]
+  exact_size: "four non-empty YAML lines; `user_authorization: null` counts as non-empty"
+  forbidden: [free-form prose, checklist, contract quotation, manual summary, conversation history, TODO mutation, audit history, rationale, status narrative, repeated acceptance criteria]
+  overflow: refuse dispatch and fix the caller; never add a fifth field or encode extra prose inside a value
+
+operations:
+  open_editable_successor:
+    user_authorization: null
+    precondition: the live plan is frozen at expected_revision_uuid
+    transition: open exactly one editable successor revision
+    forbidden: [step mutation, TODO mutation, matrix mutation, freeze, commit, second readback]
+  freeze_authorized_candidate:
+    user_authorization: exact current user command authorizing freeze of the presented plan_uuid and expected_revision_uuid
+    precondition: live identity equals the presented and authorized candidate identity
+    transition: freeze exactly that unchanged candidate once
+    forbidden: [content mutation, successor creation, inferred or stale authorization, second freeze, confidence readback]
+
+execution_budget:
+  calls: one live precondition read plus one transition call
+  retry: only a classified tool failure that produced no state verdict; never because the agent is slow, uncertain or silent
+  no_progress: if no tool result is returned, report the exact absence; do not add reads, TODO work or prompt context

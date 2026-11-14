@@ -1,0 +1,16 @@
+# Atomic A-step authoring
+# EVENT-SELECTED OPERATION CARD. Only planner_a reads this card.
+
+atomic_step_file_rule: >-
+  One A step processes EXACTLY ONE project file. Documentation, configuration, schemas and every
+  other project artifact count like code. One file may have several ordered A steps, but one A
+  step never names or requires two files.
+
+target_ownership:
+  - resolve the exact target_file before writing the A step
+  - a file already owned by an open branch is not claimed by another branch; the second waits or is re-scoped
+  - concept coverage may overlap, but concrete files and objects have one owner at a time
+
+result:
+  required: [A_uuid, A_path, target_file, executable_action, acceptance_evidence, live_readback]
+  forbidden: [child_dispatch, child_common, model_selection, second_target_file]

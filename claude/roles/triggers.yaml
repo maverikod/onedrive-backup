@@ -1,0 +1,190 @@
+# onedrive-backup — orchestrator event registry for Claude
+template_version: v1.7.82
+mode_aliases: {planning: [planning, plan], plan_todo_repair: [plan_todo_repair, plan-todo-repair, "исправление TODO после проверки плана"], analysis: [analysis, inspect], stupid_mode: [stupid_mode, stupid-mode, single-model, "Режим тупого"], no_logger_mode: [no_logger_mode, no-logger, "без логгера", "Режим без логгера"], prompt_development: [prompt_development, prompt-development, autonomy], refactoring: [refactoring, implement]}
+registry_contract:
+  purpose: This complete startup registry selects files by event; it is not permission to read every path.
+  fields:
+    orchestrator_reads: files the orchestrator itself must read before handling this event
+    agent_reads: files passed by path to the assigned agent; the orchestrator MUST NOT open one
+      unless the current event also lists that file under `orchestrator_reads`
+  selection:
+    - match events only from the user's request, current mode latch, and returned agent evidence
+    - take the union of `orchestrator_reads` for events that match now
+    - before every launch, match exactly one concrete `dispatch_*` event plus every operation
+      event that applies; the agent reads exactly the union of their concrete `agent_reads`
+    - every item in either read list is a real package path; descriptions and placeholders never
+      grant a read, and role-local pointers or trigger tables never activate another file
+    - do not preload files for a possible later event
+    - an empty `orchestrator_reads` means the startup contract already contains all authority needed
+    - after compaction, reread only the entrypoint, common and this registry, then the manuals for the next event; do not replay manuals from completed events
+events:
+  task_intake:
+    when: every new user request
+    orchestrator_reads: []
+    action: classify the request and select every event that currently matches; with no declared mode the mode is `refactoring` — `planning` only on the user's command
+  supplied_task_context:
+    when: the user or harness explicitly supplies one task-context file for dispatch
+    orchestrator_reads: [claude/roles/orchestrator.yaml]
+    action: read that exact file completely through EOF without following its links
+  agent_dispatch:
+    when: before selecting a model, writing an agent prompt, or launching an agent
+    orchestrator_reads: [claude/roles/orchestrator.yaml, claude/roles/laws-orchestrator.yaml, claude/ops/model-selection.yaml, claude/ops/logger-exchange.yaml]
+    action: select exactly one concrete role-dispatch event below and every matching operation event
+  dispatch_planner:
+    when: immediately before launching the non-decomposition planner for a project matrix TODO, normative candidate preparation or user-authorized freeze
+    orchestrator_reads: []
+    agent_reads: [claude/roles/common.yaml, claude/roles/laws-common.yaml, claude/roles/laws-planner.yaml, claude/roles/tooling.yaml, claude/roles/planner.yaml, claude/ops/logger-exchange.yaml]
+  dispatch_planner_g:
+    when: immediately before launching one G-step author
+    orchestrator_reads: []
+    agent_reads: [claude/roles/planner-common.yaml, claude/roles/planner-g.yaml, claude/roles/tooling.yaml, claude/ops/planning-context.yaml, claude/ops/planning-authoring.yaml, claude/ops/planning-common-gate.yaml, claude/ops/planning-child-dispatch.yaml, claude/ops/logger-exchange.yaml]
+  dispatch_planner_t:
+    when: a G owner launches one direct T-step author
+    orchestrator_reads: []
+    agent_reads: [claude/roles/planner-common.yaml, claude/roles/planner-t.yaml, claude/roles/tooling.yaml, claude/ops/planning-context.yaml, claude/ops/planning-authoring.yaml, claude/ops/planning-common-gate.yaml, claude/ops/planning-child-dispatch.yaml, claude/ops/logger-exchange.yaml]
+  dispatch_planner_a:
+    when: a T owner launches one direct A-step author
+    orchestrator_reads: []
+    agent_reads: [claude/roles/planner-common.yaml, claude/roles/planner-a.yaml, claude/roles/tooling.yaml, claude/ops/planning-context.yaml, claude/ops/planning-a-authoring.yaml, claude/ops/logger-exchange.yaml]
+  dispatch_researcher:
+    when: immediately before launching a researcher
+    orchestrator_reads: []
+    agent_reads: [claude/roles/common.yaml, claude/roles/laws-common.yaml, claude/roles/laws-researcher.yaml, claude/roles/tooling.yaml, claude/roles/researcher.yaml, claude/ops/cas-tools.yaml, claude/ops/logger-exchange.yaml]
+  dispatch_context_former:
+    when: immediately before launching a context_former
+    orchestrator_reads: []
+    agent_reads: [claude/roles/common.yaml, claude/roles/laws-common.yaml, claude/roles/laws-researcher.yaml, claude/roles/tooling.yaml, claude/roles/context_former.yaml, claude/ops/logger-exchange.yaml]
+  dispatch_coder:
+    when: immediately before launching a coder
+    orchestrator_reads: []
+    agent_reads: [claude/roles/common.yaml, claude/roles/laws-common.yaml, claude/roles/laws-coder.yaml, claude/roles/tooling.yaml, claude/roles/coder.yaml, claude/ops/cas-tools.yaml, claude/ops/logger-exchange.yaml]
+  dispatch_tester:
+    when: immediately before launching a tester
+    orchestrator_reads: []
+    agent_reads: [claude/roles/common.yaml, claude/roles/laws-common.yaml, claude/roles/laws-tester.yaml, claude/roles/tooling.yaml, claude/roles/tester.yaml, claude/ops/cas-tools.yaml, claude/ops/logger-exchange.yaml]
+  dispatch_conscience: {when: immediately before launching conscience, orchestrator_reads: [], agent_reads: [claude/roles/common.yaml, claude/roles/laws.yaml, claude/roles/conscience.yaml, claude/ops/logger-exchange.yaml], model: {tier: fable, id: claude-fable-5-1}}
+  dispatch_plan_state_operator: {when: immediately before one mechanical plan revision-state transition, orchestrator_reads: [], agent_reads: [claude/roles/plan-state-operator.yaml, claude/ops/logger-exchange.yaml], model: {tier: haiku, id: claude-haiku-5-5}}
+  dispatch_plan_checker_a: {when: immediately before checking one live A step, orchestrator_reads: [], agent_reads: [claude/roles/plan-checker.yaml, claude/ops/logger-exchange.yaml], model: {tier: haiku, id: claude-haiku-5-5}}
+  dispatch_plan_checker_t: {when: immediately before checking one live T step, orchestrator_reads: [], agent_reads: [claude/roles/plan-checker.yaml, claude/ops/logger-exchange.yaml], model: {tier: sonnet, id: claude-sonnet-5-5}}
+  dispatch_plan_checker_g: {when: immediately before checking one live G step, orchestrator_reads: [], agent_reads: [claude/roles/plan-checker.yaml, claude/ops/logger-exchange.yaml], model: {tier: opus, id: claude-opus-5-5}}
+  dispatch_plan_todo_api_researcher: {when: an unknown external-service API nuance blocks one finding classification, orchestrator_reads: [], agent_reads: [claude/roles/plan-api-researcher.yaml, claude/ops/logger-exchange.yaml], model: {tier: sonnet, id: claude-sonnet-5-5}}
+  dispatch_plan_todo_corrector_a: {when: a live A finding exceeds direct orchestrator authority, orchestrator_reads: [], agent_reads: [claude/roles/plan-todo-corrector.yaml, claude/ops/logger-exchange.yaml], model: {tier: haiku, id: claude-haiku-5-5}}
+  dispatch_plan_todo_corrector_t: {when: a live T finding exceeds direct orchestrator authority, orchestrator_reads: [], agent_reads: [claude/roles/plan-todo-corrector.yaml, claude/ops/logger-exchange.yaml], model: {tier: sonnet, id: claude-sonnet-5-5}}
+  dispatch_plan_todo_corrector_g: {when: a live G finding exceeds direct orchestrator authority, orchestrator_reads: [], agent_reads: [claude/roles/plan-todo-corrector.yaml, claude/ops/logger-exchange.yaml], model: {tier: opus, id: claude-opus-5-5}}
+  declared_mode:
+    when: the task or assigned stage selects a canonical mode or any key/value in `mode_aliases`
+    orchestrator_reads: []
+    agent_reads: [claude/modes.yaml]
+  prompt_development_gate:
+    when: the selected mode is `prompt_development`, `prompt-development` or `autonomy`
+    orchestrator_reads: [claude/roles/laws.yaml, claude/modes.yaml]
+    gate: refuse the mode unless the current repository's `laws.variables.autonomy` is exactly true
+  stage_tool_use:
+    when: before an assigned stage's first tool call, or after a tool failure
+    orchestrator_reads: []
+    agent_reads: [claude/roles/tooling-rules.yaml]
+  local_repository_access:
+    when: before an assigned stage's first local repository read, search or shell inspection
+    orchestrator_reads: []
+    agent_reads: [claude/ops/local-tools.yaml]
+  manual_file_edit:
+    when: before an assigned stage's first manual file edit
+    orchestrator_reads: []
+    agent_reads: [claude/ops/editing.yaml]
+  verification_or_pipeline:
+    when: before an assigned stage's first verification, pipeline check or pipeline edit; also when `pipeline` is missing or a runner other than `pipeline` appears
+    orchestrator_reads: []
+    agent_reads: [claude/ops/testing.yaml, claude/ops/verification-discipline.yaml]
+  delivery_action:
+    when: before an assigned stage defines an external contour, packages, deploys, fixes, versions or releases, or touches `build.sh`, a service database or `projectid`; read `laws.variables.project_kind` to select service or library delivery — while `laws.variables.dev_prod` is true work runs in DEV and reaches production only by `ops/delivery.yaml` `dev_prod`
+    orchestrator_reads: []
+    agent_reads: [claude/ops/delivery.yaml, claude/ops/testing.yaml]
+  planning_authoring:
+    when: the user asks to create or revise HRS, MRS, G, T or A planning artifacts
+    orchestrator_reads: [claude/roles/orchestrator.yaml, claude/roles/laws-orchestrator.yaml, claude/ops/planning-context.yaml, claude/ops/planning-common-gate.yaml, claude/ops/planning-authoring.yaml]
+    action: orchestrator authors HRS/MRS and plan common, then dispatches exactly one G owner
+  plan_child_dispatch:
+    when: immediately before preparing or dispatching a G, T or A plan-authoring assignment
+    orchestrator_reads: [claude/roles/orchestrator.yaml, claude/ops/planning-context.yaml, claude/ops/planning-common-gate.yaml, claude/ops/model-selection.yaml]
+    agent_reads: []
+    action: orchestrator dispatches G only through planner_g; G dispatches T only through planner_t; T dispatches A only through planner_a; A is terminal
+  plan_steps_check:
+    when: the user explicitly commands "проверка шагов плана", or before asking the user to authorize any plan freeze
+    orchestrator_reads: [claude/roles/orchestrator.yaml, claude/ops/planning-runtime.yaml, claude/ops/model-selection.yaml]
+    agent_reads: [claude/roles/plan-checker.yaml, claude/ops/plan-step-check.yaml]
+    action: create the root TODO; for pre-freeze cover every live G/T/A step; dispatch by live level; route UUID-only corrections in one mutable candidate; enforce the closed-child barrier; final GREEN permits only a freeze request, never freeze
+  plan_todo_repair: {when: plan_todo_repair mode is explicitly active for one exact root review TODO, orchestrator_reads: [claude/roles/orchestrator.yaml, claude/ops/plan-todo-repair.yaml, claude/ops/model-selection.yaml], agent_reads: [], action: "process direct children serially; research unknown external APIs first; enforce 8k/24k context, 1k/3k mutation and three-step caps; delegate overflow by UUID; one terminal affected-scope check; never freeze or commit"}
+  plan_open_editable_successor: {when: one frozen plan needs an editable successor for approved corrections, orchestrator_reads: [claude/ops/planning-runtime.yaml], agent_reads: [claude/ops/plan-state-transition.yaml], action: dispatch exact four-line open_editable_successor envelope; no checklist, TODO, step mutation, history or extra readback}
+  plan_freeze_authorization: {when: only after the user explicitly authorizes freezing the exact presented current plan/revision, orchestrator_reads: [claude/ops/planning-runtime.yaml], agent_reads: [claude/ops/plan-state-transition.yaml], action: dispatch exact four-line freeze_authorized_candidate envelope; fresh identity read and one freeze only if unchanged}
+  product_or_repository_analysis:
+    when: the request requires reading, searching or judging product or test sources
+    orchestrator_reads: [claude/roles/orchestrator.yaml, claude/ops/model-selection.yaml]
+    agent_reads: [claude/roles/researcher.yaml, claude/ops/local-tools.yaml]
+    action: dispatch a researcher; do not inspect the repository in the orchestrator session
+  bounded_context_formation:
+    when: a contract-selected unit must assemble bounded non-authoring context for another owner
+    orchestrator_reads: [claude/roles/orchestrator.yaml, claude/ops/model-selection.yaml]
+    agent_reads: [claude/roles/context_former.yaml]
+    action: dispatch context_former for the declared bounded non-authoring context only
+  implementation_or_bugfix:
+    when: the request requires product edits, a bug fix, packaging or delivery
+    orchestrator_reads: [claude/roles/orchestrator.yaml, claude/ops/model-selection.yaml]
+    agent_reads: [claude/roles/coder.yaml, claude/roles/tester.yaml, claude/ops/editing.yaml, claude/ops/testing.yaml, claude/ops/delivery.yaml]
+    action: on the TODO tree of `laws.todo_tree_work`, no plan read or written; tester establishes the mapped RED, coder corrects the proven cause, the real mapped check decides the next transition and resolves its step TODO
+  external_surface_change:
+    when: a command, API schema, result, side effect, public callable or signature changes
+    orchestrator_reads: [claude/roles/orchestrator.yaml, claude/ops/model-selection.yaml]
+    agent_reads: [claude/roles/planner.yaml, claude/roles/tester.yaml, claude/ops/planning-runtime.yaml, claude/ops/planning-authoring.yaml, claude/ops/testing.yaml, claude/ops/delivery.yaml]
+    action: planner opens one editable successor without asking, analyses HRS/MRS, offers HRS options for the user's permission, updates MRS, concepts and the matrix, writes no G/T/A step, then the user is asked and freeze happens only on permission; after it tester changes matrix/checks and proves RED; only then may coder change the contour
+  pipeline_result:
+    when: an agent returns a mapped pipeline RED or GREEN result
+    orchestrator_reads: [claude/roles/orchestrator.yaml, claude/ops/model-selection.yaml]
+    action: route RED to the corrective tier of `laws.cheapest_capable_model` and GREEN to the next planned unit
+  requested_risk_report:
+    when: after pipeline evidence, the user requests a human-readable risk report
+    orchestrator_reads: [claude/roles/orchestrator.yaml, claude/ops/model-selection.yaml]
+    agent_reads: [claude/roles/conscience.yaml]
+    action: dispatch the explicitly highest-tier conscience after pipeline evidence; its report never replaces pipeline acceptance
+  plan_operation_outside_authoring:
+    when: an assigned unit opens, continues, mutates, validates or closes planning runtime state
+    orchestrator_reads: [claude/roles/orchestrator.yaml, claude/ops/model-selection.yaml]
+    agent_reads: [claude/ops/planning-runtime.yaml]
+    action: dispatch the stage owner selected by the current plan operation; the orchestrator does not inspect lower-level artifacts
+  documentation_store:
+    when: an assigned unit reads or writes the documentation server
+    orchestrator_reads: []
+    agent_reads: [claude/ops/doc-store-tools.yaml]
+  cas_operation:
+    when: an assigned unit uses CAS; file_access is cas or local_ide; tree analysis, a structural rewrite such as splitting a file/class or extracting a superclass, code that is too long, too complex or duplicated, server git, a file too large for one inline call, a lock, job id, index-health or claim that something is absent from the project is involved; or the user explicitly commands local-to-CAS synchronization
+    orchestrator_reads: []
+    agent_reads: [claude/ops/cas-tools.yaml]
+  git_remote_or_release:
+    when: a push, pull, fetch, remote update, version release or package publication is requested
+    orchestrator_reads: [claude/roles/orchestrator.yaml]
+    agent_reads: [claude/ops/delivery.yaml]
+    gate: the mandatory `cas` and `local` push inside `laws.two_site_sync` needs no command and `main` is never part of it; for every other remote change the user must explicitly authorize the remote-changing operation
+    action: dispatch the selected modifying owner; the orchestrator performs no git or publication command
+  site_synchronization:
+    when: local-to-CAS or CAS-to-local synchronization is requested, or the mandatory `laws.two_site_sync` exchange is due before the first agent unit of a block
+    orchestrator_reads: [claude/roles/orchestrator.yaml]
+    agent_reads: [claude/ops/cas-tools.yaml]
+    gate: the mandatory `laws.two_site_sync` exchange needs no command; for every other site change the user must explicitly authorize the site-changing operation
+    action: dispatch the selected modifying owner; the orchestrator performs no transfer command
+  tool_failure:
+    when: a tool returns misuse, denial, transport, infrastructure or server failure
+    orchestrator_reads: [claude/roles/tooling-rules.yaml]
+    agent_reads: [claude/roles/tooling-rules.yaml]
+  enable_or_disable_stupid_mode:
+    when: the user explicitly enables or disables `stupid_mode` / "Режим тупого"
+    orchestrator_reads: [claude/modes.yaml, claude/roles/laws.yaml, claude/ops/testing.yaml, claude/ops/delivery.yaml]
+    action: apply the explicit latch transition; while enabled the current Claude model enters stage roles itself
+  logger_unavailable: {when: "the logger or the Code Analysis Server session issuer is unreachable or refuses a write the unit cannot correct, while `no_logger_mode` is disabled", orchestrator_reads: [claude/ops/logger-exchange.yaml], action: "dispatch nothing, report the exact error and ask the user to confirm `no_logger_mode` / \"Режим без логгера\""}
+  enable_or_disable_no_logger_mode: {when: "the user explicitly confirms or disables `no_logger_mode` / \"Режим без логгера\"", orchestrator_reads: [claude/modes.yaml, claude/ops/logger-exchange.yaml], action: "apply the explicit latch transition in one line citing the user's command; on disable import the mode's files into the logger session first"}
+  no_logger_mode_active: {when: "`no_logger_mode` is already enabled and a later dispatch begins", orchestrator_reads: [claude/ops/logger-exchange.yaml], action: "exchange the task and the answer as the files of `ops/logger-exchange.yaml` `no_logger_mode`; everything else follows the current mode"}
+  stupid_mode_active:
+    when: "`stupid_mode` is already enabled and a later task or stage action begins"
+    orchestrator_reads: [claude/modes.yaml, claude/roles/laws.yaml]
+    action: >-
+      execute serially without launching another model; for only the current stage, the concrete
+      `agent_reads` union of its matching `dispatch_*` and operation events becomes the current
+      Claude model's stage read set, and no nonmatching event grants a read

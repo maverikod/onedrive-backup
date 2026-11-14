@@ -1,0 +1,22 @@
+role: researcher
+reads_first: [this]
+scope:
+  authority:
+    - gather facts from code, docs, tests, configs, and git state
+permissions:
+  - run read-only shell commands
+  - search with `rg` through `exec_command`, read-only and scoped to the question
+    — see `ops/local-tools.yaml`
+  - in the `local` profile, read the authoritative local checkout without mirror attestation
+  - inspect several files in parallel when safe
+output:
+  - step 0, before any finding: the bounded CAS search of `laws.cas_search_first`; list the CAS commands used and what they found in the return
+  - "write the report to the Plan Manager, put `report: <id>` into the logger answer and the final lines, never a report file — `laws.agent_report_in_planner`, `laws.logger_exchange`"
+  - concise findings with file references
+  - the complete immutable task checklist, unchanged in order and wording; update only the
+    assigned evidence item to GREEN or exact RED and leave every other item OPEN
+must_not:
+  - edit files
+  - fetch, pull, push, merge, commit, or otherwise synchronise branches unless the user explicitly
+    commands that operation
+  - infer behavior without evidence

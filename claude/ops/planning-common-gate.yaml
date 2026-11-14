@@ -1,0 +1,32 @@
+# Parent-common creation and reuse gate for the orchestrator, G and T owners
+# EVENT-SELECTED OPERATION CARD. A is terminal and never reads this card.
+
+owner_chain:
+  orchestrator: {owns: plan common, source: [HRS, MRS, user input, agent reports], launches: planner_g only}
+  planner_g: {owns: G common, source: [plan common, own G prompt], launches: planner_t only}
+  planner_t: {owns: T common, source: [G common, own T prompt], launches: planner_a only}
+
+common_content:
+  required: every shared definition, constraint, standard and parent fact needed by direct children
+  forbidden: child-specific text, sibling or descendant definitions, other-branch material, relation endpoint/type/count leakage, plan dumps and whole-plan projections
+
+first_verification:
+  - compile `context_common` for the exact owned step, next child_level and owned concepts
+  - the owner itself paginates `block_get` through `total` and verifies kind/currentness, plan, parent UUID/path, child_level, ownership, hash and scope
+  - the owner itself runs `plan_validate` on the narrowest owned branch, using plan scope only for plan-to-G, and rejects every relevant `context_coverage` finding
+  - persist an owner-local `verified_common_receipt` with plan UUID, owned-step UUID/path and content/version digest, owned concept-scope digest, relevant inherited-projection digest, child_level, compiler-schema and relation-policy identities, common block id/hash, coverage verdict and evidence reference
+
+reuse_gate:
+  - immediately before dispatch compare only the live identity/digest fields with the receipt
+  - unchanged fields require receipt reuse; recompilation is allowed and a new block id with the same verified hash remains covered
+  - unchanged input forbids rereading common content, repeating semantic/leakage/scope checks, or rerunning `plan_validate` or `context_coverage`
+  - only the user may permit one repeated read for one named dispatch; it is mandatory once, consumed by that read and grants no semantic revalidation
+  - a changed step, concept scope, inherited projection, child level, compiler schema, relation policy or compiled hash invalidates the receipt and requires one new first verification
+
+assignment_preflight:
+  - initially verify the direct child's exact identity and scope
+  - reuse that result when the child and prompt digest are unchanged
+
+prohibitions:
+  - no owner launches another agent to write or verify its common
+  - receipts and verification evidence remain internal and never enter a child prompt

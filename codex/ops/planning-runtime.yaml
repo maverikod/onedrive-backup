@@ -1,0 +1,138 @@
+# Planning runtime guidance
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+# Every `applies_after_event_selection` condition constrains an already selected card and grants no read.
+
+rules:
+  - treat planning mode as structured planning-system work, not generic "think before code"
+  - keep planning artifacts, review states, and acceptance gates explicit
+  - G/T/A authoring and parent-common verification are isolated in `planning-context.yaml` and `planning-common-gate.yaml`; this card is not in a G/T/A author's read set
+  - HRS/MRS mutations belong to the orchestrator; every GS/TS/AS mutation belongs to planner_g/planner_t/planner_a, except for the root-TODO lifecycle of `plan_steps_check_event` and the explicit budgeted one-step mutation gate of active `plan_todo_repair`
+  - the Plan Manager readback is the only live plan truth; a handoff describes context, never state — see `laws.source_freshness`
+
+plan_steps_check_event:
+  law: laws.plan_steps_check_event
+  applies_after_event_selection: the user's explicit command "проверка шагов плана", or automatically before requesting permission to freeze a plan
+  purpose: audit the selected steps in one mutable candidate and keep every finding, correction and rerun discoverable below one root TODO
+  roles:
+    orchestrator: owns only the root TODO lifecycle, the owner-filter barrier and agent dispatch
+    plan_checker: audits the specified steps and creates one direct child TODO for each problematic step
+    correction_agent: reads one child TODO by UUID, repairs that step, records evidence and closes that TODO
+  root_todo:
+    create_before_first_plan_checker_launch:
+      kind: review
+      status: open
+      assigned_to: plan_checker
+      primary_anchor: "anchor_type=plan with anchor_plan_uuid set to the audited plan"
+    required_description:
+      - event name `plan_steps_check_event` and trigger source: literal user command or mandatory pre-freeze gate
+      - exact plan UUID, current revision UUID, and every selected step UUID and path
+      - the audit criteria, required evidence and definition of a GREEN pass
+      - "child contract: every finding has owner=<ROOT_TODO_UUID> and is a direct child with primary_anchor_type=todo and anchor_ref_id=<ROOT_TODO_UUID>"
+      - "descendant query: paginate todo_list(owner=<ROOT_TODO_UUID>, view=summary, limit=200, offset=<N>) and retain only rows whose primary_anchor_type is todo and anchor_ref_id equals <ROOT_TODO_UUID>"
+      - "barrier: rerun plan_checker only after every direct child returned by that query has status closed; only the orchestrator closes this root after a GREEN rerun"
+    readback: >-
+      Immediately after creation, read the root TODO back and append its actual UUID plus the
+      fully substituted descendant query to the description before launching plan_checker.
+  plan_checker_pass:
+    fanout: one fresh level-confined plan_checker agent per selected step; no agent receives the root's full step list; under `variables.step_isolation` = `relaxed` one launch may carry one sibling batch under one parent per `laws.step_isolation`
+    pre_freeze_scope: every live G/T/A step in the mutable candidate; an ad-hoc explicit user audit may name a smaller scope
+    input: one audit prompt specific only to that selected step; it contains the step UUID/path and root TODO UUID as the finding anchor
+    procedure:
+      - audit only the assigned step against its live Plan Manager readback; stale or missing identity is RED
+      - on every pass launch a fresh agent for every step in the root scope, including steps previously corrected; in relaxed isolation one launch per sibling batch
+      - create at most one finding TODO for the assigned problematic step in this pass, aggregating that step's findings
+      - create each finding with `owner=<ROOT_TODO_UUID>` and make it a direct child with `anchor_type=todo` and `anchor_ref_id=<ROOT_TODO_UUID>`; both owner and anchor are mandatory, while title matching, links and text references establish neither
+      - include pass number, plan and revision UUIDs, step UUID and path, exact evidence, required correction and closure evidence in each finding TODO
+      - return GREEN or RED for the assigned step; on RED return its created child TODO UUID
+    aggregate: the orchestrator uses the returned step verdicts as inbound agent context, appends the pass manifest to the root TODO, and declares the pass GREEN only when every assigned step returned GREEN
+    authority: each plan_checker agent may create only its assigned step's direct finding TODO; it may not read or update the root TODO body
+  correction_loop:
+    optional_bounded_mode: >-
+      Only an explicit user activation for this exact root selects `plan_todo_repair`. Its operation
+      card then replaces this correction loop, but not the root ownership contract or freeze gate.
+      It forbids per-child rechecking and permits one final affected-scope pass after the whole
+      queue only when the plan changed.
+    dispatch: >-
+      The child TODO UUID is the only task assignment. The launch still names the
+      runtime-required model and reasoning settings; it does not copy, paraphrase or replace the
+      TODO assignment with a separate checklist. The plan-authoring gate does not apply here.
+    executor:
+      - call `todo_get` for the supplied UUID and verify `owner=<ROOT_TODO_UUID>`, `primary_anchor_type=todo` and `anchor_ref_id=<ROOT_TODO_UUID>`
+      - set the TODO in progress and assign it to the executing agent, then repair only its named plan step in the same mutable candidate; never freeze during correction
+      - append exact readback evidence and execution result to the TODO
+      - on completed work call `todo_resolve(todo=<CHILD_UUID>, changed_by=<agent>)` and then `todo_close`; a blocked or failed correction remains non-closed
+    barrier: >-
+      Paginate the root owner query through exhaustion and verify every returned direct child is
+      `closed`. Empty active-only output, `resolved`, `cancelled`, `blocked`, `in_progress` and
+      `open` are not the barrier. A repeated defect receives a new child TODO; closed history is
+      never reopened or rewritten.
+    repeat: >-
+      When the barrier is green, the orchestrator launches a fresh level-confined plan_checker
+      agent for every selected step. RED creates new direct children and returns to correction.
+      The orchestrator appends the aggregate GREEN manifest to the root, then calls `todo_resolve` and `todo_close` for the
+      root. No other role may close the root. GREEN closes the semantic gate only; it never freezes
+      the plan or authorizes freeze.
+
+freeze_authorization:
+  law: laws.user_authorized_plan_freeze
+  operator: plan_state_operator through the exact four-field envelope in `ops/plan-state-transition.yaml`
+  candidate: one mutable plan revision through all findings, corrections and semantic reruns
+  before_request: [matrix incorporated into normative plan, every live G/T/A step covered, final aggregate GREEN, every direct finding TODO closed, root review TODO closed]
+  request: present exact plan UUID, current revision UUID and GREEN root TODO evidence, then wait for an explicit user command to freeze that candidate
+  authorization: binds one freeze attempt to the exact presented plan/revision; continue, implement, done, silence, validation or GREEN are not authorization
+  invalidation: any plan or incorporated-matrix mutation invalidates semantic GREEN and authorization; recheck affected scope and ask again
+  execute: after authorization perform one fresh identity read; freeze exactly once only if the presented identity is unchanged
+  existing_frozen_plan: use `open_editable_successor` to create one mutable successor, batch every correction there, then repeat this gate; never freeze per finding
+
+pipeline_matrix_todo:
+  law: laws.pipeline_parameter_matrix
+  applies_after_event_selection: before freezing any plan that creates or changes commands, endpoints, public library callables, parameters, schemas, constraints, return/result/error contracts, observable side effects or pipeline coverage
+  required_project_record: exactly one current non-terminal pipeline-matrix TODO directly anchored by immutable `anchor_project_id` to the exact project
+  source_of_truth: that project-anchored TODO until its reviewed matrix is incorporated into the normative plan; the frozen PLAN revision is implementation authority
+  structure:
+    - the main table has one row per application command/endpoint or public library constructor/function/method and one column per parameter in the project-wide union
+    - a cell is empty when the row does not accept the parameter; otherwise it contains exactly allowed types, allowed values and baseline required/optional status
+    - a separate relations table, keyed by row, records conditional requirements, compatibility, mutual exclusion, all-or-none, at-least-one, exactly-one, repetition, order and multiplicity
+    - a separate result-contract table, keyed by row and derived case, records success/error outcome, result or error type, shape, value assertions or semantic invariants, collection semantics and required/forbidden side effects
+  freeze:
+    - verify the TODO's direct project anchor and uniqueness by live readback before freeze
+    - review the row inventory, cells and relations and incorporate them into the mutable normative plan candidate
+    - in `planning` complete `plan_steps_check_event`; outside it present the HRS, MRS and matrix change; present the exact candidate and wait for explicit user authorization; only then freeze the PLAN revision through supported Plan Manager operations
+    - record project id, TODO id and `updated_at`, plan id and frozen plan revision in every execution task and in `pipeline/matrix.yaml`
+  change_control: >-
+    A new command, public callable, parameter, constraint, return/result/error contract or side
+    effect — and nothing else — changes the matrix, by `laws.external_surface_change_requires_matrix_revision`:
+    open one editable successor without asking, analyse HRS and MRS, offer HRS options and change HRS
+    only on the user's permission, update MRS and concepts, update the project-anchored TODO's rows,
+    cells, relationships and result contracts and incorporate them, then present the change and
+    freeze one new PLAN revision only on the user's explicit permission; only then refresh the
+    repository snapshot. No G/T/A step is rewritten. Editing only `pipeline/matrix.yaml` is forbidden.
+
+external_surface_change_events:
+  laws: [laws.external_surface_change_requires_matrix_revision, laws.external_api_change_pipeline_first]
+  service_events:
+    - add, remove or rename a command or endpoint
+    - change a request or response schema, parameter, default, type, boundary, validation rule or inter-parameter constraint
+    - change a success/error result contract, returned values or invariants, collection semantics or observable side effects
+  library_events:
+    - add, remove or rename a public constructor, function or method
+    - change a public signature, parameter, default, type, boundary, validation rule or inter-parameter constraint
+    - change a return type, success/error result contract, returned values or invariants, collection semantics or observable side effects
+  mandatory_transition: [open one editable successor without asking, analyse HRS and MRS, present HRS options and change HRS only on the user's permission, update MRS and add concepts, resolve unique project-anchored matrix TODO, update affected row/cells/relations/result contracts, incorporate into the successor, present the HRS/MRS/matrix change and exact candidate, obtain explicit user freeze authorization, freeze one new plan revision, refresh pipeline/matrix.yaml, update affected named pipeline checks including exact result assertions, run those checks against the unchanged contour and obtain RED, update skeleton and external contour, update client or examples, update product logic, deploy or rebuild, run the same named checks to GREEN]
+  first_repository_changes: [pipeline/matrix.yaml, affected pipeline/checks/check_<name>.py]
+  block: any external contour, client, example or product-code change attempted before the matrix and affected named checks produce RED against the unchanged contour
+
+gate_first:
+  law: laws.one_open_tree
+  applies_after_event_selection: before ANY plan mutation, and before opening or continuing a branch
+  procedure:
+    - "readback: `plan_status` for state identity plus `plan_validate` on the narrowest owned branch, live, with the timestamp; never fetch a full step tree"
+    - "gate diff, compact: gate green or red, counts per level, the top findings, and the OWNING level of each"
+    - "repair only the topmost owning level whose findings are red; never a lower level while a higher one is red"
+    - "readback again and repeat until the current branch is structurally green"
+    - "only then open the next branch or the next owner; while structural red stands on the current branch no new branch opens"
+  serial_order: >-
+    Branches close in dependency order, one at a time: the current GS to mechanical green and
+    review, then the next GS, and only then a new GS is created. Parallel decomposition of several
+    GS trees is forbidden; it produced interrupted branches and stale context blocks.
+  report: state the gate result, the level repaired, and the readback time in the working narrative and in the final report

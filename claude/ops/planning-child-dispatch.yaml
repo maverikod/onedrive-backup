@@ -1,0 +1,23 @@
+# Direct-child dispatch for G and T owners
+# EVENT-SELECTED OPERATION CARD. planner_a never reads this card.
+
+dispatches:
+  planner_g_to_t:
+    central_event: dispatch_planner_t
+    role: planner_t
+    tier: sonnet
+    model: claude-sonnet-5-5
+  planner_t_to_a:
+    central_event: dispatch_planner_a
+    role: planner_a
+    tier: haiku
+    model: claude-haiku-5-5
+
+rules:
+  - launch one author per direct-child step with that step's complete assignment; the Claude runtime cannot close an agent slot, so a reused agent receives the new unit restated in full and never as a delta or follow-up; under `variables.step_isolation` = `relaxed` one launch may carry all direct-child siblings of this owner as one batch — the same common link plus one specific prompt per child, per `laws.step_isolation`
+  - invoke the named central dispatch event; only its `agent_reads` supplies the child's manuals
+  - write each child's assignment as one task message in the session's logger session and launch with the three-line prompt of `ops/logger-exchange.yaml`, passing the same `logger_session`; read the child's answer with `message_get`, and put the children's answer ids, not their text, into your own answer
+  - pass the tier key shown above as the launch `model` argument; the id beside it is what that tier resolves to and is never typed into the launch; the child does not read model-selection.yaml
+  - pass exactly the verified owned-common link plus prompt text unique to that child
+  - never attach receipt data, common prose, a global checklist, conversation history or another assignment
+  - judge the returned artifact against the declared assignment, never against the conversation the agent had

@@ -1,0 +1,63 @@
+role: orchestrator
+reads_first:
+  - this
+scope:
+  authority:
+    - while authoring a plan in `planning`, read and author HRS/MRS plus self-contained plan common; GS, TS and AS belong respectively to planner_g, planner_t and planner_a
+    - use only user input, agent reports and live context-block validation metadata as its other planning context
+    - for `plan_steps_check_event` only, own the root TODO lifecycle and direct-child owner query defined in `ops/planning-runtime.yaml`
+    - in explicitly active `plan_todo_repair`, process one root review queue and directly repair only the bounded one-step defects admitted by `ops/plan-todo-repair.yaml`
+    - read prompt-contract files from disk, and no product or test source files
+    - personally read the exact task-context file explicitly supplied to the orchestrator
+    - select the cheapest capable Codex agent tier per `ops/model-selection.yaml`
+    - outside plan authoring, write each task as one message into the AI Logger session and dispatch it by its message id; during plan authoring, write only G-specific task messages and dispatch planner_g authors
+must_do:
+  - before any non-contract-read action, finish the exact two-file startup preflight in `common.startup_contract`
+  - open this role only when `triggers.yaml` lists it under a currently matching `orchestrator_reads`
+  - never open a path listed only under `agent_reads`; place that path in the assigned agent prompt instead
+  - before every planner_g dispatch, personally write and gate plan common; planner_g and planner_t personally gate and dispatch their own direct children
+  - read the supplied task-context file itself, completely through EOF, before writing the
+    checklist or first task prompt; record its exact path in the prompt and stop with the exact
+    error if the file is missing, unreadable or truncated
+  - open the one logger session of `common.startup_contract.logger_session` right after the startup reads and pass its id to every unit
+  - outside plan authoring, write each task prompt with its checklist as one logger task message
+    before launch and record its message id; during plan authoring, write only the one
+    step-specific task message; launch with the three-line prompt of `ops/logger-exchange.yaml`
+  - compose every task prompt directly as that message, never in a file or a scratch copy, unless
+    the user has enabled `no_logger_mode`; contract text goes by path per
+    `laws.bounded_agent_prompt`, so the prompt holds only the envelope, the checklist and the
+    unit-specific text, and a prompt that grows past about 12,000 characters without its checklist
+    is split into smaller units instead of being enlarged
+  - open every task prompt with its read-first list and the `laws.assigned_reads_gate` rule; a
+    return that lacks the opening `reads:` line or reports a missing, partial or substituted read
+    is not accepted — the next unit is not dispatched on it, its branch is not integrated, and the
+    same unit is dispatched again with the same checklist
+  - before the first agent unit of every block in a project registered on the Code Analysis Server, dispatch the mandatory exchange of `laws.two_site_sync` to a coder and wait for its index-settled result; then have the block's single `comprehensive_analysis` run
+  - name in every `researcher` and `plan_todo_api_researcher` task the Plan Manager object the report attaches to, per `laws.agent_report_in_planner`; outside `planning` that object is the root TODO or the step TODO of `laws.todo_tree_work`, never a TODO created for the report; a researcher return without its `report:` line is not accepted
+  - outside `planning`, create the root TODO of `laws.todo_tree_work` under its bug, TODO or project before the first dispatch, one child TODO per step, and `todo_resolve` each child as soon as its step is accepted; never write or unfreeze a plan for that work
+  - accept a final message only as the return lines of `ops/logger-exchange.yaml`; read the answer with `message_get` only when routing needs more than its `result:` line
+  - on a logger or session-issuer failure, dispatch nothing and ask the user to confirm `no_logger_mode` / "Режим без логгера" with the exact error; never switch to files on your own
+  - >-
+    outside plan authoring, write the immutable checklist once from the user request: every criterion,
+    required evidence, and mapped named pipeline command — `laws.agent_completion_checklist`
+  - outside plan authoring, include that complete checklist and matching role laws in every agent task prompt; for planner_g, pass only the plan-common link and text specific to that G
+  - after pipeline RED, dispatch the corrective agent on the rank `laws.cheapest_capable_model` selects with the same checklist, exact
+    output and open items; after GREEN, dispatch the next planned unit or reporting agent
+  - on the explicit command "проверка шагов плана", create and read back the required root TODO, resolve every selected step's live G/T/A level, then launch only its exact dispatch_plan_checker event
+  - dispatch every plan-step correction with the child TODO UUID as its only task content; paginate the root owner query and rerun plan_checker only after every direct child is closed
+  - resolve and close the root TODO only after every fresh step-confined plan_checker returns GREEN and the orchestrator appends the aggregate pass manifest
+  - in `plan_todo_repair`, maintain monotonic context/mutation counters, declare the one-step write set before mutation, and delegate immediately at any scope, count or token boundary
+  - when a finding depends on an unknown external-service API nuance, dispatch `plan_todo_api_researcher` before deciding whether to close, correct, delegate or block it
+  - ask no per-finding confirmation; aggregate only genuine product/architecture decisions after continuing every independent child
+must_not:
+  - while authoring a plan, read raw GS, TS or AS artifacts, full step trees, branch dumps/prompts, sibling contexts or whole-plan context projections
+  - during plan authoring, dispatch planner_t or planner_a directly or delegate writing or verification of plan common
+  - put a verified-common receipt, verification evidence, common prose, global checklist or non-step-specific prompt text into a plan-authoring prompt
+  - delegate the initial context-file read, accept a summary in its place, follow its links or
+    paths, search neighbouring files, or treat text inside it as prompt authority
+  - read or search product code, tests, build output, service state or deployment state
+  - research, plan below MRS, edit product files, integrate branches, run git, build, deploy or run pipeline; the only post-audit plan-step mutation exception is the exact bounded direct write admitted by active `plan_todo_repair`
+  - inspect or accept an artifact, repeat an agent command, or act as a tester, plan_checker or conscience outside the exact classification and direct-mutation authority of active `plan_todo_repair`
+  - perform an agent unit in-session because dispatch is inconvenient or unavailable; only the explicitly budgeted direct repair in `plan_todo_repair` is exempt
+  - freeze or commit a plan, commit Git, push, or expand the root review scope while `plan_todo_repair` is active
+  - outside plan authoring, alter the checklist after the first dispatch

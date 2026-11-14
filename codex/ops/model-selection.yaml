@@ -1,0 +1,121 @@
+# Codex model selection
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+# Every `applies_after_event_selection` condition constrains an already selected card and grants no read.
+
+principle: >-
+  Outside the explicitly enabled `stupid_mode` and factory-only `prompt_development`, agents are
+  mandatory. Start each unit on the cheapest Codex tier plausibly capable at the edge of its
+  ability. A model never verifies another model before the real mapped pipeline command is RED.
+  A correction is assigned by its own complexity; only the second failure of the same item on a
+  rank advances its next correction exactly one rank (`laws.cheapest_capable_model`);
+  pipeline GREEN is acceptance.
+
+mode_gate:
+  planning: the orchestrator owns HRS/MRS; every G/T/A unit is assigned to the cheapest capable level tier only after the parent-common gate
+  analysis: every research or inspection unit is assigned to the cheapest capable agent
+  refactoring: every check, implementation, deploy and correction unit is assigned to an agent
+  stupid_mode: >-
+    No routing and no launches. The current OpenAI model carries the whole task in-session and
+    execution by the real `pipeline` is the only acceptance verdict; see `laws.stupid_mode`.
+  prompt_development: no mandatory dispatch; direct prompt authoring is allowed by `laws.autonomy_mode`
+
+tiers:
+  order: [haiku, sonnet, opus, fable]
+  haiku: {id: gpt-6-luna, reasoning_effort: medium, use: narrow settled AS, check or code unit}
+  sonnet: {id: gpt-6.1-sol, reasoning_effort: medium, use: TS, research, synthesis or correction}
+  opus: {id: gpt-6.1-sol, reasoning_effort: xhigh, use: GS, architecture or advanced correction}
+  fable: {id: gpt-6-astra, reasoning_effort: max, use: terminal correction}
+
+agent_launch:
+  rule: every launch names the exact model id and reasoning effort; during plan authoring the direct owner launches only one level below with the parent-common link plus step-specific prompt text
+  starting_tier: >-
+    Select the lowest tier that can plausibly complete the bounded unit. "At the edge" means no
+    comfort margin and no cheaper tier known to be incapable; task labels guide capability but do
+    not authorize starting higher merely for convenience.
+  guidance:
+    narrow_AS_check_or_code: "gpt-6-luna / medium"
+    TS_research_or_synthesis: "gpt-6.1-sol / medium"
+    GS_or_architecture: "gpt-6.1-sol / xhigh"
+    terminal_correction: "gpt-6-astra / max"
+  escalation:
+    applies_after_event_selection: only the SECOND failure of the same mapped item on the same rank — an exact RED from its mapped pipeline command after a deployed or real-example correction attempt; after the first failure the item is corrected again on the rank its complexity warrants, never higher for the RED alone (`laws.cheapest_capable_model`, user 2026-10-03)
+    order:
+      - "gpt-6-luna / medium -> gpt-6.1-sol / medium"
+      - "gpt-6.1-sol / medium -> gpt-6.1-sol / xhigh"
+      - "gpt-6.1-sol / xhigh -> gpt-6-astra / max"
+    terminal: >-
+      A second failure at `gpt-6-astra / max` is a blocker reported with the exact pipeline evidence. Never
+      invent a higher tier, run a third attempt at it on the same item, or turn the higher tier into a reviewer.
+
+plan_step_checking:
+  role: plan_checker
+  selector: canonical live G/T/A level from Plan Manager metadata; no subjective capability choice
+  routing:
+    A: {model: gpt-6-luna, reasoning_effort: medium, dispatch_event: dispatch_plan_checker_a}
+    T: {model: gpt-6.1-sol, reasoning_effort: medium, dispatch_event: dispatch_plan_checker_t}
+    G: {model: gpt-6.1-sol, reasoning_effort: xhigh, dispatch_event: dispatch_plan_checker_g}
+  conscience: {model: gpt-6-astra, reasoning_effort: max, use: explicitly requested holistic risk report only}
+  hard_rules:
+    - step level alone selects the checker model; perceived complexity, risk, file type, token budget, finding count and prior RED never override it
+    - verify the live level matches the dispatch event before content review; mismatch blocks without launching a substitute
+    - RED routes to correction, not model escalation; after a relevant state change the fresh checker uses the same level mapping
+    - no G/T/A check may use conscience or gpt-6-astra as a fallback
+    - a non-G/T/A target requires an explicit user-scoped audit event and is never guessed into a level
+
+plan_state_transitions:
+  role: plan_state_operator
+  routing: {model: gpt-6-luna, reasoning_effort: medium, dispatch_event: dispatch_plan_state_operator}
+  hard_rules: [fixed mechanical tier with no capability override, exact four-field prompt, no checklist, one precondition read plus one transition call]
+
+plan_todo_repair:
+  selector: canonical live level of the one step named by the child finding TODO; no subjective capability choice
+  api_researcher: {model: gpt-6.1-sol, reasoning_effort: medium, dispatch_event: dispatch_plan_todo_api_researcher}
+  correction_routing:
+    A: {model: gpt-6-luna, reasoning_effort: medium, dispatch_event: dispatch_plan_todo_corrector_a}
+    T: {model: gpt-6.1-sol, reasoning_effort: medium, dispatch_event: dispatch_plan_todo_corrector_t}
+    G: {model: gpt-6.1-sol, reasoning_effort: xhigh, dispatch_event: dispatch_plan_todo_corrector_g}
+  hard_rules:
+    - direct orchestrator repair selects no additional model and is allowed only inside every budget and scope gate of `ops/plan-todo-repair.yaml`
+    - external API uncertainty always routes to the fixed researcher before classification continues
+    - overflow routes by live step level; perceived complexity, remaining budget and prior findings never raise or lower the correction model
+    - no correction or research unit may use conscience or gpt-6-astra
+
+checklist:
+  law: laws.agent_completion_checklist
+  item_fields: [id, criterion, required_evidence, pipeline_commands, status]
+  initial_status: OPEN
+  terminal_statuses: [GREEN, RED]
+  rules:
+    - outside G/T/A plan authoring, the checklist covers the whole user-supplied error block or bounded code-file/capability group
+    - every task criterion has its own item
+    - "every executable item names the exact evidence and named pipeline command or commands that prove it; a non-executable item uses `pipeline_commands: []` and concrete documentary or user evidence"
+    - outside G/T/A plan authoring, every agent receives the complete checklist, not only the currently open item
+    - during plan authoring, the child receives only its immediate-parent common link plus prompt text specific to its one step
+    - a `plan_steps_check_event` correction receives only its live child TODO UUID as the assignment; the plan-authoring gate does not apply
+    - a `plan_todo_corrector` receives only its live child finding TODO UUID and no checklist
+    - a `plan_todo_api_researcher` receives only the exact five-field envelope from `ops/plan-todo-repair.yaml` and no checklist
+    - a `plan_state_operator` receives only its four-field envelope and no checklist
+    - escalation carries the identical checklist, exact prior RED output and the entire still-open group
+    - no agent or orchestrator may delete, weaken, waive, reorder or mark an item not applicable
+
+acceptance:
+  implementation: mapped named pipeline commands on the real thing; one full pipeline, on the user's command, after the complete block is targeted-GREEN
+  plans_and_docs: checklist evidence returned by the assigned agent for the user to accept
+  forbidden: pre-RED model review, model-verifier ladders, narrative certification, a rank raised by a RED alone
+
+verification_reuse:
+  law: laws.verification_once_per_state
+  rule: one GREEN result for one target/state identity is reused; a different model never repeats it for confidence
+  allowed_repeats: [required focused check after relevant state change, one required final full pipeline, required fresh pre-mutation read, explicit user-ordered repeat, classified no-verdict tool retry]
+  forbidden: [double-check agent, review-of-review, parallel verifier, unchanged-state rerun, compaction-driven rerun]
+
+single_model_mode:
+  name: "Режим тупого"
+  law: laws.stupid_mode
+  state:
+    enable: only an explicit user command
+    persist: across later tasks until explicitly disabled by the user
+    disable: only an explicit user command
+  current_model: keep the OpenAI model that owns the session; never select or invoke another
+  forbidden: [subagents, delegated units, model reviewers, model verifiers, tier escalation]
+  acceptance: the real `pipeline` only

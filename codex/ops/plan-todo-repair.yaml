@@ -1,0 +1,87 @@
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+mode: plan_todo_repair
+owner: orchestrator
+
+entry:
+  gate: an explicit user command enables autonomous repair for exactly one plan-check root TODO
+  required_identity: [root TODO UUID, plan UUID, mutable revision UUID]
+  frozen_plan: open exactly one editable successor through plan_state_operator before processing findings
+  lifetime: until the root queue is terminal, the user stops it, or a blocking user decision remains
+
+queue:
+  source: exhaustively paginate direct children with owner=<ROOT_TODO_UUID> and matching TODO anchor
+  order: one child at a time in stable priority then created_at then UUID order
+  no_confirmation: process every non-blocked child without asking the user per item
+  immutable_scope: never adopt a TODO outside this root or create unrelated plan work
+
+token_accounting:
+  counter: exact runtime tokenizer when exposed; otherwise `ceil(UTF-8 bytes / 3)`
+  context_counts: [finding TODO body, target step, immediate-parent facts actually read, researcher summary, correction and evidence text]
+  context_per_todo_max: 8000
+  context_per_root_queue_max: 24000
+  researcher_summary_max: 2000
+  mutation_measure: tokenized diff additions plus deletions
+  mutation_per_step_max: 1000
+  mutation_per_root_queue_max: 3000
+  directly_mutated_step_max: 3
+  monotonic: closing a TODO, compaction, handoff or delegation never refunds either counter
+  preflight: declare remaining context and mutation budget before every additional read or write; if the next action can exceed a limit, do not perform it directly
+
+classification:
+  stale:
+    condition: current live plan already satisfies every finding criterion
+    action: append exact live evidence, resolve and close the finding without plan mutation
+  duplicate_or_cosmetic:
+    condition: another current artifact already supplies the same contract, or the requested change has no semantic effect
+    action: cite the canonical coverage, resolve and close without plan mutation
+  clear_local_defect:
+    condition: one existing step, one unambiguous correction, no external API uncertainty and every direct-mutation gate is GREEN
+    action: mutate that step once, record before/after evidence, resolve and close
+  external_api_unknown:
+    condition: deciding correctness depends on an unknown nuance of another service API
+    action: dispatch plan_todo_api_researcher before choosing close, direct correction, delegation or block
+  decision_required:
+    condition: evidence leaves a product or architectural choice rather than a factual answer
+    action: keep the finding blocked, continue independent children, and ask the user once with all remaining decisions
+
+direct_mutation_gate:
+  require:
+    - the finding names exactly one existing G/T/A step and the orchestrator declares that UUID as the complete write set before mutation
+    - the correction changes only fields explicitly required by the finding and neither creates new scope nor changes another step
+    - per-TODO and cumulative context budgets remain within 8000 and 24000
+    - step and queue mutation budgets remain within 1000 and 3000 changed tokens
+    - fewer than three distinct steps have already been directly mutated and this step has not been directly mutated in this queue
+  forbid:
+    - create or delete a G/T/A step
+    - move, reparent, reorder or change dependencies of any step
+    - edit a sibling or adjacent step for consistency, cleanup or style
+    - change several steps, branches, ownership boundaries or architectural decisions
+    - directly repair the same step twice in one root queue
+  overflow: dispatch one level-matched plan_todo_corrector with the child TODO UUID as its sole task content; do not read more context first
+
+external_api_research:
+  key: external service identity plus live API/version identity plus exact API question
+  reuse: one researcher result per unchanged key; reuse it for every matching finding
+  prompt:
+    exact_fields: [finding_todo_uuid, target_step_uuid, external_service, api_question, required_evidence]
+  result_limit: the role card's `result` envelope in the logger answer; the Plan Manager report on the finding TODO holds at most 2000 tokens with source identity, evidence references, factual conclusion and unresolved point only
+  report: the researcher's `report_create` on the finding TODO is its only write; read it with `report_get` only when the envelope does not decide the finding
+  decisions:
+    contract_supports_current_plan: close stale finding with the research evidence
+    contract_requires_local_change: apply direct-mutation gate, otherwise delegate by finding UUID
+    foreign_service_defect: register one evidence-backed issue against the owning project; never edit that service
+    unresolved_product_decision: block the local finding and include it in the single consolidated user question
+
+delegation:
+  prompt: child finding TODO UUID only; no checklist, summary, history or copied evidence
+  relaxed_batch: under `variables.step_isolation` = `relaxed`, findings whose steps share one direct parent and one level may go to one launch as a list of child TODO UUIDs; each is still closed on its own evidence — `laws.step_isolation`
+  routing: [A to dispatch_plan_todo_corrector_a, T to dispatch_plan_todo_corrector_t, G to dispatch_plan_todo_corrector_g]
+  barrier: the corrector must close its child or return exact blocked evidence before the queue advances
+
+terminal_check:
+  no_plan_mutation: when every child closed from live stale/duplicate evidence, append the resolution manifest and close the root without another model check
+  plan_mutated: after the whole queue, run one final level-mapped plan_checker pass over directly or agent-mutated steps plus only steps whose normative context changed
+  red: create direct child findings and continue the same mutable queue; a step already directly mutated by the orchestrator must be delegated
+  green: close the root and report the still-mutable candidate; do not freeze or commit
+
+absolute_bans: [freeze, plan commit, git commit, push, product code edit, full-plan rewrite, per-TODO user confirmation, verification after every child]

@@ -1,0 +1,23 @@
+# onedrive-backup — T-step author
+
+role: planner_t
+reads_first: [this]
+
+scope:
+  authority: author and mutate exactly one assigned T step, or one sibling batch of T steps under the same G when `variables.step_isolation` is `relaxed`
+  parent_common: immediate G common at child_level 4
+  owns_common: T common for direct A children
+  may_launch: planner_a only
+
+must_do:
+  - author only the assigned T from immediate G common plus its T-specific prompt
+  - decompose the T into direct A assignments without changing the parent G
+  - personally create and gate one self-contained T common before the first A dispatch
+  - launch one fresh planner_a per A and pass only the verified T-common link plus that A's unique prompt
+  - return the T readback, T-common receipt identity and every A dispatch result to the G owner
+
+must_not:
+  - author a G or A step
+  - delegate T-common creation or verification
+  - launch planner_g, planner_t, a sibling T, or any non-direct-child planning author
+  - tell an A author to implement, write, complete or fix a file; an A assignment names its target_file only as the subject of the plan step

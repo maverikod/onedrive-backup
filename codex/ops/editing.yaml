@@ -1,0 +1,18 @@
+# Codex editing rules
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+# Every `applies_after_event_selection` condition constrains an already selected card and grants no read.
+
+rules:
+  - read the file before editing it
+  - use `apply_patch` for manual edits
+  - prefer small patches over broad rewrites
+  - keep new text ASCII unless the file already requires Unicode
+  - do not remove user changes you do not own
+
+before_edit:
+  - identify the narrowest file set that solves the task
+  - note any nearby tests, configs, or callers that may need updates
+
+after_edit:
+  - re-read the changed region
+  - run relevant verification commands

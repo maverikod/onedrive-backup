@@ -1,0 +1,397 @@
+# onedrive-backup — Code Analysis Server capability card for Codex
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+# Every `applies_after_event_selection` condition constrains an already selected card and grants no read.
+#
+# The central `cas_operation` event selects this card. Block conditions below limit use only after
+# selection and never grant a read. It is a contract, not a menu: a command that is neither admitted here nor
+# read from fresh command-specific `help` is unavailable, and inventing a command name is a
+# defect, not an attempt.
+
+template_version: v1.7.82
+
+purpose: >-
+  The Code Analysis Server is the authoritative surface for the registered server-side project:
+  its index, its AST, its search, its files, its sessions and its git. Under
+  `laws.variables.file_access: cas` it is the ONLY surface — local project tools are forbidden
+  even as a fallback. Under `local` it still owns code-analysis search and CAS-authoritative git
+  sync. Either way, the blocks below are the admitted command set.
+
+call_shape:
+  proxy_tool: "the MCP Proxy `call_server` tool exactly as this session lists it — `mcp__codex_apps__mcp_proxy_call_server` where the Codex apps bridge registers it; never guess a tool name the session does not list"
+  arguments: "server_id, copy_number, command, params"
+  server_id: >-
+    the LIVE registry id from `list_servers` — a short or remembered name yields SERVER_NOT_FOUND,
+    and `copy_number` can change after a backend restart, so verify both rather than reusing them
+    from memory.
+  project_binding: >-
+    take `project_id` from `list_projects`; never pass a host `root_dir`, and never take the id
+    from a repository's `projectid` file — its `id`/`iddev` identify the code's production and dev
+    installations (`laws.dev_prod_instances`), not a CAS project. Paths are project-relative
+    POSIX paths.
+  discovery: >-
+    `help({})` lists commands, `help({cmdname: "<name>"})` returns one schema. Read the schema
+    before the first use of any command this card does not spell out, and after any
+    VALIDATION_ERROR.
+
+hard_rules:
+  - >-
+    CAS calls are STRICTLY SEQUENTIAL. Never fan out parallel CAS calls, never run two searches
+    at once, and never poll several job ids concurrently: concurrent calls corrupt each other's
+    dispatch and the server keeps reporting itself healthy while doing it. This overrides
+    `multi_tool_use.parallel` — for CAS, one call at a time.
+  - >-
+    A queue status of `completed` is NOT command success. Read the inner result and exit code
+    before reporting an outcome.
+  - >-
+    `long_task`/`job_status` and the `queue_*` family are SEPARATE job stores. Never poll a job
+    id issued by one against the other.
+  - >-
+    Server ADMINISTRATION is out of contract: database backup and restore, log rotation, worker
+    start/stop, vector rebuilds, the trash, and project creation, renaming or deletion are the
+    server owner's business, not a development task. When the server side is broken, REPORT it
+    with the exact command and error and stop — never repair it as a side effect of your task.
+  - >-
+    Never report "this does not exist in the project" from a search or index result alone. The
+    `index_health` block decides whether the index could answer at all; an unindexed or stale
+    project produces a confident empty answer, which is the worst failure mode this surface has.
+  - >-
+    Context economy: ask `help` for one command only when this card does not spell it out or
+    after a VALIDATION_ERROR; call `list_projects` or `list_servers` once per launch; never paste
+    a server JSON result into a prompt, TODO or report — cite the fields you rely on. Every
+    result stays in the context until the launch ends. See `laws.context_economy`.
+
+blocks:
+
+  analysis:
+    applies_after_event_selection: before the first structural, quality, or complexity question about server-side code
+    order: >-
+      AST and index FIRST, cross-search only when this block missed the target. Defaulting to
+      search for a structural question is a defect of method, not a shortcut.
+    commands:
+      get_ast: full AST of one file
+      search_ast_nodes: AST nodes matching a node-type query
+      ast_statistics: aggregate AST statistics for a file or project
+      file_structure: structural outline with start/end lines per class and method
+      list_code_entities: classes, functions and methods in a file or project
+      get_code_entity_info: detail for one entity
+      get_imports: imports of a file or project
+      list_class_methods: methods of one class
+      find_classes: classes matching a name pattern
+      list_yaml_blocks: indexed YAML values for a `.yaml`/`.yml` file — the AST path for config
+      universal_file_preview: uniform structured preview of any project file node
+      analyze_complexity: cyclomatic complexity per function and method
+      find_duplicates: duplicate blocks via AST normalisation
+      analyze_tree: sub-tree analysis under a package, dependency, structure or cycle lens
+      list_long_files: files past a length threshold
+      list_errors_by_category: code errors grouped by category
+      lint_code: flake8 findings
+      type_check_code: mypy findings
+      comprehensive_analysis: full multi-check analysis; asynchronous, returns a job id
+      get_comprehensive_analysis_results: saved results of a previous comprehensive_analysis
+    pagination: default `page_size` 20; walk further pages with `block_position`
+
+  search:
+    applies_after_event_selection: >-
+      after the `analysis` block failed to locate the target, or when the question is about text
+      content rather than structure
+    commands:
+      search: >-
+        fulltext/BM25 always runs; `enable_semantic` and `enable_grep` are opt-in. `file_pattern`
+        and `path_filter` are aliases for one concept — passing both with different values is a
+        silent footgun.
+      search_get_page: next block of a paginated session, `block_position` is 1-based
+      search_get_status: whether more pages remain
+      search_cancel: abort an in-flight session
+      search_close: release server-side result state when done
+    semantic_precondition: >-
+      `enable_semantic` is only meaningful when the project's vectors are current. Confirm that
+      through the `index_health` block before believing a semantic miss.
+
+  index_health:
+    applies_after_event_selection: >-
+      before the first search or index-based conclusion in a session, and ALWAYS before reporting
+      that something is absent from the project
+    commands:
+      get_database_status: index state, statistics and pending work
+      check_vectors: vector statistics and vectorization status
+      list_indexing_errors: files whose indexing failed
+      update_indexes: re-index after a file operation that the watcher has not picked up
+    rule: >-
+      A stale or failed index answers "nothing found" exactly like a correct empty result. Read
+      the state, and if the index cannot answer, say so and treat the question as unanswered
+      instead of reporting an absence. Repairing the server's database or rebuilding vectors is
+      administration — report it, do not do it.
+    settled_gate:
+      law: laws.two_site_sync
+      applies_after_event_selection: after every exchange, before any CAS search relies on it
+      steps:
+        - "`update_indexes {project_id}` and read its job to the inner result"
+        - "`get_database_status {}` with NO `project_id` (bug 80d26613) and read the project's row in `projects.sample` by id"
+        - "settled when `files_processed_percent` is 100 and `files_indexed` is unchanged across two reads 60 s apart; any shortfall against `file_count` must be named by `list_indexing_errors`"
+        - a distinctive term from a file changed by the exchange is found by `search`; when the exchange changed nothing this step is skipped
+      bound: at most 15 minutes of polling, one call at a time
+      on_timeout: >-
+        the index is not settled and CAS results in this block are stale, not evidence. Report the
+        last row read; under `local` units continue on local tools and say so, under `cas` stop.
+      verification: "the server-wide `get_database_status` row format was read live on 2026-11-09"
+
+  refactoring_support:
+    applies_after_event_selection: before any change that crosses file or module boundaries
+    commands:
+      find_usages: >-
+        call sites of a method, property, class or function — parameters are
+        `target_name`/`target_type`/`target_class`, NOT `entity_name`
+      find_dependencies: where a class, function, method or module is used
+      get_entity_dependencies: what one entity depends on
+      get_entity_dependents: what depends on one entity
+      get_class_hierarchy: inheritance tree
+      export_graph: dependency, hierarchy or call graph in DOT or JSON
+    caution: >-
+      the usages table can be EMPTY for everything when it was never populated. Treat
+      `find_usages` as supplementary and let the `analysis` block decide whether a symbol is
+      really unreferenced.
+
+  refactor:
+    applies_after_event_selection: >-
+      before splitting a file or a class, before extracting a superclass, and whenever a file or
+      a class has grown past the point where the `analysis` block flags it — `list_long_files`,
+      `analyze_complexity`, `find_duplicates` or `comprehensive_analysis`
+    commands:
+      split_file_to_package: split one file into a package of several modules
+      split_class: split one class into several smaller classes
+      extract_superclass: lift shared behaviour of several classes into a base class
+    availability: >-
+      This block is available in BOTH work profiles — it is the one CAS write path the `local`
+      profile admits, carved out of `laws.local_mode` by name. The reason is that these three
+      commands do a structural rewrite no local edit sequence performs safely by hand, and the
+      server-side project mirrors the local checkout, so the result comes back through the
+      branches. Nothing else in `local` changes: builds, tests, deploys and ordinary file edits
+      still run with local tools.
+    order: >-
+      These commands REWRITE code. In `local`, do not invoke them until block `two_site_sync`
+      has brought current local content to CAS for this block or the user explicitly commands
+      local-to-CAS synchronisation. Then (1) ANALYSE THE TREE:
+      `analyze_tree`
+      under the package-boundary, dependency, structure or cycle lens, together with the rest of
+      the `analysis` block — length, complexity, duplication. The split follows from that
+      analysis: which module boundary the tree already implies, which class carries two
+      responsibilities, which base class the hierarchy is asking for. A split chosen without the
+      tree analysis is a split chosen on taste. (3) Map every caller with the
+      `refactoring_support` block: `find_usages`, `find_dependencies`, `get_entity_dependents`,
+      `get_class_hierarchy`; a split that ignores an importer breaks it silently. (4) Take the
+      locks from the `locks` block for every file the split will touch. (5) Run the split
+      command. (6) Re-index through `index_health` `update_indexes` — the file layout just
+      changed and nothing else updates the index for you. (6) Wait for the user's explicit
+      synchronisation command before moving the server result back to local. (7) Re-run the tree
+      analysis and the project `pipeline`; a split is not finished because the
+      command returned success, it is finished when the imports still resolve and the suite is
+      green.
+    rule: >-
+      A split is a code change like any other: it lands under the same acceptance as an edit,
+      never as a "mechanical" step exempt from verification. If the command cannot express the
+      split you need, say so and do the split explicitly through the editing path — never
+      half-apply a server-side split and finish it by hand without saying which parts came from
+      where.
+
+  files:
+    applies_after_event_selection: before listing, previewing, copying, moving or removing a server-side project file
+    commands:
+      list_project_files: >-
+        listing with `file_pattern`/`glob` filters; returns `file_id` for indexed files
+      universal_file_preview: structured preview of one file node
+      fs_copy: copy a file inside the project
+      fs_move: move or rename a file inside the project
+      fs_remove: remove a file under the project root
+      list_backup_files: files with backup snapshots
+      list_backup_versions: every stored version of one file
+      list_deleted_files: soft-deleted files and their trash paths
+    rule: >-
+      `fs_copy`, `fs_move` and `fs_remove` do NOT update the index. Follow them with
+      `update_indexes` from `index_health`, or state explicitly that the index is now behind.
+
+  transfer:
+    applies_after_event_selection: >-
+      before reading or writing a server-side file too large for an inline call, and before any
+      whole-file replacement
+    commands:
+      project_file_transfer_download_begin: >-
+        start a chunked download of an indexed project file by `file_id`
+      project_file_transfer_upload_save: >-
+        save a completed upload into a project file — `file_id` to update an existing file,
+        `project_id` plus a project-relative `file_path` to create a new one
+      transfer_upload_begin: open a resumable upload session; returns the chunk URL template
+      transfer_upload_status: session state and `offset` for resume
+      transfer_upload_complete: finalise; the server re-checks the plaintext SHA-256
+      transfer_download_begin: register a resumable download and return its checksum metadata
+      transfer_download_status: session state, checksum and size for verification
+    rule: >-
+      `checksum_value` is the SHA-256 of the PLAINTEXT before compression, and a mismatch on
+      completion is a real failure, never a warning to pass over. Resume from the reported
+      `offset` rather than restarting a large transfer from zero.
+
+  locks:
+    applies_after_event_selection: >-
+      before editing a server-side file that another agent or session may hold, and after any
+      write that reported a lock error
+    commands:
+      project_file_lock_status: lock state of one file — free, write-locked or fully locked
+      project_file_advisory_lock_batch: acquire or release advisory leases on a set of files
+      session_create: open a work session and take its `session_id`
+      session_validate: confirm the session is still live
+      session_open_file: take a file lock inside the session
+      session_close_file: release one file lock
+      session_list_file_locks: locks currently held by the session
+      session_view: locked files and subordinate links of the session
+      session_delete: close the session, `force` when it still holds locks
+    rule: >-
+      Locks are cooperative: they only work if you take them before writing and release them
+      when the unit of work ends. A lock left behind blocks another agent, so close what you
+      opened even when the task fails.
+
+  jobs:
+    applies_after_event_selection: whenever a CAS command returns a job id
+    commands:
+      queue_get_job_status: poll a queuemgr job
+      queue_get_job_logs: stdout and stderr of that job
+      queue_list_jobs: jobs currently in the queuemgr store
+      job_status: poll a `long_task` job in the separate in-memory store
+    rule: >-
+      poll one job at a time, and read the inner result before calling the work done. Managing
+      the queue itself — adding, starting, stopping or deleting jobs — is administration and
+      stays out of this contract.
+
+  git:
+    applies_after_event_selection: before ANY git operation on the server-side project
+    inspect: [git_status, git_log, git_diff, git_show, git_blame, git_branch_current, git_branch_list, git_branch_sync_status, git_branch_compare, git_remote]
+    mutate: [git_add, git_commit, git_reset, git_restore, git_revert, git_merge, git_rebase, git_cherry_pick, git_stash_push, git_stash_apply, git_stash_list, git_stash_drop, git_tag, git_clean]
+    branches: [git_branch_create, git_branch_checkout, git_branch_delete, git_branch_fetch, git_branch_pull, git_branch_push, git_branch_track_remote, git_branch_set_upstream, git_branch_unset_upstream]
+    remotes: [git_fetch, git_pull, git_pull_safe, git_push, git_remote_add, git_remote_set_url, git_remote_remove, git_remote_rename, git_remote_branch_list, git_remote_branch_compare, git_remote_branch_track, git_remote_branch_prune]
+    diagnose: [git_repo_doctor, git_repo_permissions_check, git_repo_lock_cleanup]
+    call_shapes:
+      note: >-
+        exact parameter shapes of the sync calls, taken from live `help` on 2026-11-07. git_fetch,
+        git_branch_checkout, git_merge, git_pull, git_status, git_branch_list and update_indexes were
+        exercised live (doc-store 2026-10-03, factory 2026-11-02); git_push, git_pull_safe and
+        git_reset are help-only — read their `help({cmdname})` before the first call. Every other
+        git command: read its schema before the first use.
+      git_fetch: "{project_id, remote: origin}"
+      git_branch_checkout: "{project_id, name: <branch>} — the key is `name`, NOT `branch`; a new branch adds `create: true, start_point: <ref>`"
+      git_merge: "{project_id, ref: origin/<branch>, ff_only: true}"
+      git_pull: "{project_id, remote: origin, ref: <branch>} — the key is `ref`, NOT `branch`"
+      git_pull_safe: "{project_id, remote: origin, ref: <branch>} — stashes the dirty tree first and re-applies it"
+      git_push: "{project_id, branch: <branch>, remote: origin} — here `branch` IS the required key; `force` only on the user's explicit command"
+      git_reset: "{project_id, mode: soft|mixed|hard, target: <ref>} — `mode: hard` also needs `confirm_hard: true` and runs only on the user's explicit command or as the mirror-branch overwrite step of block `two_site_sync`"
+      git_status: "{project_id}"
+      git_branch_list: "{project_id, scope: local|remote|all}"
+      update_indexes: "{project_id}"
+      job_poll: "queue_get_job_status {job_id} — one job at a time, inner result read before the next call"
+    rules:
+      - >-
+        In `local`, ordinary work uses the authoritative local checkout. Server-side Git, push and
+        site-to-site synchronisation run only on the user's explicit command or as the mandatory
+        exchange of block `two_site_sync`. Inside that exchange the server's `local` branch is
+        overwritten from GitHub and its CAS-only differences are disposable; the server's `cas`
+        branch is merged, never discarded.
+      - >-
+        server-side git ALWAYS goes through these commands. Never reach for console or ssh git on
+        the server without explicit user permission.
+      - '`git_pull` takes `ref`, not `branch` — a recurring parameter trap'
+      - prefer `git_pull_safe` over `git_pull` whenever the server-side tree is dirty
+      - >-
+        most git commands are queued: poll them through the `jobs` block and read the inner
+        result before reporting a push or a merge as done
+      - >-
+        the server-side working tree carries CAS scratch — `old_code/`, `*.tree` sidecars and a
+        server-side `projectid`. It is not somebody's work, and it is not yours to commit unless
+        the user says so.
+
+  cas_search_first:
+    law: laws.cas_search_first
+    applies_after_event_selection: step 0 of every researcher, coder and tester unit, before any edit
+    precondition: the current block's `two_site_sync` is finished and its `settled_gate` passed
+    order:
+      - "callers and usages of what the task touches: `find_usages`, `get_entity_dependents`, `find_dependencies`"
+      - "an existing implementation under a similar name or meaning: `find_classes`, `list_code_entities`, `search`"
+      - "duplicates in the touched files: `find_duplicates`"
+      - "presence among unwired code: `analyze_tree` under the dead-code lens; read its `help` before the first call"
+    bound: a few targeted queries per task, never a full analysis
+    full_analysis: >-
+      `comprehensive_analysis` runs once per block, after the exchange and its `settled_gate`; units
+      read the saved result through `get_comprehensive_analysis_results`.
+    outcome: reuse or wire existing code instead of writing a new copy; confirm every hit against the work site first
+    return_evidence: >-
+      the return lists the CAS commands used and what they found; a return without that list is
+      incomplete.
+    known_limits:
+      - duplicate detection compares only inside one file (bug f59215ec), so a clean result does not exclude a copy in another file
+      - the dead-code lens reports registered code as unused — decorators, entry points, registries, getattr strings, validators, visitors, in-function imports (bug 3aaa9af3)
+      - semantic search can answer VECTORIZER_UNAVAILABLE (bug 2745dc4b); `search` fulltext still runs
+      - "`find_duplicates` has no paging (bug 76a7e868)"
+      - "`get_database_status` cannot be scoped to one project (bugs 38dff99e, 80d26613); read the project's row from the server-wide result"
+      - a file arriving by git pull can stay out of fulltext search past 60 s (bug 91d6c588)
+      - value depends on code-analyzis TODO 778903ed (cross-file and semantic duplicates, registration-aware dead-code lens)
+    measure: >-
+      after two or three blocks the orchestrator counts, from the returned CAS lists, the tasks where
+      a CAS hit changed the work and reports the count to the user; if almost none, the user
+      simplifies step 0.
+
+  two_site_sync:
+    law: laws.two_site_sync
+    applies_after_event_selection: before the first agent unit of every block, and whenever the two sites must be brought together
+    verification: >-
+      `git_fetch`, `git_branch_checkout` and `git_merge` with `ff_only` were exercised live;
+      `git_merge` without `ff_only`, `git_push` and `git_reset` are help-only until the first real
+      exchange, so read their `help({cmdname})` before the first call and report any mismatch.
+    preconditions:
+      - no pipeline run holds the deployed server; reindex load can stall its fixtures, so wait for the run to end
+      - "`cas` and `local` exist in both repositories; a missing branch stops the exchange and is reported, never invented"
+      - only committed state crosses; tracked uncommitted changes on the site being overwritten stop the exchange and are reported
+      - server-side steps use only the CAS git commands of the `git` block, one call at a time, each queued job read to its inner result
+      - local merges run in a linked worktree at `laws.worktree_location` so that the checkout's branch is never switched under other agents
+      - never force-push; `main` is never fetched into, merged, checked out or pushed by this exchange
+    work_site_local_or_local_ide:
+      - "1 SERVER: `git_status`, then `git_push {project_id, branch: cas, remote: origin}` to publish the server's `cas` state. A non-fast-forward refusal means an earlier exchange stopped half-way: `git_fetch`, `git_merge {ref: origin/cas, ff_only: true}`, push again; if that is refused too, stop and report"
+      - "2 LOCAL: `git fetch origin cas local`"
+      - "3 LOCAL, on `cas`: merge `origin/cas`, resolve conflicts, then merge `local`; `cas` is the integration branch"
+      - "4 LOCAL: `git push origin cas local`"
+      - "5 SERVER: `git_fetch {project_id, remote: origin}`, `git_branch_checkout {project_id, name: cas}`, `git_merge {project_id, ref: origin/cas, ff_only: true}`"
+      - "6 SERVER, overwrite `local` with no merge and no conflict handling: `git_status` shows no tracked changes, `git_branch_checkout {project_id, name: local}`, `git_reset {project_id, mode: hard, target: origin/local, confirm_hard: true}`, `git_branch_checkout {project_id, name: cas}`"
+      - "7 run `index_health` `settled_gate`"
+    work_site_cas:
+      - "1 LOCAL: `git push origin local` to publish the local `local` state"
+      - "2 SERVER: `git_fetch {project_id, remote: origin}`, `git_branch_checkout {project_id, name: local}`, `git_merge {project_id, ref: origin/local}`, resolve conflicts with the admitted server editing commands, then `git_merge {project_id, ref: cas}`; `local` is the integration branch"
+      - "3 SERVER: `git_push {project_id, branch: local, remote: origin}`, `git_push {project_id, branch: cas, remote: origin}`, `git_branch_checkout {project_id, name: cas}`"
+      - "4 LOCAL: `git fetch origin local cas`; fast-forward `local` to `origin/local`"
+      - "5 LOCAL, overwrite `cas` with no merge and no conflict handling: `git branch -f cas origin/cas` when `cas` is not checked out; when it is, stop on tracked changes and otherwise reset that tree to `origin/cas`"
+      - "6 run `index_health` `settled_gate`"
+    evidence: the commit of `cas` and of `local` on each site and on GitHub after the exchange, and the `settled_gate` result
+
+  batch:
+    applies_after_event_selection: before issuing many read-only calls that belong to one question
+    command: read_only_batch
+    whitelist: >-
+      The authority is the LIVE whitelist printed by `help({cmdname: read_only_batch})` on the
+      server being called; the server grows it, so this card does not freeze it. As deployed on
+      2026-11-07: ast_statistics, find_classes, find_dependencies, find_usages, get_ast,
+      get_class_hierarchy, get_code_entity_info, get_entity_dependencies, get_entity_dependents,
+      list_class_methods, list_code_entities, universal_file_preview. Before batching a command
+      outside that list, check the live help. Anything not whitelisted returns
+      BATCH_COMMAND_NOT_WHITELISTED — call it individually instead of retrying the batch.
+    rule: >-
+      an oversize batch result is written to a file and returned as `output_file` plus
+      `results_metadata`; page it with `page_size`/`block_position` rather than asking for
+      everything inline.
+
+errors:
+  VALIDATION_ERROR: >-
+    a parameter name or value the command does not accept. Read `help({cmdname})`, correct once,
+    and escalate if the corrected call fails again.
+  SERVER_NOT_FOUND: >-
+    wrong `server_id` or a stale `copy_number` — re-read `list_servers` instead of retrying.
+  BATCH_COMMAND_NOT_WHITELISTED: the command cannot be batched; issue it on its own.
+  VENV_NOT_FOUND: the project venv is missing; report it rather than provisioning one silently.
+  SESSION_NOT_FOUND: the session expired or was deleted; open a new one and retake the locks.
+  transport_or_health_failure: >-
+    stop on the first occurrence and report the exact call, the proxy and downstream health
+    evidence. Never fall back to local project tools while `file_access: cas` is active — that
+    is a `cas_mode` violation, not a workaround.

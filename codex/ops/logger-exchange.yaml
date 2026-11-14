@@ -1,0 +1,110 @@
+# onedrive-backup — AI Logger exchange card for Codex
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+template_version: v1.7.82
+# Read by EVERY launched agent — every `dispatch_*` event lists it — and by the orchestrator through
+# `agent_dispatch`. It is complete on its own: a role that reads no law excerpt needs nothing else to
+# take its task from the logger and to answer through it. `laws.logger_exchange` points here.
+
+absolute_prohibitions:
+  - NEVER answer in your final message with anything but the return lines of `agent.final_message`. The answer goes into the logger.
+  - NEVER pass a task or an answer through a file unless the user has enabled `no_logger_mode` — no task-prompt file, no answer file, no report file, no scratch copy, nothing in a log directory. An unavailable logger does not enable that mode; only the user's confirmation does.
+  - NEVER open, close or replace a logger session unless you are the session model; use the `logger_session` your launch prompt names, and pass that same id to every unit you launch.
+  - NEVER write a report into the Plan Manager unless your role is `researcher` or `plan_todo_api_researcher`.
+
+purpose: >-
+  The AI Logger is the main exchange channel of the contract. Every role writes and reads it: the
+  session model and every owner that launches a unit (planner_g, planner_t) write the task there,
+  the launched agent reads its task there and writes its whole answer there as a reply. The launch
+  prompt and the final message carry identifiers only. A role card that says "return" means the
+  answer message of this card: its result envelope goes into that message.
+
+call_shape:
+  proxy_tool: "the MCP Proxy `call_server` tool exactly as this session lists it — `mcp__codex_apps__mcp_proxy_call_server` where the Codex apps bridge registers it; never guess a tool name the session does not list"
+  logger: "`server_id: ailogger`, `copy_number: 1`; on SERVER_NOT_FOUND re-read `list_servers` for the live id and copy, never retry the same call; it is ALWAYS the PRODUCTION AI Logger — a DEV installation of the logger takes only DEV servers and the models they call and is never the exchange channel (`laws.dev_prod_instances`)"
+  session_issuer: "the Code Analysis Server — the live `code-analysis-server*` id from `list_servers`; the logger opens no session whose id that server did not issue"
+
+session:
+  owner: the session model — the orchestrator, or the single model while `stupid_mode` is enabled
+  opened_by: >-
+    `roles/common.yaml` `logger_session`: once per session of the session model, right after the
+    two startup reads. A launched agent never opens one; it uses the `logger_session` of its launch
+    prompt.
+  reuse: >-
+    Every task message, every launch prompt, every answer and every child dispatch of the session
+    uses that one `session_id`. No agent opens, closes or reopens a session.
+
+task:
+  writer: the unit that launches — the orchestrator, or planner_g / planner_t for its direct children
+  message: >-
+    The complete task prompt — its read-first list (the event's `agent_reads`), the role's envelope,
+    the checklist where the contract requires one, and the unit-specific text — is ONE logger
+    `append_message {session_id, text, sender_kind: model, sender_identity: <own role>,
+    receiver_kind: model, receiver_identity: <role>-<NN>-<slug>, attributes: {message_type: task,
+    role, model_tier}}`. Keep the returned `message_id`. A repeated dispatch of the same unit is a
+    new task message naming the previous answer in `relations` as `{to_message_id, kind: influence}`.
+  launch_prompt: >-
+    Exactly three lines and nothing else:
+    `logger_session: <session_id>`, `task_message: <message_id>`,
+    `read first: codex/ops/logger-exchange.yaml`. The launch names the exact model and
+    reasoning effort the dispatch event gives.
+
+agent:
+  first_action: >-
+    Read this card, then `message_get {message_id: <task_message>}`. Its text is your complete
+    assignment and its read-first list is your assigned read set; nothing else in the launch prompt
+    is an assignment. A task message that cannot be read stops the unit at once with the exact error.
+  answer: >-
+    Your whole answer — the `reads:` line, the result envelope or findings, checklist statuses with
+    their evidence, exact failing commands and outputs — is ONE logger `append_message {session_id,
+    text, sender_kind: model, sender_identity: <the task's receiver_identity>, receiver_kind: model,
+    receiver_identity: <the task's sender_identity>, relations: [{to_message_id: <task_message>,
+    kind: reply}], attributes: {message_type: answer}}`. A unit that launches children writes their
+    answers' ids into its own answer instead of copying their text.
+  final_message: >-
+    Exactly these lines and nothing else: `reads: <path:last-line, ...>`, `result: <one line of at
+    most 200 characters>`, `logger: <answer message_id>`; a `researcher` or
+    `plan_todo_api_researcher` adds `report: <report_id>`. No restated findings, no summary, no
+    copy of the answer.
+  retry: >-
+    `append_message` without `message_id` creates a new message on every call. After a timeout,
+    repeat only with the `message_id` the first call returned; when none came back, read the
+    session with `messages_read {session_id, mode: resolved, start_sequence_number, block_size}`
+    (continue with the returned `continuation`) before writing again, so one answer is never
+    stored twice.
+
+acceptance:
+  - the launcher reads an answer with `message_get` only when its routing needs more than the `result:` line
+  - a final message that carries more than the return lines, or lacks its `logger:` line, is not accepted, and the unit is dispatched again with the same task
+
+reports:
+  - "only `researcher` and `plan_todo_api_researcher` write a Plan Manager report (`report_create`), as their cards say; their answer message carries the result envelope and `report: <id>`, not the report text"
+  - "every other role writes no report anywhere: its answer message is the whole record of the unit"
+
+outage:
+  defined_as: >-
+    The logger, or the Code Analysis Server that issues its session, is unreachable or refuses a
+    write for a reason you cannot correct after one `help` check of your own parameters. A
+    parameter error of your own is not an outage.
+  agent: >-
+    Stop the unit at once: no further work, and nothing written to disk. The final message is
+    `reads: ...`, `result: STOPPED — logger unavailable`, `logger: UNAVAILABLE — <exact command and
+    error>`; that is the only case in which the final message carries an error instead of an id.
+  session_model: >-
+    Dispatch nothing, write no task file, and ask the user — quoting the exact error — whether to
+    enable `no_logger_mode` / "Режим без логгера" (`laws.no_logger_mode`). Until the user confirms,
+    the work waits; an outage never enables the mode by itself. While `stupid_mode` is enabled
+    nothing is exchanged, so an outage is only reported.
+
+no_logger_mode:
+  law: laws.no_logger_mode
+  exchange: >-
+    Only while the user has enabled it: the launcher writes the task to
+    `codex/task-prompts/<YYYY-MM-DD>-<block>/NN-<role>-<slug>.md` in the project checkout and
+    launches with exactly `task_file: <path>` and `read first: codex/ops/logger-exchange.yaml`;
+    the agent reads that file as its task, writes its whole answer beside it as
+    `<prompt-name>.answer.md`, and its final message is the return lines with `logger: OFF <answer
+    path>` in place of the logger id. Researcher reports still go to the Plan Manager.
+  return: >-
+    When the user disables the mode, the session model opens the logger session if it has none,
+    appends every task and answer file of the mode to it in order with its original `occurred_at`,
+    reads each back with `message_get`, and only then deletes the files.

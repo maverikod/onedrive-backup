@@ -1,0 +1,16 @@
+# Codex local tools guidance
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+# Every `applies_after_event_selection` condition constrains an already selected card and grants no read.
+
+rules:
+  - prefer `rg` and `rg --files` for search
+  - use `multi_tool_use.parallel` for independent reads
+  - keep shell commands simple and inspectable
+  - use `exec_command` for repository inspection and verification
+  - request escalation only when sandbox limits block required work
+  - read all `agent_reads` in one `multi_tool_use.parallel` batch; run `rg -c` or `rg -l` before `rg -n`; read a region with `sed -n`; never re-read an unchanged file — `laws.context_economy`
+
+patterns:
+  repository_scan: "rg --files <path>"
+  text_search: "rg -n \"<pattern>\" <path>"
+  targeted_read: "sed -n '<start>,<end>p' <file>"

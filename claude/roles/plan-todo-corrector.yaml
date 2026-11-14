@@ -1,0 +1,18 @@
+# EVENT-SELECTED ROLE CARD. One concrete dispatch_plan_todo_corrector_A/T/G event selects this role.
+role: plan_todo_corrector
+reads_first: [this]
+
+assignment: exactly one child finding TODO UUID and no other prompt content
+
+must_do:
+  - read that TODO live and verify its root owner/anchor, mutable plan revision, target step UUID and canonical G/T/A level
+  - reject a mismatch between the live level and concrete dispatch event
+  - repair only the one named existing step and only the finding's required semantic defect
+  - append exact before/after and live readback evidence, then resolve and close the child TODO
+
+must_not:
+  - read a sibling finding, whole plan, full step tree, conversation history or copied checklist
+  - create, delete, move, reparent or reorder steps; change dependencies; edit a second step
+  - broaden scope, perform cleanup, launch another agent, freeze or commit the plan, or touch product code
+
+result: [finding_todo_uuid, plan_revision_uuid, level, step_uuid, changed_fields, evidence, terminal_todo_status]

@@ -1,0 +1,320 @@
+# GENERATED ROLE EXCERPT of roles/laws.yaml for the `coder` stage — never edit; change
+# laws.yaml or laws-roles.yaml and regenerate. Read together with roles/laws-common.yaml;
+# every `[APPLIES AFTER THIS CARD IS EVENT-SELECTED: ...]` condition keeps its meaning here.
+laws:
+  branch_discipline: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any branch, merge, or release action] `main` is production and never work in
+    progress. Under `local`, local branches are authoritative; under `cas`, CAS branches are
+    authoritative. Prepare and verify work on the active site. NEVER edit `main` directly or
+    rewrite published history. Push, promotion and every site-to-site synchronisation wait for
+    the user's explicit command, except the mandatory `cas`+`local` exchange of `two_site_sync`.
+    A merge into `main` and a push of `main` happen ONLY with the user's explicit permission, and
+    only after a new version is released (version bump, build, deploy) and the FULL pipeline run
+    on that deployed version is GREEN.
+  two_site_sync: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before the first agent unit of every block, and
+    whenever the two sites must be brought together, in a project registered on the Code Analysis
+    Server] MANDATORY and without asking: the model performs this exchange itself, including the
+    GitHub push of both `cas` and `local`. It is the ONE standing exception to "push and
+    synchronisation only on the user's explicit command", and it is the precondition of every CAS
+    search step (`cas_search_first`): it keeps the server repository and its index identical to
+    the work site. Topology: the local checkout and the server repository carry the same two
+    branches, `local` and `cas`; GitHub (`origin`) is the only exchange point and there is no
+    direct site-to-site transfer. Every git operation in the server repository runs through the
+    CAS git commands via MCP Proxy, never ssh and never raw git on the host. Work site `local` or
+    `local_ide`: `cas` is the integration branch, in the LOCAL repository; it takes the server's
+    `cas` state, conflicts are resolved there, then `local` is merged into it; both branches are
+    pushed; the server's `cas` is brought to GitHub `cas` and the server's `local` is simply
+    overwritten from GitHub `local`, with no merge and no conflict handling. Work site `cas` is
+    the mirror image: `local` is the integration branch, in the SERVER repository; it takes the
+    local repository's `local` state, conflicts are resolved there, then `cas` is merged into it;
+    both branches are pushed; the local `local` is brought to GitHub `local` and the local `cas`
+    is simply overwritten from GitHub `cas`. Exact steps and the index-settled gate:
+    `ops/cas-tools.yaml` block `two_site_sync`. `main` is NOT an exchange branch and the exchange
+    never touches it. This law supersedes every older scheme of exchanging only through `main`.
+    NEVER: run the exchange while a pipeline run holds the deployed server; force-push; overwrite
+    tracked uncommitted changes on the site being overwritten (stop and report them).
+  cas_search_first: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: step 0 of every researcher, coder and tester unit
+    of a project registered on the Code Analysis Server, before any edit] MUST: read
+    `ops/cas-tools.yaml`, which every such dispatch assigns, and run the bounded search of its
+    `cas_search_first` block through MCP Proxy for an existing implementation of what the task
+    touches, duplicates, usages and callers, and unwired code. Reuse or wire existing code instead
+    of writing a new copy. The search counts only on an index that the current block's
+    `two_site_sync` has settled; a search on a not-yet-indexed state is a stale result, not
+    evidence. A CAS hit is a claim until it is confirmed against the work site. The return lists
+    the CAS commands used and what they found; a return without that list is incomplete. Step 0
+    is a few targeted queries, NEVER a full analysis: `comprehensive_analysis` runs once per block,
+    after the exchange. When CAS cannot answer, the return states the exact error: under `local`
+    the unit continues on local tools, under `cas` it stops (`cas_mode`).
+  parallel_agent_isolation: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: launching more than one agent that may modify the repository at the same time]
+    MUST: give each parallel writing agent its own LOCAL git worktree at `worktree_location`
+    (`git worktree add <path> -b
+    <agent-branch>`) on its own local branch; keep it working and verifying ONLY there;
+    integrate only after the work is ACCEPTED — merge into the leading branch per
+    `branch_discipline`, resolve conflicts in the integration tree, re-run the `pipeline` on the
+    merged result, remove the worktree; discard a rejected agent with its worktree. NEVER: share
+    a working tree or a branch between concurrent agents; check out the same branch in two
+    worktrees; leave anything half-merged. This law is git mechanics; it relaxes no gate.
+  external_contour_first: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: building a new project or a new external contour, after receiving that task and before its product code] Take the task from
+    the user or active plan. Before freezing the plan, create or update the project's directly
+    anchored Plan Manager TODO for the complete command/method-by-parameter matrix and its separate
+    parameter-relations table and result-contract table, incorporate the reviewed contents into the normative plan, complete
+    the mandatory semantic gate, present the exact candidate and wait for the user's explicit
+    freeze authorization. Only after that authorization freeze the PLAN revision. After freeze, materialize that plan revision as
+    `pipeline/matrix.yaml`. SERVICE: create the empty
+    API/command schema and runnable server skeleton with parameter validation but no product logic;
+    then write the complete client; then write the single pipeline over that client. LIBRARY:
+    create the empty public constructors, functions and methods plus runnable examples/testing
+    script with parameter validation but no product logic; then write the single pipeline over
+    those real examples. Only then implement a bounded group of related capabilities and code files at a time.
+    After deploying each group, run only the named checks mapped to that group: RED
+    returns the entire still-red group to diagnosis, proof, correction and deployment; GREEN opens
+    the next group. A group of one is valid but is not the default decomposition. When the complete
+    requested contour is targeted-GREEN, run the full pipeline once on the user's command. The pipeline is the
+    verifier; do not add a model-verifier ladder, branch-attestation loop or narrative acceptance
+    layer. See `ops/delivery.yaml` `external_contour_first`. A bug fix, a refactoring or any change
+    that leaves the external interface as it is never enters this law: it runs on the TODO tree of
+    `laws.todo_tree_work`; a change to an existing interface follows
+    `laws.external_surface_change_requires_matrix_revision`.
+  bugfix_acceptance_cycle: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any bug fix] Give the first Claude agent the immutable checklist and the cheapest
+    plausible tier. Use one loop, in order: (1) reproduce the error with ONLY the named pipeline
+    commands mapped to the current user-supplied bug block on the live deployed service or real
+    library example and obtain RED before changing product code; (2) assign the corrective unit
+    with the same checklist and exact RED to the Claude tier its complexity warrants
+    (`laws.cheapest_capable_model`); (3) find the root cause;
+    (4) prove the cause-to-symptom link; (5) fix it; (6) deploy the changed service candidate or
+    rebuild the real library example candidate; (7) run ONLY those same block commands. RED is a
+    failure: the first on a tier repeats steps 3-7 on that tier, the second on a tier moves the
+    next correction one Claude rank higher and repeats steps 3-7. GREEN closes the mapped checklist items without model review. A
+    user-supplied block uses the same loop, not a new orchestration scheme. Run the full pipeline
+    once only after every item in the block is targeted-GREEN, and only on the user's command. A mock, local-only result, diff,
+    agent report, commit, build or deploy acknowledgment is not RED or GREEN. See
+    `ops/delivery.yaml` `bugfix_cycle`.
+  external_surface_change_requires_matrix_revision: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: proposing, planning or making any addition, removal or change to a service command,
+    endpoint, request/response schema, parameter, constraint, result/error contract or observable
+    side effect, or to a public library constructor, function, method, signature, parameter,
+    constraint, return type, result/error contract or observable side effect] The matrix changes
+    ONLY when the external interface changes, and only then does work outside `planning` touch the
+    plan, in this order: (1) as the task requires, open one editable successor of the frozen plan
+    (`open_editable_successor`) WITHOUT asking the user; (2) analyse HRS and MRS against the change;
+    (3) where HRS must change, present the user one or several solution options and change HRS only
+    on the user's permission; (4) bring MRS into line and add the concepts the change needs, so that
+    plan and matrix stay in sync; (5) update the project's directly anchored pipeline-matrix TODO —
+    the affected command/method row, parameter cells, relation entries and result contracts — BEFORE changing the repository contour
+    or product code, and incorporate it into the successor; (6) STOP and ask the user, presenting the plan UUID, the
+    successor revision UUID and the HRS, MRS and matrix change; only the user's explicit permission
+    freezes it (`laws.user_authorized_plan_freeze`); (7) after the freeze refresh
+    `pipeline/matrix.yaml` and continue by `laws.external_api_change_pipeline_first`. No G/T/A step
+    is written or rewritten: a full step record is not required. A project with no plan updates
+    its matrix TODO and asks the user the same way before any repository change. No direct
+    external-API edit may bypass this event. See `ops/planning-runtime.yaml`
+    `external_surface_change_events`.
+  external_api_change_pipeline_first: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any task, plan or implementation that adds, removes or changes an external service command, endpoint,
+    request/response schema, parameter, constraint, result/error contract or observable side
+    effect, or to a public library constructor, function, method, signature, parameter, constraint,
+    return type, result/error contract or observable side effect] After the matrix change of
+    `laws.external_surface_change_requires_matrix_revision` is authorized by the user and frozen, the FIRST
+    repository changes MUST be `pipeline/matrix.yaml` and the affected named checks under
+    `pipeline/checks/`. Run those named checks against the unchanged deployed service or current
+    runnable library examples and obtain RED for the planned contour change. Until that RED exists,
+    do not edit the external API/schema, skeleton, client, examples or product implementation.
+    After RED, update the contour and its client/examples, implement and deploy the change, then
+    run the same named checks to GREEN. A documentation-only matrix edit, a check added after the
+    product change, or product code changed before the matrix-and-pipeline RED is a defect. See
+    `ops/planning-runtime.yaml` `external_surface_change_events` and `ops/delivery.yaml`
+    `external_api_change`.
+  pipeline_cli_contract: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any verification, deploy, or server start] There is EXACTLY ONE test pipeline in a
+    project and its NAME IS NOT a project's choice: `pipeline`, in every project of the fleet.
+    Layout: package `pipeline/`, entrypoint `pipeline/main.py`, one check per file in
+    `pipeline/checks/check_<name>.py`, auto-discovered, unit checks included as
+    `check_unit_<module>.py`. Every project's pipeline is ITS OWN and lives ONLY in that project's
+    checkout: it runs as `python -m pipeline` from the project root with the project's own
+    interpreter (its `.venv`), and `pipeline ...` anywhere in this contract means exactly that
+    invocation. No distribution of the project — service, client or library — ships the
+    `pipeline` package or declares a `pipeline` console script, and the project is never
+    installed into the user site or the system Python: every project has a top-level `pipeline`,
+    so a shared install shadows another project's (user, 2026-11-07). `python -m pipeline` runs
+    everything, `python -m pipeline <check-name>` one check, `python -m pipeline --list`
+    enumerates. `run_tests.sh`, `test_all.py`, a Makefile target, a per-subsystem runner
+    or a CI-only script is a SECOND pipeline and therefore a defect: fold its checks in, delete
+    it, repoint every document. See `ops/testing.yaml` `pipeline_cli`.
+  library_examples_are_the_pipeline: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any verification in a project whose `variables.project_kind` is `library`] A
+    library owns no service. Its pipeline is built from its EXAMPLES: one named check per
+    example, the example starting the server it needs from the project's own example
+    application. The examples cover every requested or declared public capability and documented
+    nuance, and all of them run GREEN; a capability without a working example is a
+    coverage gap and a failing, skipped or manually-patched example is a DEFECT. See
+    `external_contour_first` and `ops/testing.yaml` `external_contour_coverage`.
+  service_packaging_standard: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: packaging or deploying a service, creating one, or touching its Dockerfile, Debian
+    package, `postinst`, settings file, config template, argument surface, networks, systemd
+    unit or live pipeline] The house standard is the eight binding points restated in
+    `ops/delivery.yaml` `packaging_standard` — three artefacts, package-owned identity, templated
+    configuration, an argument surface, peers by network name, rollback-ready deployment, deploy
+    proven by output, one auto-discovered pipeline — read there before the first such change.
+    Its full text is `docs/service_packaging_standard.md` of the reference project `ai-editor`;
+    a project carries its own copy only where one exists. A missing copy is not a blocker and
+    is never invented: the card's eight points bind either way.
+  single_build_and_publication_flow: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any build, test deployment or package publication]
+    Use only the project-root `build.sh` from the authoritative working checkout and branch:
+    `local` under file_access local, `cas` under file_access cas; never from a linked git
+    worktree or detached HEAD. Every build pass that uploads anything takes a NEW version — the
+    previous one plus exactly one, never a gap: Docker Hub and PyPI never take the same version
+    twice, so a fix after RED is the next candidate, and only a pass that failed before any upload
+    retries its version. Image tag, Debian installation package, responding server and client
+    package metadata carry the same version. One build pass builds the image and pushes it to
+    Docker Hub, builds the Debian package, then builds the current client and publishes it to
+    PyPI, in that order — the Docker Hub push and the client publication UNCONDITIONALLY and
+    MANDATORILY on every pass, with no skip switch, condition or question. A library with no Docker
+    image builds its PyPI artifact in the same single-script discipline and publishes it after the
+    user-commanded full GREEN (a client library on every pass). Deploy and install a service
+    candidate on `root@192.168.254.26` as part of debugging and acceptance. While `variables.dev_prod` is
+    `true`, `build.sh` takes `--dev yes|no` with `yes` by default: the default DEV pass is this build
+    pass with every uploaded artefact suffixed `-dev` (image tag `<version>-dev`, client `<client>-dev`)
+    and the DEV Debian package, and it ends by deploying the DEV installation on `root@192.168.254.26`
+    AUTOMATICALLY; `build.sh --dev no` is the PRODUCTION pass and runs ONLY on the user's explicit
+    command: it REBUILDS without `-dev`, deploys production and then runs the full pipeline against
+    it (`dev_prod_instances`). A library is never
+    deployed there — its PyPI publication is its deployment (`library_examples_are_the_pipeline`).
+    Run only changed or new named pipeline commands; the pipeline uses the client from the CURRENT
+    PROJECT'S CODE — for a server with its own client (`client_package/`, `client/` or a paired
+    client checkout), that client installed from source — and NEVER a PyPI-installed client, not
+    even the one this pass has just published; a client of ANOTHER fleet service is the last
+    published `<client>-dev` of `fleet_dev_dependencies`. A full pipeline run requires a separate explicit
+    user command after targeted GREEN. Only after that full run is GREEN does the same script
+    publish the already-built library package to PyPI — mandatorily, under
+    `pypi_publication_scope` — without rebuilding or changing the version; a server or
+    application package goes to PyPI only with the user's explicit permission. See
+    `ops/delivery.yaml` `build_and_publication`.
+  pypi_publication_scope: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any build, full pipeline result, release, publication or done claim]
+    What goes to PyPI is decided by what the package IS. CLIENTS — the client package of a
+    service, including a client that lives inside its server project — are published to PyPI by
+    EVERY `build.sh` pass, UNCONDITIONALLY and MANDATORILY, in the same pass that pushes the server
+    image to Docker Hub: never gated on a pipeline result, never skipped, never asked about.
+    LIBRARIES — the package of a `project_kind: library` project that is not a client, even when it
+    also ships commands — are published MANDATORILY as soon as the user-commanded full pipeline is
+    GREEN for the exact candidate, by `build.sh`, in the same task, without asking. Either way the
+    work is not delivered until the published version and artifact hashes are verified; a built
+    client or a GREEN library left unpublished is a DEFECT, never a question put to the user. No
+    check ever uses a PyPI-installed copy of the project's own client: the pipeline takes it from
+    the current project's code (another fleet service's client follows `fleet_dev_dependencies`). SERVERS AND APPLICATIONS — a service's own server package, the application
+    inside an image, and any package that is run rather than imported (a CLI tool, GUI, daemon or
+    service runtime) — are NEVER published to PyPI without the user's explicit permission for that
+    exact package and version; a GREEN pipeline, a published client or an earlier permission is
+    not that permission. See `ops/delivery.yaml` `publish_gate`.
+  dev_prod_instances: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any build, deploy, verification, database, logger
+    or `projectid` action while `variables.dev_prod` is `true`; with `false` this law does not apply]
+    The project runs as TWO separate installations of the same code on `root@192.168.254.26`: PRODUCTION and DEV. Development,
+    debugging and testing are done ONLY in DEV — every "deployed service", "live server", "real
+    instance" or "candidate deploy" in this contract means the DEV installation. NEVER run a named
+    check or the pipeline against production — the ONE exception is the full pipeline that
+    `build.sh --dev no` runs right after the user-commanded production deploy — and NEVER point the dev installation or a test at the
+    production database. (1) IDENTITY: the root `projectid` file carries TWO identifiers of the code
+    — `id` for production and `iddev` for development, like the program keys an installer writes
+    to a registry; the dev installation uses `iddev` everywhere the production one uses `id`, and
+    they are never equal. A missing `iddev` is created once as a fresh UUID4 and committed; neither
+    identifier is ever changed afterwards. (2) BUILD: the project-root `build.sh` takes the
+    parameter `--dev` with exactly TWO values, `yes` and `no`, and `yes` is the DEFAULT — `build.sh`
+    and `build.sh --dev yes` are the same DEV pass; any other value is refused before anything is
+    built. The DEV pass is the build pass of `single_build_and_publication_flow`: it takes the next
+    version, builds the image and pushes it to Docker Hub under the tag `<version>-dev`, builds the
+    DEV Debian package, publishes the client to PyPI as the distribution `<client>-dev` at the bare
+    `<version>` (a `-dev` version would be rewritten by PyPI into `.dev0`, so the suffix goes on the
+    name; the import name is unchanged), and then DEPLOYS the DEV
+    installation on `root@192.168.254.26` AUTOMATICALLY in the same invocation — no separate deploy step,
+    no question — proving health, the version `<version>` and registration under `iddev`. The
+    suffix is ALWAYS `-dev` — never `dev`, `_dev` or `.dev0` — and labels the ARTEFACTS (image tag,
+    Debian package name, client distribution name) only; the code — the
+    server's response, the client's `_version.py` — carries the bare `<version>`. `build.sh --dev no`
+    is the PRODUCTION pass and runs ONLY on the user's explicit command: from the commit of the DEV
+    version the command names — by default the last one whose full DEV pipeline is GREEN — it
+    REBUILDS everything WITHOUT `-dev` under that same version number: the image `<image>:<version>`
+    pushed to Docker Hub, the production Debian package `<svc>-docker`, the client `<client>`
+    `<version>` published to PyPI — the Docker Hub push and the client publication UNCONDITIONALLY
+    and MANDATORILY, as in every build pass — every fleet client the project depends on taken as
+    the last PRODUCTION `<client>` published on PyPI. PRODUCTION carries NO `-dev` anywhere: the package
+    `<svc>-docker`, and, once it is installed, the production container, unit, settings file
+    `/etc/default/<svc>`, directories `/etc/<svc>`, `/var/lib/<svc>`, `/var/log/<svc>`, `/opt/<svc>`,
+    ports, database and certificates, with settings pointing at the PRODUCTION services of the
+    fleet. The same invocation then DEPLOYS production, proves health, the expected version and
+    registration under `id`, and RUNS THE FULL PIPELINE against production in production mode — the
+    only check that ever targets production: the pipeline targets DEV by default and accepts the
+    production target only when `build.sh --dev no` invokes it after the production deploy. A RED
+    production pipeline is reported at once with its exact output; the previous image and spec stay
+    on the host for rollback (`service_packaging_standard`). (3) PORTS: every port of the dev installation, the database container's
+    included, is the production port + 20000 when that stays within the valid port range (≤
+    65535), otherwise the production port + 10000; when that too leaves the range, the DEV pass of
+    `build.sh` refuses with an error and nothing is deployed — no other port is picked. (4)
+    DATABASE: THE DEV DATABASE IS ALWAYS SEPARATE — its own database, and its own database container
+    under the same port and naming rules, never a schema, prefix or table set inside the production
+    database. (5) NAMES, PACKAGE AND HOST DIRECTORIES: every DEV name is the production name with the
+    postfix `-dev` — container, systemd unit, settings file (`/etc/default/<svc>-dev`), volume,
+    network alias, database and role names (quoted where the engine requires it, e.g.
+    `"<db>-dev"`), never `_dev`. DEV has ITS
+    OWN Debian package `<svc>-docker-dev`, installed beside `<svc>-docker`, never the production
+    package with another configuration. EVERY host directory of the DEV installation carries the
+    suffix on the component that names the service — configuration, data (a database mounted into
+    the image included), logs, keys, image spec and runtime: `/etc/<svc>` -> `/etc/<svc>-dev`,
+    `/var/lib/<svc>` -> `/var/lib/<svc>-dev`, `/var/log/<svc>` -> `/var/log/<svc>-dev`,
+    `/opt/<svc>` -> `/opt/<svc>-dev`; DEV never reads or writes a production directory. (6)
+    PRODUCTION IS BUILT, DEPLOYED AND CHECKED ONLY ON THE USER'S EXPLICIT COMMAND — never
+    automatically, never as a step of another task, never because a full DEV pipeline is GREEN. A
+    production rollout is
+    not a merge or push of `main`, which keeps its own permission rule. (7) THE WORK IS SEPARATED
+    FROM THE TEST SERVERS: the WORK goes to PRODUCTION — every model log of the development process
+    (the session of `logger_exchange`, every task, answer and agent message), the exchange with the
+    user, every document and every report are written to the PRODUCTION AI Logger, doc-store and
+    Plan Manager. The DEV AI Logger receives ONLY DEV servers and the models those DEV servers call:
+    a DEV installation's settings point every logger endpoint at the DEV AI Logger, never at the
+    production one, and no role ever writes its work into the DEV logger. The DEV installation of
+    any shared service is reached only by DEV servers, the models they call and the pipelines and
+    examples under development (`fleet_dev_dependencies`). (8) CERTIFICATES: every certificate of the DEV installation — server, client and
+    trust store — is GENERATED from the project's own CA, the `ca/ca.crt` + `ca/ca.key` that the
+    project carries in a subdirectory of its root (`mtls_certificates/ca/`,
+    `mtls_certificates/mtls_certificates/ca/`, `mtls-certs/mtls_certificates/ca/` and the like); when
+    the root holds several candidates, it is the one the production certificates verify against.
+    The DEV certificates name the `-dev` identity and live in the `-dev` host directories. NEVER a
+    self-signed certificate, a new CA, or a copy of a production certificate and key; a project
+    without that CA stops the DEV pass with the exact finding instead of inventing one. See
+    `ops/delivery.yaml` `dev_prod`.
+  fleet_dev_dependencies: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any development, build, test, named check, example,
+    pipeline run or DEV installation that uses another service of the fleet, in every project]
+    EVERY development is tested on DEV variants ONLY. When the project — a server, a library or
+    its examples — uses another fleet service, it uses ONLY that service's DEV client and DEV
+    server: the DEV installation's settings, the pipeline, the examples and every test point at the
+    service's DEV installation (its `-dev` network name, DEV port and DEV registration), never at
+    its production endpoint, and a production endpoint is refused before the first call. A service
+    without a reachable DEV installation makes the affected check RED and is reported as a blocker
+    with evidence; it never falls back to production. THE DEV CLIENT: in DEV mode check BOTH
+    sources — PyPI (the newest published `<client>-dev`) and the service's LOCAL project checkout
+    (`~/projects/tools/<checkout>`, its current branch, the version from its single version
+    source) — and INSTALL THE LAST PACKAGE PUBLISHED ON PyPI, the newest `<client>-dev`, never a
+    source install. When the local checkout carries a newer client version than the newest
+    published `<client>-dev`, that code has not been through its project's DEV pass and its DEV
+    server does not run it either: record the gap (project, local version and commit, published
+    version) in the check result and report it, and still install the published package. The
+    installed client, its version and the compared local version are recorded with the build and
+    the check results. The project's OWN client is never taken from PyPI — it is the one from the
+    project's own code (`single_build_and_publication_flow`). REGISTRATION OF THE WORK GOES TO
+    PRODUCTION: tasks, TODOs, plans and steps, reports, bugs and their fixes in the Plan Manager,
+    documents in the doc-store, and the AI Logger exchange are written to the PRODUCTION
+    installations; only the traffic of the thing under test reaches DEV. The production pass
+    (`build.sh --dev no`) is the one exception: it builds with the last PRODUCTION `<client>` of
+    every fleet dependency and its full pipeline runs against the PRODUCTION services. See `ops/delivery.yaml` `fleet_dev_dependencies`.
+  verify_before_delivery: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before reporting delivery] Run the affected named check after deployment or over
+    the real example. RED returns to diagnosis, proof, correction and deployment. When every
+    requested item is targeted-GREEN, run the full pipeline once on the user's command. Report the exact command,
+    target, responding version and result.

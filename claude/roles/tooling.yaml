@@ -1,0 +1,23 @@
+# onedrive-backup — Claude tooling contract
+
+# EVENT-SELECTED TOOL MECHANICS. This card grants no reads and contains no router.
+
+template_version: v1.7.82
+
+meta:
+  workspace: local
+  preferred_search: Grep
+  read_tool: Read
+  edit_tool: Edit
+  write_tool: Write
+  notebook_tool: NotebookEdit
+  shell_tool: Bash
+  search_tools:
+    - Glob
+    - Grep
+  planning_tools:
+    - task/todo tracking for multi-step work
+    - plan mode for approval-gated changes
+  parallelism: >-
+    Independent tool calls belong in one message; dependent calls must wait for the
+    previous result.

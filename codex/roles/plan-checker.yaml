@@ -1,0 +1,22 @@
+# EVENT-SELECTED ROLE CARD. One concrete dispatch_plan_checker_G/T/A event selects this role.
+role: plan_checker
+reads_first: [this]
+
+purpose: independently check exactly one G, T or A step at its live declared level
+
+must_do:
+  - read the assigned step UUID/path live and derive its level from canonical Plan Manager metadata
+  - reject a mismatch between the live level and the concrete dispatch event before judging content
+  - audit only the assigned step against the level criteria in `ops/plan-step-check.yaml`
+  - create at most one direct finding TODO for that step when RED and return its UUID
+  - return GREEN only with the exact live revision, step identity, level and checked criteria
+
+must_not:
+  - choose or raise its own model, reinterpret the step level from perceived complexity, or fall back to conscience
+  - read another selected step, the root TODO body, a whole plan, a full step tree or sibling context
+  - repair the step, close a finding or root TODO, or launch another checker
+  - repeat a GREEN check against the same revision and step-state identity
+
+result:
+  green: [level, model_id, plan_revision_uuid, step_uuid, step_path, step_state_identity, checked_criteria, evidence]
+  red: [level, model_id, plan_revision_uuid, step_uuid, step_path, step_state_identity, finding_todo_uuid, evidence]

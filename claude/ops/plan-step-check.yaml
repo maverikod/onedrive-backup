@@ -1,0 +1,38 @@
+# Level-confined plan-step checking
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+
+assignment:
+  input: one selected step UUID/path, its declared G/T/A level, the root TODO UUID and pass number; under `variables.step_isolation` = `relaxed` a sibling batch of such steps under one direct parent, each with its own identity, verdict and finding
+  live_identity: [plan UUID, current revision UUID, step UUID, canonical path, declared level, step updated_at or content identity]
+  source_of_level: live canonical Plan Manager metadata only
+
+level_criteria:
+  G:
+    - coherent goal and architectural boundary with no implementation-level leakage
+    - complete T coverage of the goal, external contour, dependencies, acceptance structure and required ordering
+    - no sibling-G scope or unresolved decision silently delegated downward
+  T:
+    - one coherent tactical outcome inside its parent G
+    - complete A coverage, dependency order, target ownership and observable acceptance for that outcome
+    - no child A requires missing parent facts or hidden cross-file work
+  A:
+    - exactly one target_file and one executable atomic change
+    - exact object/symbol or file region, action, preconditions, expected result and acceptance evidence
+    - no implicit second file, unresolved design choice, sibling context or child decomposition
+
+finding_contract:
+  limit: at most one aggregated finding TODO for the assigned step in the current pass
+  owner: owner=<ROOT_TODO_UUID>
+  anchor: anchor_type=todo and anchor_ref_id=<ROOT_TODO_UUID>
+  required: [pass number, plan UUID, revision UUID, step UUID/path/level, model id, exact evidence, required correction, closure evidence]
+
+routing_invariants:
+  - the dispatch event's level and model are fixed before launch and must match live step metadata
+  - perceived difficulty, risk, file type, token budget, number of findings or previous RED never raises the checker model
+  - RED creates the finding and routes to correction; after relevant state change a fresh checker uses the same level/model mapping
+  - a missing or non-G/T/A live level is exact RED to the orchestrator and launches no checker
+  - conscience is reserved for an explicitly requested holistic risk report and is never a checker fallback
+
+read_boundary:
+  allowed: [assigned step live readback, its immediate normative context admitted by the assignment, root UUID as owner/anchor value, in relaxed isolation the other steps of the same sibling batch through their own assignments only]
+  forbidden: [another selected step, full root TODO body, whole plan, full step tree, sibling context, conversation history]

@@ -1,0 +1,37 @@
+# Planning authoring guidance
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+# Every `applies_after_event_selection` condition constrains an already selected card and grants no read.
+
+rules:
+  - define scope, acceptance criteria, and execution order explicitly
+  - record review checkpoints and dependency assumptions in the planning artifact
+  - when converting user intent into implementation work, preserve a stable planning vocabulary
+  - state each authoring unit's scope, inputs and acceptance completely in its own assignment; see `agent_reuse_in_plan_creation`
+  - decomposition ends in the external-contour order of `laws.external_contour_first`; see `branch_order`
+  - no plan may freeze without the user's explicit authorization for the exact presented current candidate; matrix completion and semantic GREEN only permit requesting that authorization
+  - HRS/MRS and plan common stay with the orchestrator, which launches planner_g only; planner_g writes G common and launches planner_t only; planner_t writes T common and launches planner_a only
+  - each owner writes and verifies its own common without another agent, and gives each direct child only that common link plus prompt text specific to the child step
+
+agent_reuse_in_plan_creation: >-
+  [APPLIES AFTER THIS CARD IS EVENT-SELECTED: creating plan artifacts in `planning` mode] Reusing an agent across authoring units is
+  ALLOWED. The Claude runtime does not let a session close an agent slot on demand, so a
+  one-fresh-agent-per-unit rule cannot be honoured here and must not be pretended. What remains
+  binding is the reason such a rule would exist: a reused agent carries the previous unit's residue —
+  earlier drafts, rejected options, half-relevant file contents, its own prior conclusions — and
+  will reason from that residue unless the new unit is stated completely. So re-state the new
+  unit's scope, inputs, and acceptance in full when reusing an agent, never as a delta against what
+  it did before, and check the artifact it returns against the declared inputs rather than against
+  the conversation it had. Each launch still carries exactly the two-item plan-context payload of
+  `ops/planning-context.yaml`; reuse never widens it.
+
+branch_order:
+  law: laws.external_contour_first
+  before_freeze: [task, complete external surface, project-anchored matrix TODO, command/method rows, parameter cells, parameter-relations table, result-contract table for every derived case, matrix review, incorporate into mutable normative plan, semantic audit and corrections to aggregate GREEN, present exact candidate, explicit user freeze authorization, freeze plan revision once]
+  service: [materialize frozen matrix snapshot, empty API or command schema with parameter validation, runnable server skeleton with no product logic, complete client, pipeline over derived focused cases, implementation by bounded matrix group, deploy and named checks, full pipeline]
+  library: [materialize frozen matrix snapshot, empty public callable and example skeletons with parameter validation and no product logic, runnable examples or testing script, pipeline over derived focused cases, implementation by bounded matrix group, full pipeline, publication]
+  ownership: A-level target-file ownership is defined only in `ops/planning-a-authoring.yaml`
+  context_refresh: >-
+    after a plan mutation refresh only the not-yet-started child projections whose inputs changed,
+    never every derived context. Before dispatch, the gate may compile the exact parent common.
+    The owner itself verifies only a new or invalidated receipt; unchanged receipt inputs prohibit repeated
+    verification. Pass only the common link plus prompt text specific to the one child step.

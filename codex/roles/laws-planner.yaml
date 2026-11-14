@@ -1,0 +1,202 @@
+# GENERATED ROLE EXCERPT of roles/laws.yaml for the `planner` stage — never edit; change
+# laws.yaml or laws-roles.yaml and regenerate. Read together with roles/laws-common.yaml;
+# every `[APPLIES AFTER THIS CARD IS EVENT-SELECTED: ...]` condition keeps its meaning here.
+laws:
+  plan_steps_check_event: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: the user's explicit command "проверка шагов плана", or the mandatory semantic
+    gate before asking the user to freeze a plan] Before launching plan_checker,
+    the orchestrator creates one open root review TODO anchored to the exact plan and assigned to
+    plan_checker. Its description fixes the plan and revision UUIDs, selected step UUIDs and paths,
+    audit criteria, GREEN definition, and this descendant contract: every finding has
+    `owner=<root TODO UUID>` and is a direct TODO child with `primary_anchor_type=todo` and
+    `anchor_ref_id=<root TODO UUID>`; descendants
+    are enumerated by paginating `todo_list(owner=<root TODO UUID>, view=summary, limit=200,
+    offset=<N>)` and retaining only rows whose owner and anchor fields all match the root. The orchestrator
+    reads the created root back and writes the actual UUID and fully substituted query into that
+    description before dispatch. For every selected step the orchestrator reads the canonical live
+    level and applies exactly A=`gpt-6-luna`/medium, T=`gpt-6.1-sol`/medium or
+    G=`gpt-6.1-sol`/xhigh. No subjective complexity or prior RED overrides the mapping; a level
+    mismatch blocks dispatch. Each pass uses one fresh level-confined plan_checker per selected
+    step; each receives only a step-specific audit prompt containing that step identity
+    and the root UUID, and creates at most one direct child TODO for that problematic step with
+    the root UUID in both owner and anchor plus exact evidence, required correction and closure
+    evidence. The orchestrator aggregates returned
+    verdicts as inbound agent context and dispatches each correction by child TODO UUID as the sole
+    assignment. The executor reads that TODO live, verifies its owner and anchor against the root,
+    repairs only its named step under this event's rules, records readback evidence, then calls
+    `todo_resolve` and `todo_close`; failure remains
+    non-closed. Only after an exhaustive owner-filter read shows every direct child `closed` does
+    the orchestrator rerun fresh confined plan_checker agents for every selected step with the same
+    level mapping. RED creates new direct children and
+    repeats the loop. After all agents return GREEN and the orchestrator appends the pass manifest, only the orchestrator resolves and
+    closes the root. Closed findings are immutable history and a recurring defect gets a new
+    child. For the pre-freeze gate, scope is every live G/T/A step in the mutable candidate; all
+    corrections and reruns happen before freeze. When the user explicitly activates
+    `plan_todo_repair` for this root, that card replaces only the correction-loop mechanics: it
+    processes findings under its budgets and performs no per-finding recheck, then runs exactly
+    one affected-scope final checker pass if the plan changed, or none if every finding closed
+    without plan mutation. Its final GREEN permits only presenting that
+    exact candidate and asking the user for freeze authorization; it never authorizes freeze.
+    `ops/planning-runtime.yaml` `plan_steps_check_event` is the full state machine.
+  user_authorized_plan_freeze: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: preparing, requesting or executing any PLAN freeze]
+    Only the user may authorize freeze. No mechanical validation, semantic GREEN, matrix review,
+    implementation request, agent verdict, procedure or prior permission authorizes it. Keep one
+    mutable candidate through the whole finding/correction/rerun cycle and NEVER freeze an
+    intermediate correction. Before requesting permission, incorporate the reviewed matrix and, in `planning`,
+    finish `plan_steps_check_event` GREEN for every live G/T/A step at the candidate's current
+    state — a matrix change outside `planning` changes no step and presents its HRS, MRS and matrix
+    change instead; present the exact plan UUID, current revision UUID and GREEN root TODO evidence, then
+    wait. Only a new explicit user command to freeze that presented candidate authorizes exactly
+    one freeze operation. "Continue", "implement", "done" or silence is not permission. Any plan
+    or incorporated-matrix mutation after GREEN or authorization invalidates both and requires the
+    affected semantic check plus new user authorization. Immediately before the authorized freeze,
+    perform only the required fresh identity read; if the identity differs, do not freeze. A repair
+    of an already frozen plan uses one mutable successor and the same gate, never one frozen
+    revision per finding.
+  one_open_tree: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: opening a plan branch, launching an owner, or fanning out agents in `planning`]
+    Capacity-aware serial policy: no more than ONE plan tree (a GS with its TS and AS) is open per
+    session at a time; the next opens only after the previous is mechanically green and
+    reviewed. Before any plan mutation read the live gate first (`ops/planning-runtime.yaml`
+    `gate_first`): status, counts, top findings, owning level; repair only the topmost owning
+    level, read back, and open no new branch while the current one is structurally red. NEVER:
+    decompose several GS in parallel; launch a new owner without free capacity and a completion
+    barrier; leave interrupted branches behind as if completed.
+  external_contour_first: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: building a new project or a new external contour, after receiving that task and before its product code] Take the task from
+    the user or active plan. Before freezing the plan, create or update the project's directly
+    anchored Plan Manager TODO for the complete command/method-by-parameter matrix and its separate
+    parameter-relations table and result-contract table, incorporate the reviewed contents into the normative plan, complete
+    the mandatory semantic gate, present the exact candidate and wait for the user's explicit
+    freeze authorization. Only after that authorization freeze the PLAN revision. After freeze, materialize that plan revision as
+    `pipeline/matrix.yaml`. SERVICE: create the empty
+    API/command schema and runnable server skeleton with parameter validation but no product logic;
+    then write the complete client; then write the single pipeline over that client. LIBRARY:
+    create the empty public constructors, functions and methods plus runnable examples/testing
+    script with parameter validation but no product logic; then write the single pipeline over
+    those real examples. Only then implement a bounded group of related capabilities and code files at a time.
+    After deploying each group, run only the named checks mapped to that group: RED
+    returns the entire still-red group to diagnosis, proof, correction and deployment; GREEN opens
+    the next group. A group of one is valid but is not the default decomposition. When the complete
+    requested contour is targeted-GREEN, run the full pipeline once on the user's command. The pipeline is the
+    verifier; do not add a model-verifier ladder, branch-attestation loop or narrative acceptance
+    layer. See `ops/delivery.yaml` `external_contour_first`. A bug fix, a refactoring or any change
+    that leaves the external interface as it is never enters this law: it runs on the TODO tree of
+    `laws.todo_tree_work`; a change to an existing interface follows
+    `laws.external_surface_change_requires_matrix_revision`.
+  external_contour_coverage: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: defining or changing the external service or library contour] Every declared
+    service command has a client method and named pipeline check; every public library constructor,
+    function and method has a runnable example or testing-script case and named check. Coverage is
+    complete only when the matrix required by `pipeline_parameter_matrix` has one row per command
+    or method, every accepted parameter has a filled cell, every relationship is declared, and
+    every derived focused case names and asserts its expected result contract. See
+    `ops/testing.yaml` `external_contour_coverage`.
+  pipeline_parameter_matrix: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: creating or changing a pipeline, external command, endpoint, public library callable,
+    parameter, schema, constraint, return type, result/error contract or observable side effect] The source is exactly one current non-terminal Plan Manager
+    TODO directly anchored to the exact project. Before implementation, a planner agent reviews its
+    contents, incorporates them into the normative plan, completes the semantic gate and freezes
+    the PLAN revision only after the user's explicit authorization. Maintain
+    `pipeline/matrix.yaml` as the machine-readable snapshot of that frozen plan revision. Its main
+    table has one ROW per application command/endpoint or public library constructor/function/
+    method and one COLUMN per parameter in the project-wide union. A cell is filled only when that
+    row accepts that parameter and contains exactly: allowed types, allowed values, and baseline
+    required/optional status; an empty cell means the parameter is not accepted. A separate
+    parameter-relations table declares conditional requirements, compatibility, mutual exclusion,
+    all-or-none, at-least-one, exactly-one, ordering and multiplicity rules.
+    A separate result-contract table is keyed by command/method row and derived case. The command
+    or method, exact supplied parameter set (including omissions), and declared preconditions of
+    each executable case determine exactly one expected outcome. Every case declares success or
+    error and the exact observable contract: returned or raised type,
+    schema/shape, required and forbidden fields, exact values or semantic invariants, collection
+    cardinality/order/termination where relevant, and required or forbidden side effects. Dynamic
+    values use explicit predicates instead of guessed literals. An error case also asserts its
+    error type/code/status and that forbidden state changes did not occur. A row may define a
+    baseline result contract with focused per-case overrides. A case whose parameter values or
+    preconditions change the observable result MUST override the baseline accordingly; a shared
+    baseline may be reused only when its assertions remain true for that exact invocation. An
+    invalid parameter set terminates in its specified error: never accept a success value, run
+    the command body, or infer a successful result from that case. For commands built on
+    `mcp-proxy-adapter`, parameter-validation cases assert the adapter's `ErrorResult` contract:
+    `success: false`, error code `-32602`, message and structured `error.data` including the
+    matching `violation` (`unknown`, `missing`, `type`, or `value`) and applicable field or
+    parameter list, plus `expected` and `got` for `type` and `value`; assert the correct
+    transport envelope as declared by
+    that project's live adapter version. Other error causes retain their own declared codes.
+    Result contracts are assertions on existing focused cases, NEVER another matrix dimension
+    and NEVER a Cartesian multiplier.
+    Validation order is fixed: reject every supplied parameter not accepted by the row; inspect the
+    supplied set and apply the relations table to determine the effective required set; reject any
+    missing required parameter; only after completeness succeeds, validate allowed types and values
+    of EVERY supplied parameter, including optional ones. Tests use one valid baseline per row,
+    focused type/value/boundary/omission cases with other inputs valid, and the minimal positive and
+    negative cases for each declared relation. NEVER form a Cartesian product of unrelated
+    parameters or simultaneous unrelated invalid conditions. Every derived case executes through
+    the row's named pipeline check against the real deployed service or runnable library example;
+    it is GREEN only when the returned value or raised error and observable side effects match the
+    case's result contract. Skipped/XFAIL/manual cases, success inferred from no exception, HTTP
+    status alone, a substring, schema alone, or a matrix copied but not executed are defects. A
+    changed callable, parameter, relation, return/result/error contract or side effect updates the
+    project TODO first and requires a new user-authorized frozen PLAN revision;
+    never edit only the local snapshot. The pipeline fails RED when the project/TODO/plan identity,
+    live callable inventory, accepted-parameter cells, relations, result contracts or derived
+    executable assertions do not match. See
+    `ops/planning-runtime.yaml` `pipeline_matrix_todo` and `ops/testing.yaml` `command_parameter_matrix`.
+  project_matrix_todo_required: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: creating, reading, attaching work to, freezing a plan for, or implementing in any
+    project] Every project MUST have exactly one current non-terminal pipeline-matrix TODO directly
+    anchored by that project's immutable `anchor_project_id`. This anchored TODO is the required
+    project work record; do not invent a project attribute that Plan Manager does not expose.
+    Absence, duplicates, a foreign-project anchor, or disagreement with the matrix incorporated into
+    the frozen plan revision blocks plan freeze and implementation. This applies to both `service`
+    and `library` projects.
+  external_surface_change_requires_matrix_revision: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: proposing, planning or making any addition, removal or change to a service command,
+    endpoint, request/response schema, parameter, constraint, result/error contract or observable
+    side effect, or to a public library constructor, function, method, signature, parameter,
+    constraint, return type, result/error contract or observable side effect] The matrix changes
+    ONLY when the external interface changes, and only then does work outside `planning` touch the
+    plan, in this order: (1) as the task requires, open one editable successor of the frozen plan
+    (`open_editable_successor`) WITHOUT asking the user; (2) analyse HRS and MRS against the change;
+    (3) where HRS must change, present the user one or several solution options and change HRS only
+    on the user's permission; (4) bring MRS into line and add the concepts the change needs, so that
+    plan and matrix stay in sync; (5) update the project's directly anchored pipeline-matrix TODO —
+    the affected command/method row, parameter cells, relation entries and result contracts — BEFORE changing the repository contour
+    or product code, and incorporate it into the successor; (6) STOP and ask the user, presenting the plan UUID, the
+    successor revision UUID and the HRS, MRS and matrix change; only the user's explicit permission
+    freezes it (`laws.user_authorized_plan_freeze`); (7) after the freeze refresh
+    `pipeline/matrix.yaml` and continue by `laws.external_api_change_pipeline_first`. No G/T/A step
+    is written or rewritten: a full step record is not required. A project with no plan updates
+    its matrix TODO and asks the user the same way before any repository change. No direct
+    external-API edit may bypass this event. See `ops/planning-runtime.yaml`
+    `external_surface_change_events`.
+  external_api_change_pipeline_first: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any task, plan or implementation that adds, removes or changes an external service command, endpoint,
+    request/response schema, parameter, constraint, result/error contract or observable side
+    effect, or to a public library constructor, function, method, signature, parameter, constraint,
+    return type, result/error contract or observable side effect] After the matrix change of
+    `laws.external_surface_change_requires_matrix_revision` is authorized by the user and frozen, the FIRST
+    repository changes MUST be `pipeline/matrix.yaml` and the affected named checks under
+    `pipeline/checks/`. Run those named checks against the unchanged deployed service or current
+    runnable library examples and obtain RED for the planned contour change. Until that RED exists,
+    do not edit the external API/schema, skeleton, client, examples or product implementation.
+    After RED, update the contour and its client/examples, implement and deploy the change, then
+    run the same named checks to GREEN. A documentation-only matrix edit, a check added after the
+    product change, or product code changed before the matrix-and-pipeline RED is a defect. See
+    `ops/planning-runtime.yaml` `external_surface_change_events` and `ops/delivery.yaml`
+    `external_api_change`.
+  step_isolation: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: preparing any launch that carries plan steps — plan_checker passes, plan_todo_corrector
+    delegation, planner_t and planner_a authoring] `variables.step_isolation` in this bundle
+    fixes how many steps one launch may carry; only the user changes it. `strict` (the default):
+    exactly one step per launch, with one step-specific prompt, as every plan card states. `relaxed`:
+    one launch may carry ONE SIBLING BATCH — all selected steps of one level under one direct
+    parent (the A children of one T, or the T children of one G) — with the same verified
+    parent-common link plus one specific prompt per step, listed in plan order. The agent works
+    the batch serially, returns per-step evidence, and a checker still creates at most one finding
+    TODO per problematic step. NEVER, in either mode: mix two parents or two levels in one launch,
+    add sibling context beyond the shared parent common, widen the read boundary, or choose the
+    model by anything but the live level. `relaxed` trades launches for context: it removes the
+    per-launch startup cost, not any gate, criterion, owner or evidence rule.

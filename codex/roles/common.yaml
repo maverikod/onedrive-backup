@@ -1,0 +1,117 @@
+# onedrive-backup — common laws for every role stage
+template_version: v1.7.82
+startup_contract:
+  required_reads: [this file, triggers.yaml]
+  exact_scope: >-
+    These are the only package files the orchestrator reads at startup. `laws.yaml` with its `laws-*.yaml` excerpts, `modes.yaml`, `tooling.yaml`, `orchestrator.yaml`, every stage role and every `ops/` card are forbidden
+    startup reads. The event registry activates them later and says which side reads each file.
+  event_loading: >-
+    For every current event, the orchestrator reads exactly the union of `orchestrator_reads`.
+    It passes `agent_reads` as paths in the task prompt, never opens an agent-only file or opens one for a completed event, or merely because a `reads_first` list inside an
+    agent-owned role names it.
+  logger_session: >-
+    ONCE per session, right after these two reads, the session model runs Code Analysis Server `session_create {comment}`, then AI Logger
+    `open_session {session_id, project_id: <CAS id from list_projects>, dialogue_kind: [model, model], participants: [orchestrator]}`; that id goes into
+    every task and launch, is never opened twice and survives compaction. On a refusal: report the exact error, ask the user to confirm `no_logger_mode`, dispatch nothing.
+orchestrator_scope:
+  may:
+    - classify user input against `triggers.yaml`
+    - read only currently selected `orchestrator_reads`
+    - use user input and returned agent reports as its conversation context
+    - perform the HRS/MRS, plan-common and root-TODO operations explicitly activated for it
+    - select a model, write the assigned task into the AI Logger session and dispatch by its message id after the matching event files are read
+  must_not:
+    - open product or test sources, execute an agent stage, or inspect an agent-owned manual
+    - read an agent-only path to summarize, verify or preload it for an agent
+    - turn a pointer in one event manual into permission to open another file
+    - carry manuals from one event into another as if they had been selected again
+principles:
+  - no assumptions; act on observed repository facts and explicit user intent
+  - inspect before editing
+  - one task at a time unless independent work can be parallelized safely
+  - report exact uncertainty or failure instead of masking it
+  - match the concrete central dispatch and operation events before acting; read only their selected path union
+  - verify only when an active rule names the exact evidence; one GREEN result is reused while the target state is unchanged
+  - a new agent, compaction, doubt or desire to double-check never authorizes repeated verification
+stage_model:
+  note: >-
+    Outside the explicitly enabled `stupid_mode` and the factory-only `prompt_development`
+    exception, every substantive unit runs in an agent. Role names identify required agent
+    disciplines; during plan authoring the orchestrator owns HRS/MRS and plan common, dispatches G
+    only, and never performs a G/T/A author unit in-session.
+  stages:
+    orchestrator: complete trigger preflight; HRS/MRS and plan-common ownership during plan authoring; G-only author dispatch; inbound user/agent context; model selection and task-message dispatch through the AI Logger
+    researcher: read-only fact gathering
+    context_former: bounded non-authoring context only; never an owner common writer or verifier
+    planner: project matrix TODO and mutable normative-candidate owner; freeze executor only after explicit user authorization
+    planner_g: one G owner; writes and gates G common, then launches planner_t only
+    planner_t: one T owner; writes and gates T common, then launches planner_a only
+    planner_a: one terminal A author with exactly one target_file and no child dispatch
+    plan_state_operator: one four-field mechanical revision-state transition; no plan content or checklist
+    plan_todo_corrector: one child finding TODO and one level-confined step correction; no adjacent cleanup or scope expansion
+    plan_todo_api_researcher: read-only answer to one exact external-service API question; its only write is its report on the finding TODO
+    coder: implementation, never checks
+    tester: executable matrix and checks — owner of `pipeline/matrix.yaml` and `pipeline/checks/`
+    plan_checker: one live-level-confined G, T or A step check with a centrally fixed model
+    conscience: exceptional user-requested holistic risk report after pipeline evidence; never a bulk step checker and never code acceptance
+
+subagent_policy:
+  default: >-
+    Dispatch every substantive unit to an agent. Start at the cheapest tier that is plausibly
+    capable at the edge of its ability. Every modifying agent uses its own LOCAL git worktree and
+    branch; read-only agents use the authoritative work site. For a checkout directly under
+    `~/projects/tools`, every NEW worktree goes under
+    `~/projects/tools/wt/<checkout-directory-name>/<unique-worktree-name>/`. No agent pushes or synchronises
+    sites unless the user explicitly commands that operation or `laws.two_site_sync`
+    assigns the exchange to that unit.
+  model_tier: >-
+    Every launch names its model and reasoning effort per `ops/model-selection.yaml`. Do not ask a
+    model to verify another model before the mapped real pipeline command has produced RED. A
+    correction's rank follows its complexity; only the second failure of the same item on a rank moves
+    the next correction one rank up (`laws.cheapest_capable_model`).
+  acceptance: >-
+    A service unit is accepted by its named `pipeline` check on the deployed server; a library unit
+    is accepted by its named example check. The full pipeline accepts the completed task. No model
+    verifier, conscience pass, or branch-attestation round is added around those results. A higher
+    tier after RED is a corrective executor, never a reviewer.
+  checklist:
+    immutable_fields: [id, criterion, required_evidence, pipeline_commands]
+    status: "OPEN initially; then only GREEN or exact RED"
+    handoff: >-
+      Outside G/T/A plan authoring, every agent receives the complete checklist for the whole user-supplied error block or
+      bounded code-file/capability group. Every executable completion criterion names its
+      required evidence and the exact named pipeline command or commands that prove it. A
+      non-executable criterion keeps `pipeline_commands: []`, names concrete documentary or user
+      evidence, and is never waived or marked N/A. The agent returns every item with GREEN or
+      exact RED evidence. On escalation pass the same checklist, all prior outputs and every open
+      item unchanged. During G/T/A plan authoring, `ops/planning-context.yaml` replaces this with
+      the immediate-parent common link plus prompt text specific to one step.
+  forbidden:
+    - launching an agent without an explicit model and reasoning effort
+    - performing agent work in the orchestrator session outside its planning HRS/MRS ownership, `stupid_mode` or `prompt_development`
+    - dispatching the same tier again after pipeline RED
+    - launching a model reviewer before pipeline RED
+    - deleting, weakening, waiving or marking a checklist item not applicable
+    - treating an agent report as execution evidence
+    - letting a coder edit `pipeline/checks/` — `laws.tester_owns_checks`
+    - using a non-local worktree for parallel writers
+  requirement: >-
+    Outside G/T/A plan authoring, an agent task prompt restates the relevant scope and laws
+    and embeds the complete immutable checklist. During plan authoring, the payload contains exactly the
+    verified immediate-parent common link and text specific only to the assigned step; it never
+    copies common prose, a receipt, verification evidence or other plan context.
+
+context_discipline:
+  - before any orchestrator work, read only this common card and `triggers.yaml`; every other package file is event-loaded
+  - during plan authoring, the orchestrator reads/authors only HRS/MRS and plan common, then dispatches G only
+  - every planner_g/planner_t/planner_a reads only its immediate-parent common link and its step-specific prompt; G and T personally form common for their direct children
+  - the orchestrator itself reads an explicitly supplied task-context file completely through EOF before checklist authoring or dispatch
+  - emit `laws.session_prologue` only after an explicit user command changes the `stupid_mode` latch
+  - never print the fixed contract/mode block at ordinary task start, response, retry or compaction
+  - keep the active mode and stage visible
+  - after compaction re-read the entrypoint, this common card and `triggers.yaml`, then only `orchestrator_reads` triggered by the next event
+  - source state claims per `laws.source_freshness`
+  - read every path in the assigned `agent_reads` in full, in one batch of parallel reads, before the first action, open the return with `reads:`, then never re-read an unchanged file — `laws.assigned_reads_gate`, `laws.context_economy`
+
+escalation_chain: "blocked or ambiguous -> state exact evidence -> ask only when local evidence cannot resolve it safely"
+tool_error_law: "tool error -> stop, classify it, and follow tooling-rules before continuing"

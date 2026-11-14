@@ -1,0 +1,22 @@
+# Direct-child dispatch for G and T owners
+# EVENT-SELECTED OPERATION CARD. planner_a never reads this card.
+
+dispatches:
+  planner_g_to_t:
+    central_event: dispatch_planner_t
+    role: planner_t
+    model: gpt-6.1-sol
+    reasoning_effort: medium
+  planner_t_to_a:
+    central_event: dispatch_planner_a
+    role: planner_a
+    model: gpt-6-luna
+    reasoning_effort: medium
+
+rules:
+  - launch one fresh author per direct-child step; an author that returned one unit is spent; under `variables.step_isolation` = `relaxed` one launch may carry all direct-child siblings of this owner as one batch — the same common link plus one specific prompt per child, per `laws.step_isolation`
+  - invoke the named central dispatch event; only its `agent_reads` supplies the child's manuals
+  - write each child's assignment as one task message in the session's logger session and launch with the three-line prompt of `ops/logger-exchange.yaml`, passing the same `logger_session`; read the child's answer with `message_get`, and put the children's answer ids, not their text, into your own answer
+  - name the exact model and reasoning effort shown above; the child does not read model-selection.yaml
+  - pass exactly the verified owned-common link plus prompt text unique to that child
+  - never attach receipt data, common prose, a global checklist, conversation history or another assignment

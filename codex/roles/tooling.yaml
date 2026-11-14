@@ -1,0 +1,12 @@
+# onedrive-backup — Codex tooling contract
+
+# EVENT-SELECTED TOOL MECHANICS. This card grants no reads and contains no router.
+
+template_version: v1.7.82
+
+meta:
+  workspace: local
+  preferred_search: rg
+  manual_edit_tool: apply_patch
+  shell_tool: exec_command
+  parallel_tool: multi_tool_use.parallel

@@ -1,0 +1,129 @@
+# onedrive-backup — Codex testing rules
+# EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
+# Every `applies_after_event_selection` condition constrains an already selected card and grants no read.
+
+rules:
+  - use the project's single `pipeline` CLI for acceptance
+  - define the external contour, then the command/method-by-parameter matrix, relations table and result-contract table, then the client or library testing script, then the pipeline, before product implementation
+  - one named check covers one command, public library callable, example or reported bug and executes every focused case derived for it; one agent unit may own the bounded group of checks mapped to its error block or code-file/capability group
+  - every agent receives the immutable checklist for the whole group with every criterion, required evidence and exact mapped named pipeline command
+  - local and unit runs are diagnostic; the real service or runnable example supplies RED and GREEN
+  - before the first live RED there is no model review; after RED the corrective agent on the rank `laws.cheapest_capable_model` selects diagnoses, proves, fixes, deploys and runs only the same mapped block commands
+  - run the full pipeline once, on the user's command, after the complete requested task or bug block is targeted-GREEN
+  - never add verifier agents or branch-attestation rounds around a mechanical pipeline result
+  - reuse every GREEN command result while its target version and relevant inputs are unchanged; never rerun it for confidence, after compaction or through another agent
+  - when an existing external API changes, the first repository changes are pipeline/matrix.yaml and the affected named checks; those checks must be RED against the unchanged contour before API, client, example or product-code edits begin
+
+pipeline_cli:
+  name: pipeline
+  location: "the project's own checkout only; never shipped in a distribution, never installed into the user site or the system Python"
+  interpreter: "the project's own environment (`.venv`), set up from the checkout"
+  run_all: "python -m pipeline"
+  run_one: "python -m pipeline <check-name>"
+  list_checks: "python -m pipeline --list"
+  layout:
+    package: "pipeline/"
+    entrypoint: "pipeline/main.py"
+    matrix: "pipeline/matrix.yaml — command/method rows, parameter columns and cells, separate parameter-relations table, and separate result-contract table"
+    checks_dir: "pipeline/checks/"
+    check_file: "pipeline/checks/check_<name>.py — one check per file, auto-discovered"
+    unit_check: "pipeline/checks/check_unit_<module>.py"
+    module_entry: "pipeline/__main__.py calls pipeline.main:main; no `pipeline` console script and no `pipeline*` package include in any pyproject.toml"
+  contract:
+    - no arguments runs every check
+    - one argument runs only that named check
+    - every service check reaches the server only through the project client; the client owns both normal typed methods and the bounded validation invocation that can send a raw parameter map for negative cases
+    - every library check runs the corresponding real example or testing-script capability
+    - every named contour check executes every focused parameter and relationship case derived for its row
+    - pipeline startup fails RED when the live surface or schema, matrix and executable case inventory disagree
+    - unit checks live inside the pipeline; a second test runner is a defect
+
+external_contour_coverage:
+  law: laws.external_contour_coverage
+  service: every command or endpoint in the live application surface has a client method, exactly one matrix row and one named check
+  library: every public constructor, function and method has a runnable example or testing-script case, exactly one matrix row and one named check
+  rule: the complete live surface, every accepted parameter cell, every declared relationship and every result contract are covered by `command_parameter_matrix`; a declared capability or case without an executable result assertion is RED
+
+command_parameter_matrix:
+  law: laws.pipeline_parameter_matrix
+  artifact: pipeline/matrix.yaml
+  authority: the matrix incorporated from the project's directly anchored Plan Manager TODO into the frozen normative plan revision
+  required_identity: [project id, TODO id, TODO updated_at, plan id, frozen plan revision]
+  source_of_surface:
+    service: the live command listing or API schema, cross-checked with the project client
+    library: the declared public callable inventory, cross-checked with the importable library surface
+  main_table:
+    rows: exactly one row per command, endpoint, public constructor, function or method
+    columns: the project-wide union of parameter names
+    empty_cell: the row does not accept that parameter; supplying it is an error
+    filled_cell_exact_fields:
+      allowed_types: every type the row accepts for the parameter
+      allowed_values: enums, formats, ranges, boundaries and other admitted value constraints
+      presence: required or optional before relationship rules are applied
+  parameter_relations_table:
+    scope: keyed by command/method row; unrelated rows and parameters never combine
+    covers: [conditional requirement, compatibility, mutual exclusion, all-or-none, at-least-one, exactly-one, repetition, order, multiplicity]
+    rule: a relationship states its activation condition and resulting required, permitted or forbidden parameter set
+  result_contracts_table:
+    scope: keyed by command/method row and derived case; it annotates focused cases and is not a parameter dimension
+    case_identity: each executable case names the command/method, exact supplied parameter set including omissions, and required state preconditions; together they select one expected outcome and result contract
+    row_baseline: a row may define one reusable success contract; each case must override every assertion affected by its parameters or preconditions, and may inherit only assertions true for that invocation
+    required_for_every_case:
+      outcome: success or error
+      result_or_error_type: exact admitted return type or raised/error type
+      shape: schema, required fields and forbidden fields; use none only when the contract explicitly returns no value
+      value_assertions: exact stable values and semantic predicates or invariants for dynamic values
+      collection_semantics: cardinality, ordering and termination when the result is a collection, iterator, stream or chunk sequence
+      side_effects: observable state changes that must occur and state changes that must not occur
+    error_contract: assert error type, code/status, error shape and semantic fields; also assert absence of forbidden side effects and of a success result
+    invalid_parameter_case: terminate with the declared validation error; the command body and its side effects must not run
+    adapter_validation_error: for mcp-proxy-adapter commands, assert ErrorResult with success false, code -32602, message and error.data.violation matching unknown/missing/type/value; assert the applicable field or parameter list and expected/got for type/value, using the transport envelope declared by the live adapter version
+    rule: schema conformance alone is insufficient when the contract promises values, relationships, ordering, cardinality or side effects
+  validation_order:
+    - resolve the selected command/method row and its filled cells
+    - reject every supplied parameter whose cell is empty or absent
+    - inspect the supplied parameter set and apply the relations table to compute the effective required set
+    - reject a missing baseline-required or conditionally required parameter; do not continue to general value validation
+    - after completeness succeeds, validate allowed types and allowed values of every supplied parameter without exempting optional parameters
+  derived_cases:
+    - one valid baseline invocation for every row
+    - one focused omission case for each baseline-required parameter, with all other inputs valid
+    - focused allowed/disallowed type and value cases for each accepted parameter, including null, empty, malformed and boundary values where its cell permits those distinctions
+    - one unknown-parameter case proving that an empty/absent cell is rejected
+    - minimal positive and negative cases for every declared parameter relationship
+    - value-dependent relationship selectors are validated sufficiently to select the relation; an invalid selector reports its own type/value error
+    - every case references its row baseline result contract or a focused override and carries exact executable assertions for the outcome determined by its command, supplied parameters and preconditions
+  execution:
+    - reject a local matrix whose project/TODO identity or content does not match the frozen normative plan revision
+    - every derived case executes through the project client or real library example/testing script
+    - the named check fails when any required case is absent, duplicated, skipped, XFAIL, manual-only, lacks a result contract or does not assert the returned value or error and observable side effects
+    - the pipeline fails before acceptance when the live callable inventory, parameter schema or result/error schema has no exact matrix match
+  forbidden:
+    - Cartesian multiplication of unrelated parameters or simultaneous unrelated invalid conditions
+    - treating result contracts as another cross-product dimension; they annotate the already-derived focused cases
+    - accepting no exception, HTTP status alone, a substring, type alone or schema alone as proof of a correct result
+    - omitting a command/method row, an accepted parameter cell, a declared relationship or one of its required focused cases
+    - a documentation-only matrix that the pipeline does not load
+    - a local-only matrix edit not preceded by an updated project TODO, semantic GREEN, explicit user freeze authorization and one new frozen PLAN revision
+
+bugfix_check:
+  sequence:
+    - add or identify every named command mapped by the immutable checklist to the current user bug block
+    - run only those commands and record live RED before product-code changes
+    - pass the complete unchanged checklist, exact RED and the entire still-red error group to the corrective agent on the rank `laws.cheapest_capable_model` selects
+    - after root-cause proof and correction, run build.sh, then deploy/install the service candidate or start the library example
+    - run only the same mapped block commands
+    - RED after a correction is a failure: the first on a rank is corrected again on that rank, the second raises the next correction exactly one rank; GREEN closes the mapped items without model review
+    - after every item in the requested block is GREEN, wait for the user command; then run the full pipeline once
+
+definition_of_done:
+  law: laws.deployed_pipeline_green_is_done
+  service: the final candidate is deployed — while `laws.variables.dev_prod` is true, to its DEV installation (deployed by `build.sh`, default `--dev yes`, `laws.dev_prod_instances`) and never a check against production — is built by build.sh, reports the expected version and registration state, and the user-commanded full pipeline is GREEN against it; its build passes pushed the image to Docker Hub and published the matching client to PyPI
+  library: the locally built candidate's user-commanded full pipeline is GREEN over every declared example, then that exact package is published to PyPI; that publication is the library's deployment
+  not_done:
+    - a local-only or mock result
+    - a commit, build, package or deploy acknowledgment without the real named check
+    - an agent or model verdict
+    - targeted checks passed but the user-commanded full pipeline did not run; report awaiting command without a done claim
+    - a skipped check or unreachable service
+  evidence: exact command, target, responding version, named-check result and final full-pipeline result

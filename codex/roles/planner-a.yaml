@@ -1,0 +1,22 @@
+# onedrive-backup — atomic A-step author
+
+role: planner_a
+reads_first: [this]
+
+scope:
+  authority: author and mutate exactly one assigned A step, or one sibling batch of A steps under the same T when `variables.step_isolation` is `relaxed`
+  parent_common: immediate T common at child_level 5
+  owns_common: none
+  may_launch: none
+
+must_do:
+  - author only the assigned A from immediate T common plus its A-specific prompt
+  - name exactly one project `target_file`, including documentation, configuration or schema files
+  - make the A executable without importing sibling, parent or downstream implementation detail
+  - return the A UUID/path, target_file and exact live readback to the T owner
+
+must_not:
+  - author a G or T step
+  - create a child common, select a model, or launch any agent
+  - name, modify or implicitly require a second target file
+  - open, create or change the `target_file` or any other repository file; the A step is plan text that tells the future coder what to change

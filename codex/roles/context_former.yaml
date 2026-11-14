@@ -1,0 +1,15 @@
+role: context_former
+reads_first: [this]
+scope:
+  authority:
+    - form bounded non-authoring context when another contract rule explicitly requests it
+job: >-
+  Form only the bounded context explicitly assigned outside G/T/A plan authoring.
+must_do:
+  - receive and return the complete immutable task checklist for this bounded unit
+  - isolate the touched surface area
+  - note validation commands before editing
+must_not:
+  - broaden the task beyond what the user asked
+  - write or verify common for a G, T or A plan-authoring owner; that owner must do it personally
+  - inspect a sibling, descendant, full plan or step tree

@@ -1,0 +1,122 @@
+# onedrive-backup — which laws each stage reads
+# Source map for the GENERATED excerpts roles/laws-common.yaml and roles/laws-<role>.yaml
+# (see scripts/law_excerpts.py). Every law in roles/laws.yaml must appear under at least one
+# role; the work-profile laws (local_mode, cas_mode, local_ide_mode) are added to `common`
+# automatically according to `variables.file_access`. `conscience` reads the full laws.yaml.
+#
+# `common` is read by every stage agent together with its own role excerpt; `orchestrator` is
+# read by the orchestrator through the `agent_dispatch` event. `researcher` also serves
+# context_former. planner_g/planner_t/planner_a, plan_checker, plan_state_operator,
+# plan_todo_corrector and plan_todo_api_researcher read no law excerpt: their cards are complete,
+# and every dispatch also hands them `ops/logger-exchange.yaml`, the complete exchange card.
+
+roles:
+  common:
+    - role_and_trigger_compliance
+    - active_profile_declaration
+    - contract_scope
+    - no_foreign_prompt_authority
+    - agent_completion_checklist
+    - project_boundary
+    - worktree_location
+    - source_freshness
+    - verification_once_per_state
+    - context_economy
+    - assigned_reads_gate
+    - logger_exchange
+    - agent_report_in_planner
+    - todo_tree_work
+    - server_branches_are_mirrors
+    - branch_sync_before_local_work
+    - branch_sync_after_every_step
+    - no_assumption_policy
+    - inspect_before_edit
+    - patch_only_manual_edits
+    - preserve_user_work
+    - non_destructive_git
+    - commit_integrity
+    - escalation_first_error
+    - reproduce_before_claiming
+    - editor_gate_no_bypass
+    - tester_owns_checks
+    - deployed_pipeline_green_is_done
+    - exact_failure_reporting
+    - artifact_language
+  coder:
+    - branch_discipline
+    - two_site_sync
+    - cas_search_first
+    - parallel_agent_isolation
+    - external_contour_first
+    - bugfix_acceptance_cycle
+    - external_surface_change_requires_matrix_revision
+    - external_api_change_pipeline_first
+    - pipeline_cli_contract
+    - library_examples_are_the_pipeline
+    - service_packaging_standard
+    - single_build_and_publication_flow
+    - pypi_publication_scope
+    - dev_prod_instances
+    - fleet_dev_dependencies
+    - verify_before_delivery
+  tester:
+    - branch_discipline
+    - cas_search_first
+    - parallel_agent_isolation
+    - external_contour_first
+    - bugfix_acceptance_cycle
+    - external_contour_coverage
+    - pipeline_parameter_matrix
+    - project_matrix_todo_required
+    - external_surface_change_requires_matrix_revision
+    - external_api_change_pipeline_first
+    - pipeline_cli_contract
+    - library_examples_are_the_pipeline
+    - service_packaging_standard
+    - single_build_and_publication_flow
+    - pypi_publication_scope
+    - dev_prod_instances
+    - fleet_dev_dependencies
+    - verify_before_delivery
+  researcher:
+    - branch_discipline
+    - cas_search_first
+  planner:
+    - step_isolation
+    - one_open_tree
+    - plan_steps_check_event
+    - user_authorized_plan_freeze
+    - external_contour_first
+    - external_contour_coverage
+    - pipeline_parameter_matrix
+    - project_matrix_todo_required
+    - external_surface_change_requires_matrix_revision
+    - external_api_change_pipeline_first
+  orchestrator:
+    - orchestrator_trigger_preflight
+    - two_site_sync
+    - cas_search_first
+    - logger_exchange
+    - no_logger_mode
+    - agent_report_in_planner
+    - planning_context_isolation
+    - step_isolation
+    - autonomy_mode
+    - stupid_mode
+    - session_prologue
+    - agent_execution_is_mandatory
+    - orchestrator_dispatch_only
+    - bounded_agent_prompt
+    - assigned_reads_gate
+    - cheapest_capable_model
+    - explicit_agent_model
+    - zero_trust_cheap_output
+    - parallel_agent_isolation
+    - one_open_tree
+    - plan_steps_check_event
+    - user_authorized_plan_freeze
+    - external_contour_first
+    - bugfix_acceptance_cycle
+    - project_matrix_todo_required
+    - external_surface_change_requires_matrix_revision
+    - external_api_change_pipeline_first
