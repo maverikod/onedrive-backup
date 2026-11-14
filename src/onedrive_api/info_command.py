@@ -289,6 +289,7 @@ class InfoCommand(Command):
     category = "documentation"
     version = "0.3.4"
     author = "OneDrive Backup maintainers"
+    email = "maintainers@example.org"
 
     @classmethod
     def metadata(cls) -> dict[str, Any]:
