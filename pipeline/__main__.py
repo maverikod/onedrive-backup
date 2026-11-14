@@ -1,0 +1,114 @@
+"""OneDrive Backup project verification entrypoint: python -m pipeline."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+CHECKS = ("python_syntax", "shell_syntax", "config_contract", "unit_tests", "security")
+EXTRA = ("smoke_mtls",)
+
+
+def run(*args: str, env: dict | None = None) -> None:
+    print("[RUN]", " ".join(args), flush=True)
+    subprocess.run(args, cwd=ROOT, env=env, check=True)
+
+
+def python_syntax() -> None:
+    run(sys.executable, "-m", "compileall", "-q", "src", "client", "tests", "pipeline")
+
+
+def shell_syntax() -> None:
+    scripts = (
+        "build.sh", "scripts/build-deb.sh", "scripts/smoke-mtls.sh",
+        "docker/deploy.sh", "packaging/onedrive-backup-docker",
+        "packaging/onedrive-backup", "packaging/postinst",
+        "packaging/prerm", "packaging/postrm",
+    )
+    run("bash", "-n", *scripts)
+
+
+def config_contract() -> None:
+    main = json.loads((ROOT / "config/server.json").read_text())
+    backup = json.loads((ROOT / "config/backup.json").read_text())
+    assert main["server"]["protocol"] == "mtls", "mTLS server required"
+    assert main["server"]["port"] == 8050
+    assert main["registration"]["server_id"] == "onedrive-backup"
+    assert main["registration"]["enabled"] is True
+    assert main["registration"]["protocol"] == "mtls"
+    assert main["registration"]["register_url"] == "https://mcp-proxy:3004/register"
+    assert main["registration"]["heartbeat"]["url"] == "https://mcp-proxy:3004/proxy/heartbeat"
+    for field in ("cert", "key", "ca"):
+        assert main["server"]["ssl"][field].startswith("/config/certs/")
+    for field in ("cert", "key"):
+        assert main["registration"]["ssl"][field] == main["server"]["ssl"][field]
+    assert main["registration"]["ssl"]["ca"] == "/config/certs/proxy-ca.crt"
+    # Revocation checks are owned by MCP Proxy, not the internal FastAPI server.
+    assert main["server"]["ssl"]["crl"] is None
+    assert main["registration"]["ssl"]["crl"] is None
+    assert json.loads((ROOT / "packaging/server.json").read_text()) == main
+    assert "    ports:" not in (ROOT / "docker/compose.yml").read_text()
+    assert "-p " not in (ROOT / "packaging/docker-run.sh").read_text()
+    assert backup["mirror_dir"] == "/data/mirror"
+    assert backup["repository_dir"] == "/data/restic-repo"
+    assert backup["password_file"].startswith("/secrets/")
+    assert backup["rclone_config"].startswith("/secrets/")
+
+
+def unit_tests() -> None:
+    tmp = ROOT / ".test-run"
+    tmp.mkdir(exist_ok=True)
+    env = os.environ.copy()
+    env["TMPDIR"] = str(tmp)
+    env["PYTHONPATH"] = os.pathsep.join((str(ROOT / "src"), str(ROOT / "client")))
+    run(sys.executable, "-m", "unittest", "discover",
+        "-s", "tests", "-p", "test_*.py", "-v", env=env)
+
+
+def security() -> None:
+    tracked = subprocess.check_output(["git", "ls-files"], cwd=ROOT,
+                                      text=True).splitlines()
+    for path in tracked:
+        name = Path(path).name.lower()
+        assert name != ".env", "Credentials cannot be committed"
+        assert not name.endswith((".key", ".pem", ".crt", ".crl")), (
+            "Certificate material must be external: " + path
+        )
+    dockerfile = (ROOT / "docker/Dockerfile").read_text()
+    assert "USER 1000:1000" in dockerfile
+    assert "EXPOSE 8050" in dockerfile
+    ignore = (ROOT / ".dockerignore").read_text()
+    assert ".env" in ignore
+    assert "*.key" in ignore
+    assert (ROOT / "packaging/onedrive-backup-api.service").exists()
+
+
+def smoke_mtls() -> None:
+    run("bash", "scripts/smoke-mtls.sh")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="OneDrive backup verification pipeline")
+    parser.add_argument("check", nargs="?", choices=CHECKS + EXTRA)
+    parser.add_argument("--list", action="store_true")
+    args = parser.parse_args(argv)
+    if args.list:
+        for name in CHECKS + EXTRA:
+            print(name)
+        return 0
+    selected = [args.check] if args.check else list(CHECKS)
+    for name in selected:
+        print("[CHECK]", name, flush=True)
+        globals()[name]()
+        print("[GREEN]", name, flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+

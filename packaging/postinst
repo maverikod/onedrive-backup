@@ -16,6 +16,40 @@ if [ "$1" = configure ]; then
       chmod 0640 "$f"
     fi
   done
+  # Upgrade pre-0.3.1 conffiles without clobbering operator settings.
+  # CRL policy is now managed by MCP Proxy, never by this backend.
+  if [ -f /etc/onedrive-backup/server.json ]; then
+    python3 - <<'PY_MIGRATE_CRL'
+import json
+import os
+from pathlib import Path
+import tempfile
+
+path = Path("/etc/onedrive-backup/server.json")
+config = json.loads(path.read_text(encoding="utf-8"))
+changed = False
+for section in ("server", "registration"):
+    tls = config.get(section, {}).get("ssl")
+    if isinstance(tls, dict) and tls.get("crl") is not None:
+        tls["crl"] = None
+        changed = True
+if changed:
+    stat = path.stat()
+    fd, name = tempfile.mkstemp(prefix=".onedrive-tls-", dir=path.parent)
+    try:
+        os.fchmod(fd, stat.st_mode & 0o777)
+        os.fchown(fd, stat.st_uid, stat.st_gid)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(config, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(name, path)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+PY_MIGRATE_CRL
+  fi
   if [ -f /etc/default/onedrive-backup ]; then
     chmod 0644 /etc/default/onedrive-backup
     chown root:root /etc/default/onedrive-backup
@@ -23,8 +57,8 @@ if [ "$1" = configure ]; then
   if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
   fi
-  # Intentional: service/timer stay disabled pending production CA/CRL,
-  # server certificate, client certificate and data mount.
+  # Intentional: API stays inactive until TLS, admin hash and backup mount
+  # are ready. The backup timer additionally requires Microsoft 365 access.
 fi
 exit 0
 

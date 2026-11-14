@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import ssl
-import ssl
 from pathlib import Path
 import sys
 
@@ -45,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = json.loads(Path(args.config).expanduser().read_text(encoding="utf-8"))
         client = BackupClient(
-            url=config["url"], ca=config["ca"], crl=config["crl"],
+            url=config["url"], ca=config["ca"],
             cert=config["cert"], key=config["key"], timeout=config.get("timeout", 180),
         )
         if args.command == "health":

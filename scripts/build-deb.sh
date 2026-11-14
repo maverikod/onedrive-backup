@@ -18,6 +18,10 @@ mkdir -p "$PKG/DEBIAN" "$PKG/usr/bin" "$PKG/usr/lib/onedrive-backup" \
 install -m 0755 "$ROOT/packaging/onedrive-backup-docker" \
   "$PKG/usr/bin/onedrive-backup-docker"
 install -m 0755 "$ROOT/packaging/onedrive-backup" "$PKG/usr/bin/onedrive-backup"
+install -m 0755 "$ROOT/packaging/onedrive-backup-admin-password" "$PKG/usr/bin/onedrive-backup-admin-password"
+install -d -m 0755 "$PKG/usr/lib/onedrive-backup/onedrive_api"
+install -m 0644 "$ROOT/src/onedrive_api/__init__.py" "$PKG/usr/lib/onedrive-backup/onedrive_api/__init__.py"
+install -m 0644 "$ROOT/src/onedrive_api/admin_password.py" "$PKG/usr/lib/onedrive-backup/onedrive_api/admin_password.py"
 install -m 0644 "$ROOT/config/server.json" "$PKG/etc/onedrive-backup/server.json"
 install -m 0644 "$ROOT/config/backup.json" "$PKG/etc/onedrive-backup/backup.json"
 install -m 0644 "$ROOT/packaging/onedrive-backup-api.service" \
@@ -37,9 +41,9 @@ for name in postinst prerm postrm; do
 done
 printf '/etc/onedrive-backup/server.json\n/etc/onedrive-backup/backup.json\n' \
   > "$PKG/DEBIAN/conffiles"
-printf '%s\n' "maverikod/onedrive-backup:$VERSION" \
+printf '%s\n' "vasilyvz/onedrive-backup:$VERSION" \
   > "$PKG/usr/lib/onedrive-backup/image-spec"
-for item in "$ROOT"/dist/client/onedrive_backup_client-*.whl; do
+for item in "$ROOT"/dist/client/onedrive_backup_client-"$VERSION"-*.whl; do
   if [[ -f "$item" ]]; then
     install -m 0644 "$item" "$PKG/usr/share/onedrive-backup/client/"
   fi
@@ -51,7 +55,7 @@ Architecture: all
 Section: admin
 Priority: optional
 Maintainer: OneDrive Backup maintainers <maintainers@example.org>
-Depends: docker.io | docker-ce | moby-engine, adduser, util-linux, ca-certificates
+Depends: docker.io | docker-ce | moby-engine, adduser, util-linux, ca-certificates, python3
 Description: OneDrive Business backup API and Docker host controller
  Installs version-pinned Docker service, systemd timer, mTLS configuration,
  encrypted restic backup management, and host bootstrap tools. No credentials

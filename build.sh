@@ -6,18 +6,37 @@ VERSION="$(tr -d '[:space:]' < VERSION)"
 IMAGE="vasilyvz/onedrive-backup:$VERSION"
 STEP=preflight
 trap 'rc=$?; if [ "$rc" -ne 0 ]; then echo "FAILED $STEP: $rc" >&2; fi' EXIT
-STEP=tests
-mkdir -p .test-run
-TMPDIR="$ROOT/.test-run" PYTHONPATH=src python3 -m unittest discover -s tests -p 'test*.py' -v
-rmdir .test-run 2>/dev/null || true
+STEP=pipeline
+python3 -m pipeline
 STEP=package-client
+# Compileall in the pipeline generates bytecode; exclude it from distributable wheels.
+python3 - <<'PY_CLEAN_CLIENT'
+from pathlib import Path
+import shutil
+shutil.rmtree(Path("client/build"), ignore_errors=True)
+shutil.rmtree(Path("client/onedrive_backup_client/__pycache__"), ignore_errors=True)
+PY_CLEAN_CLIENT
 python3 -m venv .build-venv
 .build-venv/bin/python -m pip install -q build twine
 mkdir -p dist/client
 .build-venv/bin/python -m build --sdist --wheel --outdir dist/client client
-.build-venv/bin/python -m twine check --strict dist/client/*
+.build-venv/bin/python -m twine check --strict dist/client/onedrive_backup_client-"$VERSION"-*
+python3 - "$VERSION" <<'PY_CHECK_WHEEL'
+from pathlib import Path
+from zipfile import ZipFile
+import sys
+matches = sorted(Path("dist/client").glob("onedrive_backup_client-" + sys.argv[1] + "-*.whl"))
+assert len(matches) == 1, "Expected exactly one current-version wheel"
+with ZipFile(matches[0]) as wheel:
+    unsafe = [item for item in wheel.namelist()
+              if "__pycache__" in item or item.endswith((".pyc", ".key", ".crt", ".pem", ".env"))]
+    assert not unsafe, "Unsafe wheel entries: " + ", ".join(unsafe)
+print("Current-release wheel checked:", matches[0].name)
+PY_CHECK_WHEEL
 STEP=docker-build
 docker build -f docker/Dockerfile -t "$IMAGE" -t 'vasilyvz/onedrive-backup:latest' .
+STEP=mtls-smoke
+python3 -m pipeline smoke_mtls
 STEP=deb-build
 bash scripts/build-deb.sh
 STEP=registry-credentials
@@ -50,7 +69,7 @@ docker push "$IMAGE"
 docker push 'vasilyvz/onedrive-backup:latest'
 STEP=pypi
 if [ "$SKIP_PYPI" -eq 0 ] && [ -n "$PYPI_TOKEN" ]; then
-  if ! TWINE_USERNAME=__token__ TWINE_PASSWORD="$PYPI_TOKEN" .build-venv/bin/python -m twine upload --non-interactive dist/client/*; then
+  if ! TWINE_USERNAME=__token__ TWINE_PASSWORD="$PYPI_TOKEN" .build-venv/bin/python -m twine upload --non-interactive dist/client/onedrive_backup_client-"$VERSION"-*; then
     echo 'PyPI upload failed: client remains available locally' >&2
   fi
 else

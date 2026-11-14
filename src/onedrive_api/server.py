@@ -30,7 +30,7 @@ def _register_commands() -> None:
 
     class CatalogCommand(Command):
         category = "backup"
-        version = "0.2.0"
+        version = "0.3.1"
         author = "OneDrive Backup"
         email = "maintainers@example.org"
 
@@ -127,7 +127,7 @@ def _validate_mtls_config(config: dict) -> None:
     server = config.get("server", {})
     if server.get("protocol") != "mtls":
         raise ValueError("Production server MUST use protocol=mtls")
-    for key in ("cert", "key", "ca", "crl"):
+    for key in ("cert", "key", "ca"):
         filename = server.get("ssl", {}).get(key)
         if not isinstance(filename, str) or not Path(filename).is_file():
             raise ValueError("mTLS certificate not installed: server.ssl." + key)
@@ -138,6 +138,11 @@ def make_app(config_path: str | Path):
     config_path = Path(config_path).resolve()
     config = json.loads(config_path.read_text(encoding="utf-8"))
     _validate_mtls_config(config)
+    from .admin_password import AuthError, load_record
+    try:
+        load_record(Path(os.environ.get("ONEDRIVE_ADMIN_HASH_FILE", "/config/admin-password.hash")))
+    except AuthError as exc:
+        raise ValueError("Admin password is not configured: " + str(exc)) from exc
     os.environ["CONFIG_FILE"] = str(config_path)
     os.environ["MCP_CONFIG_FILE"] = str(config_path)
 
@@ -148,7 +153,7 @@ def make_app(config_path: str | Path):
     app = create_app(
         title="OneDrive Backup API",
         description="Read-only backup browse/export over mTLS",
-        version="0.2.0", app_config=config, config_path=str(config_path),
+        version="0.3.1", app_config=config, config_path=str(config_path),
     )
     _register_commands()
 
@@ -161,6 +166,9 @@ def make_app(config_path: str | Path):
         route for route in app.router.routes
         if getattr(route, "path", None) in allowed
     ]
+
+    from .ui import install_ui
+    install_ui(app, _catalog)
 
     def fail(exc: CatalogError) -> HTTPException:
         return HTTPException(status_code=exc.status, detail=str(exc))
@@ -234,17 +242,15 @@ def make_app(config_path: str | Path):
 
 
 def tls_server_settings(config: dict, config_path: str) -> dict:
-    """Build verified mTLS context with mandatory CRL checking (leaf)."""
+    """Build verified mTLS context; revocation policy is managed by MCP Proxy."""
     from mcp_proxy_adapter.core.app_factory.ssl_config import build_server_ssl_config
     _validate_mtls_config(config)
     settings = build_server_ssl_config(config, config_path=config_path)
     context = settings.get("ssl_context")
     if not isinstance(context, ssl.SSLContext):
         raise RuntimeError("mTLS SSLContext missing from adapter")
-    crl_file = config["server"]["ssl"]["crl"]
-    # Raising on absent/invalid CRL is intentional; do not permit insecure fallback.
-    context.load_verify_locations(cafile=crl_file)
-    context.verify_flags |= ssl.VERIFY_CRL_CHECK_LEAF
+    # CRL validation is centralized in MCP Proxy; enforce client certificate trust.
+    context.verify_flags &= ~(ssl.VERIFY_CRL_CHECK_LEAF | ssl.VERIFY_CRL_CHECK_CHAIN)
     context.verify_mode = ssl.CERT_REQUIRED
     settings["ssl_context"] = context
     settings["verify_client"] = True

@@ -1,189 +1,210 @@
-# onedrive-backup — резервное копирование OneDrive Business
+# onedrive-backup 0.3.1 — OneDrive Business backups for Ubuntu
 
-Резервное копирование Microsoft 365 OneDrive Business на Ubuntu/Debian: `rclone sync` выполняет загрузку в зеркало, затем `restic backup` создаёт **зашифрованный версионный снимок**. Предыдущие версии остаются доступны после удаления файлов в облаке до истечения политики хранения. OneDrive используется **только как источник**; записи в облако скрипт не делает.
+Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
+mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
+No writes are sent to OneDrive.
 
-## Сборка Debian-пакета (на CAS-сервере)
+## Deliverables
 
-```bash
-./build.sh
-# dist/onedrive-backup_0.1.1_all.deb
-sha256sum -c dist/onedrive-backup_0.1.1_all.deb.sha256
-dpkg-deb --info dist/onedrive-backup_0.1.1_all.deb
-```
+- Docker image: vasilyvz/onedrive-backup:0.3.1, Python 3.12,
+  mcp-proxy-adapter 8.11.15, HTTPS/mTLS TCP port 8050.
+- Debian host package: dist/onedrive-backup_0.3.1_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.1-py3-none-any.whl.
+- Verification: python -m pipeline; after image build: python -m pipeline smoke_mtls.
 
-Требуется `dpkg-deb` (пакет `dpkg`), Python 3.9+, Bash. Для сборки `root` не нужен благодаря `dpkg-deb --root-owner-group`.
+Build all release artifacts on CAS host via ./build.sh. It tests the code,
+builds Python client wheel and sdist, image, Debian package, publishes image
+to Docker Hub, and optionally publishes client to PyPI. If the PyPI
+token is missing or dontpubpypi is configured, the client remains local.
+Release version is defined only in VERSION.
 
-## Установка на сервер Ubuntu/Debian
+## Network, volumes and secrets
 
-```bash
-sudo apt install ./dist/onedrive-backup_0.1.1_all.deb
-# Если переносили .deb на отдельный сервер, укажите путь к файлу там.
-```
+Container: onedrive-backup, Docker network smart-assistant.
+FastAPI listens on container port 8050, but NO port is published on the host.
+Direct API and web UI access is limited to containers on smart-assistant.
+Automatic MCP Proxy registration is enabled:
 
-`apt` устанавливает зависимости: `python3`, `rclone`, `restic`, `adduser`. `postinst` создаёт системного пользователя `onedrive-backup`, приватный каталог `/var/lib/onedrive-backup` и выставляет безопасные права на конфигурацию. Устанавливаются служба `onedrive-backup.service`, таймер `onedrive-backup.timer`, CLI `/usr/bin/onedrive-backup` и man-страница.
+- Service ID: onedrive-backup
+- Registration: https://mcp-proxy:3004/register
+- Heartbeat: https://mcp-proxy:3004/proxy/heartbeat
+- Interval: 30 seconds.
 
-**Таймер намеренно не запускается после установки**: сначала требуется авторизовать Microsoft 365, подключить диск бэкапов, задать пароль restic и проверить сухой запуск.
+Host bind mounts:
 
-## Подключить диск (обязательно до инициализации)
+| Host | Container | Role |
+| --- | --- | --- |
+| /etc/onedrive-backup | /config:ro | server.json, backup.json, certs |
+| /var/lib/onedrive-backup/secrets | /secrets:rw | rclone.conf, restic-password |
+| /srv/backup/onedrive | /data:rw | mirror, restic-repo, temporary exports |
 
-По умолчанию ожидается файловая система, примонтированная в `/srv/backup`. Проверка `required_mountpoint` предохраняет от записи резервных копий на системный диск, если накопитель не смонтирован.
+The /srv/backup filesystem MUST be mounted before starting the service,
+otherwise it refuses to start. Keep this on real backup storage, not rootfs.
 
-```bash
-findmnt /srv/backup  # должен показывать отдельное смонтированное хранилище
-sudo install -d -m 0700 -o onedrive-backup -g onedrive-backup \
-  /srv/backup/onedrive
-```
+Root project .env holds Docker Hub (optionally PyPI) publishing credentials.
+It must never be committed or included in images/packages. At deployment
+docker/deploy.sh copies it on the HOST to
+/var/lib/onedrive-backup/credentials/.env (root:root, mode 0600).
+/etc/default/onedrive-backup contains only that path and public Docker
+settings, not the credentials themselves. These registry credentials
+are NOT mounted into the container.
 
-Если используется другой путь/точка монтирования, измените `/etc/onedrive-backup/config.json`: `required_mountpoint`, `mirror_dir` и `repository_dir`. Не располагайте зеркало внутри restic-репозитория и наоборот. Не снимайте проверку монтирования без необходимости.
+## Mandatory mTLS certificates
 
-## Авторизация OneDrive Business
+Install the following external files under /etc/onedrive-backup/certs:
 
-**Не передавайте логины, пароли, MFA-коды или OAuth-токены в переписке, репозиторий и Debian-пакет.** Для Microsoft 365 используется делегированный OAuth через `rclone`.
+- ca.crt: legacy trusted CA for internal client certificates
+- proxy-ca.crt: trust anchor for MCP Proxy and issuer of the service certificate
+- trust-bundle.pem: inbound mTLS trust bundle of both public CAs
+- server.crt and server.key: dual-purpose TLS identity for the server and proxy registration
+- client.crt and client.key: optional separately provisioned client identity (not installed by the server package)
 
-```bash
-sudo -u onedrive-backup -H rclone config --config /var/lib/onedrive-backup/rclone.conf
-```
+The server will not start when any required certificate or key is missing.
+For private keys use owner root, group onedrive-backup, mode 0640.
+Config files under /etc/onedrive-backup are owned by root:onedrive-backup.
+Client certificates are verified during the TLS handshake against trusted CAs.
+CRL validation and lifecycle are delegated to MCP Proxy, not to this server.
+TLS versions below 1.2, plaintext HTTP and certificates without trust
+validation are not permitted. All smoke-test keys are ephemeral and NEVER
+used in production.
 
-Создайте remote `onedrive` (`Storage: onedrive`), авторизуйтесь под своей учётной записью Microsoft 365, выберите диск `OneDrive Personal or Business`, затем нужный Business drive. Если сервер без браузера — на вопрос `Use web browser...` ответьте `n`, на локальном ПК с браузером исполните `rclone authorize "onedrive"` и вставьте результат в **защищённую терминальную сессию сервера**. Рекомендуется версия rclone на ПК, соответствующая версии сервера. Некоторые tenant Microsoft 365 требуют согласия администратора на разрешения приложения; может потребоваться собственная регистрация приложения Microsoft Entra ID. См. https://rclone.org/onedrive/ и https://rclone.org/remote_setup/ .
+## Installation and operations
 
-```bash
-sudo chown onedrive-backup:onedrive-backup /var/lib/onedrive-backup/rclone.conf
-sudo chmod 600 /var/lib/onedrive-backup/rclone.conf
-sudo -u onedrive-backup -H rclone --config /var/lib/onedrive-backup/rclone.conf lsf onedrive:
-```
+On a CAS build host:
 
-Параметр `onedrive_remote` в `/etc/onedrive-backup/config.json` по умолчанию `onedrive:`. Можно выбрать подкаталог, например `onedrive:Documents`. Политики Microsoft Entra ID могут потребовать одобрения администратором; резервное копирование начнётся **только после** успешной авторизации.
+    python3 -m pipeline
+    ./build.sh
+    sudo bash docker/deploy.sh
 
-**Область охвата:** копируются доступные пользователю файлы выбранного диска OneDrive. Версии файлов, созданные в Microsoft 365 до первого бэкапа, внутренние корзины, сторонние SharePoint-сайты и данные других пользователей *автоматически не охватываются*. Для них требуются отдельные источники/настройки.
+On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-## Ключ шифрования и первый запуск
+    sudo apt install ./onedrive-backup_0.3.1_all.deb
+    sudo systemctl enable --now onedrive-backup-api.service
+    sudo onedrive-backup-docker info
+    sudo onedrive-backup-docker status
+    sudo onedrive-backup-docker ports
 
-Сгенерируйте пароль restic под системным пользователем. Сохраните его отдельно, вне сервера (при утере восстановление невозможно):
+The API remains disabled until the admin password hash, TLS identities and
+mounted backup storage are ready. Microsoft 365 authorization is not required
+to start the API; keep the backup timer disabled until authorization and
+one successful test backup.
 
-```bash
-sudo -u onedrive-backup -H sh -c \
- 'umask 077; head -c 48 /dev/urandom | base64 > /var/lib/onedrive-backup/restic-password'
-sudo -u onedrive-backup -H onedrive-backup init
-sudo -u onedrive-backup -H onedrive-backup backup --dry-run
-sudo -u onedrive-backup -H onedrive-backup backup
-sudo -u onedrive-backup -H onedrive-backup snapshots
-sudo -u onedrive-backup -H onedrive-backup check
-```
+After OneDrive authorization, configure the remote onedrive: in
+/var/lib/onedrive-backup/secrets/rclone.conf, and create a strong restic
+password in /var/lib/onedrive-backup/secrets/restic-password. Both files
+must be mode 0600, owner onedrive-backup. Preserve the encryption password
+outside the backup server. OneDrive credentials are NOT included in this
+release; Microsoft 365 Entra ID configuration will be done separately.
 
-`backup --dry-run` проверяет операции синхронизации без изменения зеркала и создания restic-снимка. Первый полноценный запуск может скачивать много данных. Если синхронизация завершилась ошибкой, снимок **не** создаётся; если ошибка при создании restic-снимка — **не** запускается очистка старых снимков.
+    sudo onedrive-backup-docker init
+    sudo onedrive-backup-docker backup --dry-run
+    sudo onedrive-backup-docker backup
+    sudo onedrive-backup-docker snapshots
+    sudo onedrive-backup-docker check
+    sudo systemctl enable --now onedrive-backup.timer
 
-## Расписание и диагностика
+Never enable the timer before one successful backup and a tested restore.
+Retention defaults: 14 daily, 8 weekly and 12 monthly snapshots. Only
+the configured OneDrive remote is covered (no tenant-wide user discovery).
 
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now onedrive-backup.timer
-systemctl list-timers onedrive-backup.timer
-sudo systemctl start onedrive-backup.service
-sudo journalctl -u onedrive-backup.service --no-pager -n 100
-```
+## HTTP API, read-only restic access
 
-Каждый день около 02:30 (плюс случайная задержка до 15 минут); пропущенный запуск выполняется при следующем старте таймера. Одновременные бэкапы блокируются `flock`.
+All endpoints are protected by mutual TLS. There is no HTTP fallback.
 
-Ограничение на массовые удаления: `max_delete=100`. Если число удалений локального зеркала превысит порог, rclone останавливается и снимок не делается. При намеренном массовом удалении установите осмысленный новый порог после проверки причины. Пустой источник запрещён по умолчанию (`allow_empty_source=false`).
+GET    /api/v1/health
+GET    /api/v1/snapshots?limit=100
+GET    /api/v1/snapshots/{snapshot_id}/files?prefix=...&offset=0&limit=1000
+POST   /api/v1/exports
+GET    /api/v1/exports/{export_id}
+GET    /api/v1/exports/{export_id}/status
+DELETE /api/v1/exports/{export_id}
 
-Политика хранения по умолчанию: 14 ежедневных, 8 недельных и 12 месячных снимков. Настраивается в `/etc/onedrive-backup/config.json`. Данные шифруются restic; отдельно от самого сервера полезно сохранять резервную копию restic-репозитория (другой носитель/площадка, защита от удаления).
+To prepare a single-file export, POST a JSON object containing snapshot_id
+and a relative file_path such as Documents/file.pdf. Without file_path,
+the server stages a TAR.GZ export of the entire snapshot. The returned
+opaque export_id grants access only to that staged export, never to a
+server-local arbitrary filesystem path. Data is streamed, not returned as
+base64 in JSON. Temporary exports are plaintext, so treat /data/exports
+as sensitive and remove them promptly after download. Default maximum
+export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
-## Восстановление
+JSON-RPC commands provided to MCP Proxy: backup_snapshots,
+backup_list_files, backup_prepare_download, backup_download_status,
+backup_delete_export. The adapter admin and unrestricted file-transfer
+commands are intentionally not exposed by this server.
 
-Просмотрите идентификаторы снимков:
+Without configured restic storage, health returns HTTP 200, while
+backup browsing returns HTTP 503 rather than a fabricated empty result.
 
-```bash
-sudo -u onedrive-backup -H onedrive-backup snapshots
-```
+## Python client
 
-Восстановление на отдельное место (не в живое зеркало):
+Install the bundled wheel (or use PyPI if published):
 
-```bash
-sudo install -d -m 0700 -o onedrive-backup -g onedrive-backup /srv/restore-onedrive
-sudo -u onedrive-backup -H env \
- RESTIC_REPOSITORY=/srv/backup/onedrive/restic-repo \
- RESTIC_PASSWORD_FILE=/var/lib/onedrive-backup/restic-password \
- restic restore latest:/srv/backup/onedrive/mirror --target /srv/restore-onedrive
-```
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.1-py3-none-any.whl
+    mkdir -p ~/.config/onedrive-backup
+    cp client/config.example.json ~/.config/onedrive-backup/client.json
 
-Замените `latest` на ID конкретного снимка. Точный путь внутри снимка можно узнать через `restic ls <snapshot-id>`. После первого бэкапа обязательно протестируйте восстановление файла.
+Set the internal HTTPS URL, trusted CA, client CRT and client key in client.json.
 
-## Обновление / удаление
+    onedrive-backup-client health
+    onedrive-backup-client snapshots
+    onedrive-backup-client files SNAPSHOT --prefix Documents
+    onedrive-backup-client prepare SNAPSHOT --path Documents/file.pdf
+    onedrive-backup-client status EXPORT_ID
+    onedrive-backup-client fetch EXPORT_ID --output file.pdf
+    onedrive-backup-client download SNAPSHOT --output snapshot.tar.gz
+    onedrive-backup-client delete EXPORT_ID
 
-Обновление `sudo apt install ./onedrive-backup_<version>_all.deb` сохраняет пользовательскую `conffile` в `/etc` согласно правилам dpkg. `prerm` выключает таймер только при удалении, не на обновлении. При удалении сохраняются приватный каталог с OAuth-токенами, ключом шифрования и сами бэкапы: удалять их следует отдельно вручную после восстановления/архивации.
+Client validates hostname, trusted CA and mutual TLS on every connection.
+Before committing an output, it validates downloaded length and SHA-256,
+then atomically moves its temporary file to the requested destination.
 
-## Разработка и тестирование
 
-```bash
-TMPDIR="$PWD" python3 -m unittest discover -s tests -v
-bash -n scripts/build-deb.sh
-sh -n packaging/postinst packaging/prerm packaging/postrm packaging/onedrive-backup
-./build.sh
-```
+## Административный веб-интерфейс (0.3.1)
 
-Интеграционные тесты используют поддельные `rclone`/`restic`, не требуют Microsoft 365 и не затрагивают настоящий сервер бэкапов. Проверка пакета включает `dpkg-deb --info`, `--contents`, распаковку пакета и smoke-тест скрипта.
+FastAPI на основе MCP Proxy Adapter предоставляет /ui/login и /ui/.
+Доступны авторизация, список снимков, просмотр каталога файлов,
+подготовка выгрузки и скачивание файлов/архивов.
 
-## MCP Proxy Adapter API (production only, 0.2.0)
+Безопасность: обязательные клиентский mTLS-сертификат и отдельный
+пароль пользователя admin. Готового пароля не существует. На Ubuntu
+после установки .deb выполните sudo onedrive-backup-admin-password.
+Новый пароль вводится без отображения и не включается в историю команд.
+В /etc/onedrive-backup/admin-password.hash хранится только соль и хеш
+PBKDF2-SHA256 (600 000 итераций), права 0600, пользователь onedrive-backup.
+Файл не входит в Git, Debian-пакет и Docker-образ. При смене пароля все
+старые сессии автоматически становятся недействительными.
 
-The production image uses `mcp-proxy-adapter` with mandatory mutual TLS, server-side
-CA and CRL verification, and listens on internal port **8050**. The host wrapper
-maps port **8050:8050** and connects the service to the `smart-assistant` Docker
-network, using the DNS alias `onedrive-backup`. It registers with MCP Proxy
-at `https://mcp-proxy:3004/register` under server id `onedrive-backup-vvz`.
-There is no development instance.
+Cookie: Secure, HttpOnly, SameSite=Strict, время жизни восемь часов;
+есть защита CSRF, ограничение неудачных попыток, экранирование HTML,
+защитные HTTP-заголовки и запрет кеширования.
+Без установленного хеша приложение не запускается.
 
-Two bind mounts are used:
-- `/etc/onedrive-backup:/config:ro` — configuration and mTLS certificates.
-- `/srv/backup/onedrive:/data:rw` — mirror, restic repository and staged exports.
+Единый сертификат сервера и исходящего подключения к MCP Proxy:
+mtls-certs/for-proxy/issued/onedrive-backup.crt и onedrive-backup.key.
+Он подписан CA mtls-certs/for-proxy/ca/ca.crt, который отдельно
+устанавливается как proxy-ca.crt для проверки подлинности самого прокси.
+Сертификат содержит CN=onedrive-backup, SAN DNS:onedrive-backup,
+DNS:localhost, IP:127.0.0.1 и EKU serverAuth + clientAuth.
 
-For deployment, create a **project-root** `.env` with Docker Hub credentials.
-`docker/deploy.sh` stores a root-only copy in
-`/var/lib/onedrive-backup/credentials/.env`, using mode 0600, and writes only
-`ONEDRIVE_CREDENTIALS_FILE=/var/lib/onedrive-backup/credentials/.env`
-plus public run parameters in `/etc/default/onedrive-backup`. The image and
-the Git repository never contain the credentials.
+Обе секции server.ssl и registration.ssl указывают на единый
+/config/certs/server.crt и /config/certs/server.key. Для проверки
+входящих клиентских сертификатов используются публичные CA из
+trust-bundle.pem. Приватный ключ CA в контейнер не копируется.
+CRL внутри сервера и Python-клиента не используются: политика
+отзыва сертификатов выполняется на стороне MCP Proxy.
+Сценарий docker/deploy.sh проверяет и переносит файлы на хост
+в /etc/onedrive-backup/certs/ с ограниченными правами. Они НЕ входят
+в Git, .deb или Docker image.
 
-The **operator must provide**:
-`/etc/onedrive-backup/certs/server.crt`,
-`/etc/onedrive-backup/certs/server.key`,
-`/etc/onedrive-backup/certs/ca.crt` and
-`/etc/onedrive-backup/certs/ca.crl`.
-Client certificates and keys are supplied to the Python client separately.
-Server startup fails closed when certificates or the backup mount are absent.
+Исходные mtls-certs/backup-srv.crt и backup-srv.key НЕ используются
+ни для сервера, ни для регистрации в прокси: SHA-1 был отклонён OpenSSL.
+Новый листовой сертификат подписан SHA-256.
 
-Production deployment after `./build.sh`:
+В конфигурации сервера и регистрации значение ssl.crl=null.
+FastAPI остаётся доступным исключительно через внутреннюю Docker-сеть
+smart-assistant (порт 8050 не публикуется на хост).
+Если нужен доступ с локальной сети за пределами Docker, его следует
+организовать через отдельный контролируемый шлюз, а не открывать порт
+контейнера на всех интерфейсах.
 
-```bash
-sudo bash docker/deploy.sh
-sudo systemctl status onedrive-backup-api.service
-sudo onedrive-backup-docker ports
-```
-
-### Read-only backup API
-
-- `GET /api/v1/health` — service liveness.
-- `GET /api/v1/snapshots?limit=100` — available restic snapshots.
-- `GET /api/v1/snapshots/{snapshot_id}/files?prefix=&offset=0&limit=1000` — file tree.
-- `POST /api/v1/exports` — stage one file or an entire snapshot archive (JSON body
-  `{"snapshot_id":"...","file_path":"Documents/file.txt"}`; omit file_path for archive).
-- `GET /api/v1/exports/{export_id}/status` — size, digest, filename and expiration.
-- `GET /api/v1/exports/{export_id}` — streamed download, HTTP range support.
-- `DELETE /api/v1/exports/{export_id}` — remove decrypted export file.
-
-JSON-RPC command equivalents: `backup_snapshots`, `backup_list_files`,
-`backup_prepare_download`, `backup_download_status`, `backup_delete_export`.
-The generic adapter filesystem-transfer and administrative RPC commands are not
-exposed to clients. An export is bounded by size and expires after 24 hours.
-The client downloads into a temporary file, verifies SHA-256, and renames
-atomically.
-
-The separately published (when PyPI credentials are present)
-`onedrive-backup-client` package implements the **entire backup REST API**.
-Run `onedrive-backup-client --help` for the CLI (commands: health, snapshots,
-files, prepare, status, fetch, delete, download). Its `client.json` specifies
-the server URL, CA, CRL, client certificate and key. The client validates TLS
-hostnames and certificate revocation.
-
-Microsoft 365 authorization is intentionally deferred. The backup
-service can be deployed and tested for API connectivity without Microsoft
-credentials, but listing real restic snapshots requires an initialized repo.

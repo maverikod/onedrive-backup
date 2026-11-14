@@ -38,3 +38,10 @@ versions/
 *.tar.gz
 credentials/
 config/certs/
+.test-run/
+*.key
+*.crt
+*.crl
+*.pem
+
+mtls-certs/

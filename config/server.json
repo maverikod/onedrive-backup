@@ -8,8 +8,8 @@
     "ssl": {
       "cert": "/config/certs/server.crt",
       "key": "/config/certs/server.key",
-      "ca": "/config/certs/ca.crt",
-      "crl": "/config/certs/ca.crl",
+      "ca": "/config/certs/trust-bundle.pem",
+      "crl": null,
       "dnscheck": false,
       "check_hostname": null
     },
@@ -29,10 +29,10 @@
     "unregister_url": "https://mcp-proxy:3004/unregister",
     "heartbeat_interval": 30,
     "ssl": {
-      "cert": "/config/certs/client.crt",
-      "key": "/config/certs/client.key",
-      "ca": "/config/certs/ca.crt",
-      "crl": "/config/certs/ca.crl",
+      "cert": "/config/certs/server.crt",
+      "key": "/config/certs/server.key",
+      "ca": "/config/certs/proxy-ca.crt",
+      "crl": null,
       "dnscheck": true,
       "check_hostname": true
     },

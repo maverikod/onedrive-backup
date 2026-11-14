@@ -1,4 +1,4 @@
-"""mTLS client with verified certificate chain, CRL and streamed downloads."""
+"""mTLS client with verified certificate chain and streamed downloads."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ class ClientError(Exception):
 class BackupClient:
     """Every published REST operation (including bounded export downloads)."""
 
-    def __init__(self, url: str, ca: str, crl: str, cert: str, key: str,
+    def __init__(self, url: str, ca: str, cert: str, key: str,
                  timeout: int = 180) -> None:
         self.url = url.rstrip("/")
         if not self.url.startswith("https://"):
@@ -27,8 +27,6 @@ class BackupClient:
         context = ssl.create_default_context(cafile=ca)
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(certfile=cert, keyfile=key)
-        context.load_verify_locations(cafile=crl)
-        context.verify_flags |= ssl.VERIFY_CRL_CHECK_LEAF
         context.check_hostname = True
         self.context = context
 
@@ -81,10 +79,10 @@ class BackupClient:
     def fetch(self, export_id: str, output: str | Path,
               *, overwrite: bool = False, delete_after: bool = False) -> Path:
         """Stream to a temporary file, verify SHA256, rename atomically."""
-        meta = self.status(export_id)
         destination = Path(output).expanduser().resolve()
         if destination.exists() and not overwrite:
             raise ClientError("Output exists; use --force to overwrite")
+        meta = self.status(export_id)
         destination.parent.mkdir(parents=True, exist_ok=True)
         work_path: Path | None = None
         total = 0
