@@ -48,6 +48,7 @@ def main() -> None:
         assert "/ui/login" in paths, sorted(paths)
         assert "/ui/" in paths
         assert "/ui/exports/{export_id}/download" in paths
+        assert "/commands" in paths, "MCP Proxy method discovery endpoint missing"
         assert "/api/v1/snapshots" in paths
         assert "/api/transfer/downloads" not in paths
         assert "/api/transfer/uploads" not in paths

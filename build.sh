@@ -5,7 +5,15 @@ cd "$ROOT"
 VERSION="$(tr -d '[:space:]' < VERSION)"
 IMAGE="vasilyvz/onedrive-backup:$VERSION"
 STEP=preflight
-trap 'rc=$?; if [ "$rc" -ne 0 ]; then echo "FAILED $STEP: $rc" >&2; fi' EXIT
+DOCKER_TEMP_CONFIG=''
+release_cleanup() {
+  rc=$?
+  if [ -n "$DOCKER_TEMP_CONFIG" ] && [ -d "$DOCKER_TEMP_CONFIG" ]; then
+    rm -rf -- "$DOCKER_TEMP_CONFIG"
+  fi
+  if [ "$rc" -ne 0 ]; then echo "FAILED $STEP: $rc" >&2; fi
+}
+trap release_cleanup EXIT
 STEP=pipeline
 python3 -m pipeline
 STEP=package-client
@@ -40,6 +48,10 @@ python3 -m pipeline smoke_mtls
 STEP=deb-build
 bash scripts/build-deb.sh
 STEP=registry-credentials
+# No persistent Docker Hub token in root's Docker configuration.
+DOCKER_TEMP_CONFIG="$(mktemp -d)"
+chmod 0700 "$DOCKER_TEMP_CONFIG"
+export DOCKER_CONFIG="$DOCKER_TEMP_CONFIG"
 CREDENTIALS="$ROOT/.env"
 if [ -f /etc/default/onedrive-backup ]; then
   VALUE="$(sed -n 's/^ONEDRIVE_CREDENTIALS_FILE=//p' /etc/default/onedrive-backup | head -1)"
@@ -78,8 +90,17 @@ fi
 unset PYPI_TOKEN
 if [ "$(id -u)" -eq 0 ]; then
   STEP=deploy
-  if ! bash docker/deploy.sh; then
-    echo '[DEFERRED] Production container not started; TLS certificates and mounted storage required' >&2
-  fi
+  bash docker/deploy.sh
 fi
-echo 'Release finished. For later deployment: sudo bash docker/deploy.sh'
+# Build-only directories are disposable. Remove them to avoid stale root-owned
+# files in CAS's watched tree and to make subsequent syntax checks deterministic.
+for temporary_dir in "$ROOT/.build-venv" "$ROOT/client/build" "$ROOT/client/onedrive_backup_client.egg-info"; do
+  if [ -d "$temporary_dir" ] && [ ! -L "$temporary_dir" ]; then
+    rm -rf -- "$temporary_dir"
+  fi
+done
+# Restore ownership of generated release artifacts to CAS user.
+if [ "$(id -u)" -eq 0 ] && id casuser >/dev/null 2>&1 && getent group casgrp >/dev/null 2>&1; then
+  chown -R casuser:casgrp -- "$ROOT/dist"
+fi
+echo 'Release finished. Debian postinst manages the production installation.'

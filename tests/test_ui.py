@@ -130,6 +130,14 @@ class BrowserTests(unittest.TestCase):
                                     follow_redirects=False)
         self.assertEqual(response.status_code, 303, response.text)
 
+    def test_scaffold_never_authenticates_without_password(self):
+        self.record.unlink()
+        self.assertEqual(self.client.get("/ui/login").status_code, 503)
+        self.assertEqual(self.client.get("/ui/", follow_redirects=False).status_code, 503)
+        self.assertEqual(self.client.post("/ui/login", data={
+            "username": "admin", "password": PASSWORD, "csrf": "test"
+        }).status_code, 503)
+
     def test_protected_before_auth_and_missing_hash(self):
         self.assertEqual(self.client.get("/ui/", follow_redirects=False).status_code, 303)
         self.assertEqual(self.client.get("/ui/snapshots/" + "a" * 64,

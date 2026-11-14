@@ -1,0 +1,13 @@
+# OneDrive Backup: file paths only; never store tokens or private key values here.
+ONEDRIVE_IMAGE=vasilyvz/onedrive-backup:0.3.3
+ONEDRIVE_CONTAINER=onedrive-backup
+ONEDRIVE_NETWORK=smart-assistant
+ONEDRIVE_CONFIG_DIR=/etc/onedrive-backup
+ONEDRIVE_DATA_DIR=/srv/backup/onedrive
+ONEDRIVE_SECRET_DIR=/var/lib/onedrive-backup/secrets
+ONEDRIVE_SCAFFOLD_DATA_DIR=/var/lib/onedrive-backup/scaffold-data
+ONEDRIVE_CERT_SOURCE=/etc/onedrive-backup/certs/server.crt
+ONEDRIVE_KEY_SOURCE=/etc/onedrive-backup/certs/server.key
+ONEDRIVE_PROXY_CA_SOURCE=/etc/onedrive-backup/certs/proxy-ca.crt
+ONEDRIVE_CLIENT_CA_SOURCE=/etc/onedrive-backup/certs/ca.crt
+ONEDRIVE_CREDENTIALS_FILE=/var/lib/onedrive-backup/credentials/.env

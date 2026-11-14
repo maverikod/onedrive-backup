@@ -1,5 +1,5 @@
 """Python client for the OneDrive Backup API."""
-__version__ = "0.3.1"
+__version__ = "0.3.3"
 
 from .api import BackupClient, ClientError
 

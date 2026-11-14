@@ -75,3 +75,14 @@ class CatalogValidationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScaffoldModeTests(unittest.TestCase):
+    def test_scaffold_always_refuses_catalogue(self):
+        from unittest.mock import patch
+        from onedrive_api.catalog import Catalog, CatalogError
+        with patch.dict(os.environ, {"ONEDRIVE_SCAFFOLD_MODE": "1"}):
+            catalog = Catalog("/not-configured.json", "/not-mounted")
+            with self.assertRaises(CatalogError) as raised:
+                catalog.snapshots()
+            self.assertEqual(raised.exception.status, 503)

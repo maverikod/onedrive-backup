@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.1 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.3 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,10 +6,10 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.1, Python 3.12,
+- Docker image: vasilyvz/onedrive-backup:0.3.3, Python 3.12,
   mcp-proxy-adapter 8.11.15, HTTPS/mTLS TCP port 8050.
-- Debian host package: dist/onedrive-backup_0.3.1_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.1-py3-none-any.whl.
+- Debian host package: dist/onedrive-backup_0.3.3_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.3-py3-none-any.whl.
 - Verification: python -m pipeline; after image build: python -m pipeline smoke_mtls.
 
 Build all release artifacts on CAS host via ./build.sh. It tests the code,
@@ -78,7 +78,7 @@ On a CAS build host:
 
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.1_all.deb
+    sudo apt install ./onedrive-backup_0.3.3_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
@@ -140,7 +140,7 @@ backup browsing returns HTTP 503 rather than a fabricated empty result.
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.1-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.3-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 
@@ -208,3 +208,22 @@ smart-assistant (порт 8050 не публикуется на хост).
 организовать через отдельный контролируемый шлюз, а не открывать порт
 контейнера на всех интерфейсах.
 
+
+## Debian deployment
+
+/etc/default/onedrive-backup contains source file paths:
+ONEDRIVE_CERT_SOURCE, ONEDRIVE_KEY_SOURCE, ONEDRIVE_PROXY_CA_SOURCE,
+ONEDRIVE_CLIENT_CA_SOURCE, ONEDRIVE_CREDENTIALS_FILE, and runtime paths.
+No secret values are stored there. The Docker Hub file is owned by root
+with mode 0600 and may contain DOCKER_USER / DOCKER_PAT.
+
+Debian postinst validates both EKUs, hostname, CA chain and matching key,
+installs certs in /etc/onedrive-backup/certs, builds trust-bundle.pem,
+pulls the pinned Docker image, and starts the service on the
+internal smart-assistant Docker network, without publishing a host port.
+
+Before a backup disk is mounted or a password has been set, the server
+runs in restricted scaffold mode. Login returns HTTP 503 and backup
+operations are blocked. The scaffold data directory is separate from
+the backup volume. After setup, restart onedrive-backup-api.service
+to enable normal operation. Microsoft Entra ID credentials come later.

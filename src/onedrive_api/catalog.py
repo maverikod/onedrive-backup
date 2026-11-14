@@ -51,6 +51,8 @@ class Catalog:
             raise ValueError("Invalid export limits")
 
     def _config(self) -> dict:
+        if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1":
+            raise CatalogError("Backup storage is disabled in scaffold mode", 503)
         try:
             cfg = load_config(self.config_path)
             root = cfg["required_mountpoint"]

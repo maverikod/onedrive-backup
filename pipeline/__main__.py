@@ -20,7 +20,7 @@ def run(*args: str, env: dict | None = None) -> None:
 
 
 def python_syntax() -> None:
-    run(sys.executable, "-m", "compileall", "-q", "src", "client", "tests", "pipeline")
+    run(sys.executable, "-m", "compileall", "-q", "src", "client/onedrive_backup_client", "tests", "pipeline")
 
 
 def shell_syntax() -> None:
@@ -28,7 +28,7 @@ def shell_syntax() -> None:
         "build.sh", "scripts/build-deb.sh", "scripts/smoke-mtls.sh",
         "docker/deploy.sh", "packaging/onedrive-backup-docker",
         "packaging/onedrive-backup", "packaging/postinst",
-        "packaging/prerm", "packaging/postrm",
+        "packaging/prerm", "packaging/postrm", "packaging/install-runtime.sh",
     )
     run("bash", "-n", *scripts)
 

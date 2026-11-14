@@ -50,15 +50,45 @@ if changed:
             os.unlink(name)
 PY_MIGRATE_CRL
   fi
-  if [ -f /etc/default/onedrive-backup ]; then
-    chmod 0644 /etc/default/onedrive-backup
-    chown root:root /etc/default/onedrive-backup
+  # Keep configured paths; create defaults only when absent.
+  template=/usr/share/onedrive-backup/defaults
+  default=/etc/default/onedrive-backup
+  if [ ! -e "$default" ]; then
+    install -m 0644 -o root -g root "$template" "$default"
+  else
+    [ ! -L "$default" ] || { echo 'Unsafe /etc/default symlink' >&2; exit 2; }
+    for k in ONEDRIVE_CERT_SOURCE ONEDRIVE_KEY_SOURCE ONEDRIVE_PROXY_CA_SOURCE ONEDRIVE_CLIENT_CA_SOURCE ONEDRIVE_CREDENTIALS_FILE ONEDRIVE_SCAFFOLD_DATA_DIR; do
+      if ! grep -q "^$k=" "$default"; then
+        grep "^$k=" "$template" >> "$default"
+      fi
+    done
+    sed -i 's@^ONEDRIVE_IMAGE=vasilyvz/onedrive-backup:0.3.1$@ONEDRIVE_IMAGE=vasilyvz/onedrive-backup:0.3.3@' "$default"
+    sed -i 's@^ONEDRIVE_IMAGE=vasilyvz/onedrive-backup:0.3.2$@ONEDRIVE_IMAGE=vasilyvz/onedrive-backup:0.3.3@' "$default"
+    chmod 0644 "$default"
+    chown root:root "$default"
+  fi
+  if /usr/lib/onedrive-backup/install-runtime.sh; then
+    if [ -d /run/systemd/system ]; then
+      systemctl daemon-reload
+      systemctl enable onedrive-backup-api.service
+      if systemctl is-active --quiet onedrive-backup-api.service; then
+        systemctl restart onedrive-backup-api.service
+      else
+        systemctl start onedrive-backup-api.service
+      fi
+    fi
+  else
+    status=$?
+    if [ "$status" -eq 10 ] || [ "$status" -eq 11 ] || [ "$status" -eq 12 ]; then
+      echo 'onedrive-backup: prerequisites incomplete; API startup deferred'
+    else
+      exit "$status"
+    fi
   fi
   if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
   fi
-  # Intentional: API stays inactive until TLS, admin hash and backup mount
-  # are ready. The backup timer additionally requires Microsoft 365 access.
+  # Restricted scaffold is permitted; the backup timer stays disabled.
 fi
 exit 0
 

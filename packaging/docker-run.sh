@@ -2,7 +2,7 @@
 # Production server runtime. Never pass credentials to Docker.
 set -Eeuo pipefail
 action="${1:-}"
-image="${ONEDRIVE_IMAGE:-vasilyvz/onedrive-backup:0.3.1}"
+image="${ONEDRIVE_IMAGE:-vasilyvz/onedrive-backup:0.3.3}"
 name="${ONEDRIVE_CONTAINER:-onedrive-backup}"
 network="${ONEDRIVE_NETWORK:-smart-assistant}"
 config="${ONEDRIVE_CONFIG_DIR:-/etc/onedrive-backup}"
@@ -22,14 +22,25 @@ case "$action" in
     for f in server.crt server.key ca.crt proxy-ca.crt trust-bundle.pem; do
       test -s "$config/certs/$f" || fail "Missing mTLS file: $f"
     done
-    test -s "$config/admin-password.hash" || fail "Admin password hash missing; use sudo onedrive-backup-admin-password"
+    # With an absent password and/or mount, start only a restricted scaffold.
+    scaffold=0
+    if ! test -s "$config/admin-password.hash"; then
+      scaffold=1
+      echo "Admin password unset: UI authentication will remain locked"
+    fi
+    if ! mountpoint -q "/srv/backup"; then
+      scaffold=1
+      data="$ONEDRIVE_SCAFFOLD_DATA_DIR"
+      install -d -m 0700 -o onedrive-backup -g onedrive-backup "$data"
+      echo "Backup disk not mounted: using empty scaffold data"
+    fi
     test -s "$config/server.json" || fail "Missing server.json"
     test -s "$config/backup.json" || fail "Missing backup.json"
     test -d "$data" || fail "Missing backup data volume"
     docker network inspect "$network" >/dev/null || fail "Missing Docker network $network"
     docker image inspect "$image" >/dev/null || docker pull "$image"
     docker rm -f "$name" >/dev/null 2>&1 || true
-    docker run -d --name "$name" --restart unless-stopped \
+    docker run -d --name "$name" --restart unless-stopped       --env "ONEDRIVE_SCAFFOLD_MODE=$scaffold" \
       --user "$(id -u onedrive-backup):$(id -g onedrive-backup)" \
       --network "$network" --network-alias "$name" \
       --security-opt no-new-privileges:true \

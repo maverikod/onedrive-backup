@@ -30,7 +30,7 @@ def _register_commands() -> None:
 
     class CatalogCommand(Command):
         category = "backup"
-        version = "0.3.1"
+        version = "0.3.3"
         author = "OneDrive Backup"
         email = "maintainers@example.org"
 
@@ -138,11 +138,14 @@ def make_app(config_path: str | Path):
     config_path = Path(config_path).resolve()
     config = json.loads(config_path.read_text(encoding="utf-8"))
     _validate_mtls_config(config)
-    from .admin_password import AuthError, load_record
-    try:
-        load_record(Path(os.environ.get("ONEDRIVE_ADMIN_HASH_FILE", "/config/admin-password.hash")))
-    except AuthError as exc:
-        raise ValueError("Admin password is not configured: " + str(exc)) from exc
+    # A safe, restricted scaffold may register before the operator sets a
+    # password or mounts backup storage. All browser actions stay locked.
+    if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") != "1":
+        from .admin_password import AuthError, load_record
+        try:
+            load_record(Path(os.environ.get("ONEDRIVE_ADMIN_HASH_FILE", "/config/admin-password.hash")))
+        except AuthError as exc:
+            raise ValueError("Admin password is not configured: " + str(exc)) from exc
     os.environ["CONFIG_FILE"] = str(config_path)
     os.environ["MCP_CONFIG_FILE"] = str(config_path)
 
@@ -153,14 +156,16 @@ def make_app(config_path: str | Path):
     app = create_app(
         title="OneDrive Backup API",
         description="Read-only backup browse/export over mTLS",
-        version="0.3.1", app_config=config, config_path=str(config_path),
+        version="0.3.3", app_config=config, config_path=str(config_path),
     )
     _register_commands()
 
     # Framework registers privileged administration/transfer endpoints by default.
     # Never publish arbitrary server-local source_path transfer operations, reload,
     # config editors or command loading on the backup server, even over mTLS.
-    allowed = {"/api/jsonrpc", "/api/jsonrpc/batch", "/health",
+    # MCP Proxy registration queries GET /commands (get_methods).
+    # Registry was already reduced to help and backup_* in _register_commands.
+    allowed = {"/api/jsonrpc", "/api/jsonrpc/batch", "/health", "/commands",
                "/openapi.json", "/docs", "/redoc"}
     app.router.routes = [
         route for route in app.router.routes
