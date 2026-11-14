@@ -1,0 +1,3 @@
+#!/bin/sh
+# Default config may be overridden by: onedrive-backup --config /path/to.json backup
+exec /usr/bin/python3 /usr/lib/onedrive-backup/onedrive_backup.py --config /etc/onedrive-backup/config.json "$@"

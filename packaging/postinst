@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+case "$1" in
+  configure)
+    if ! id -u onedrive-backup >/dev/null 2>&1; then
+      adduser --system --group --home /var/lib/onedrive-backup --no-create-home --disabled-login onedrive-backup
+    fi
+    install -d -m 0700 -o onedrive-backup -g onedrive-backup /var/lib/onedrive-backup
+    if [ -f /etc/onedrive-backup/config.json ]; then
+      chown root:onedrive-backup /etc/onedrive-backup/config.json
+      chmod 0640 /etc/onedrive-backup/config.json
+    fi
+    if [ -d /run/systemd/system ]; then
+      systemctl daemon-reload || true
+    fi
+    # Do NOT enable/start timer before OAuth, restic password, mount and init.
+    ;;
+esac
+exit 0

@@ -1,0 +1,25 @@
+[Unit]
+Description=Encrypted versioned OneDrive Business backup (rclone + restic)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/onedrive-backup/config.json
+
+[Service]
+Type=oneshot
+User=onedrive-backup
+Group=onedrive-backup
+UMask=0077
+WorkingDirectory=/var/lib/onedrive-backup
+StateDirectory=onedrive-backup
+StateDirectoryMode=0700
+ExecStart=/usr/bin/onedrive-backup backup
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+RestrictSUIDSGID=true
+LockPersonality=true
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

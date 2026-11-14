@@ -1,0 +1,27 @@
+.TH ONEDRIVE-BACKUP 8 "November 2026" "onedrive-backup 0.1.0" "System Administration"
+.SH NAME
+onedrive-backup \- encrypted snapshots of Microsoft OneDrive Business
+.SH SYNOPSIS
+.B onedrive-backup
+[--config /path/to/config.json] {init|backup|snapshots|check} [--dry-run]
+.SH DESCRIPTION
+Synchronizes a OneDrive remote to a local mirror using rclone. On successful sync,
+stores an encrypted restic snapshot and applies a snapshot retention policy.
+The timer is deliberately disabled until configured.
+.SH CONFIGURATION
+Default configuration: /etc/onedrive-backup/config.json .
+Restic password and rclone configuration are stored separately outside the package.
+.SH EXAMPLES
+.B onedrive-backup init
+.br
+.B onedrive-backup backup --dry-run
+.br
+.B onedrive-backup backup
+.br
+.B onedrive-backup snapshots
+.br
+.B onedrive-backup check
+.SH SEE ALSO
+.BR rclone (1),
+.BR restic (1),
+.BR systemctl (1)

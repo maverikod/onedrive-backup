@@ -1,0 +1,17 @@
+{
+  "onedrive_remote": "onedrive:",
+  "rclone_config": "/var/lib/onedrive-backup/rclone.conf",
+  "mirror_dir": "/srv/backup/onedrive/mirror",
+  "repository_dir": "/srv/backup/onedrive/restic-repo",
+  "password_file": "/var/lib/onedrive-backup/restic-password",
+  "lock_file": "/var/lib/onedrive-backup/backup.lock",
+  "log_file": null,
+  "required_mountpoint": "/srv/backup",
+  "keep_daily": 14,
+  "keep_weekly": 8,
+  "keep_monthly": 12,
+  "max_delete": 100,
+  "transfers": 4,
+  "checkers": 8,
+  "allow_empty_source": false
+}
