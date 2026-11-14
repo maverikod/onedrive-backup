@@ -17,22 +17,31 @@ def _catalog() -> Catalog:
     return Catalog(
         os.environ.get("ONEDRIVE_BACKUP_CONFIG", "/config/backup.json"),
         os.environ.get("ONEDRIVE_BACKUP_DATA", "/data"),
-        max_export_bytes=int(os.environ.get("ONEDRIVE_MAX_EXPORT_BYTES", str(10 * 1024 ** 3))),
+        max_export_bytes=int(
+            os.environ.get("ONEDRIVE_MAX_EXPORT_BYTES", str(10 * 1024**3))
+        ),
     )
 
 
 def _register_commands() -> None:
-    """Leave only read-only catalogue commands, never adapter filesystem/admin RPCs."""
+    """Register only safe catalogue commands and their help metadata."""
     from mcp_proxy_adapter.commands.base import Command
     from mcp_proxy_adapter.commands.command_registry import registry
     from mcp_proxy_adapter.commands.help_command import HelpCommand
     from mcp_proxy_adapter.commands.result import CommandResult, ErrorResult
+    from .command_reference import command_metadata_for
+    from .info_command import InfoCommand
 
     class CatalogCommand(Command):
         category = "backup"
-        version = "0.3.3"
+        version = "0.3.4"
         author = "OneDrive Backup"
         email = "maintainers@example.org"
+
+        @classmethod
+        def metadata(cls) -> dict[str, Any]:
+            """Return detailed descriptions shared by help and info."""
+            return command_metadata_for(cls)
 
         @staticmethod
         async def apply(call, **kwargs: Any):
@@ -46,80 +55,147 @@ def _register_commands() -> None:
         name = "backup_snapshots"
         descr = "List available OneDrive restic snapshots."
 
-        async def execute(self, limit: int = 100, **kwargs: Any) -> CommandResult:
+        async def execute(
+            self,
+            limit: int = 100,
+            **kwargs: Any,
+        ) -> CommandResult:
             return await self.apply(_catalog().snapshots, limit=limit)
 
         @classmethod
         def get_schema(cls) -> dict:
-            return {"type": "object", "properties": {
-                "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100}
-            }, "additionalProperties": False}
+            return {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000,
+                        "default": 100,
+                    }
+                },
+                "additionalProperties": False,
+            }
 
     class BackupListFiles(CatalogCommand):
         name = "backup_list_files"
-        descr = "List files within an existing backup snapshot, with pagination."
+        descr = "List backup snapshot files with pagination."
 
-        async def execute(self, snapshot_id: str, prefix: str = "",
-                          offset: int = 0, limit: int = 1000,
-                          **kwargs: Any) -> CommandResult:
-            return await self.apply(_catalog().files, snapshot_id=snapshot_id,
-                                    prefix=prefix, offset=offset, limit=limit)
+        async def execute(
+            self,
+            snapshot_id: str = "",
+            prefix: str = "",
+            offset: int = 0,
+            limit: int = 1000,
+            **kwargs: Any,
+        ) -> CommandResult:
+            return await self.apply(
+                _catalog().files,
+                snapshot_id=snapshot_id,
+                prefix=prefix,
+                offset=offset,
+                limit=limit,
+            )
 
         @classmethod
         def get_schema(cls) -> dict:
-            return {"type": "object", "properties": {
-                "snapshot_id": {"type": "string"},
-                "prefix": {"type": "string", "default": ""},
-                "offset": {"type": "integer", "minimum": 0, "default": 0},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 5000, "default": 1000}
-            }, "required": ["snapshot_id"], "additionalProperties": False}
+            return {
+                "type": "object",
+                "properties": {
+                    "snapshot_id": {"type": "string"},
+                    "prefix": {"type": "string", "default": ""},
+                    "offset": {"type": "integer", "minimum": 0, "default": 0},
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 5000,
+                        "default": 1000,
+                    },
+                },
+                "required": ["snapshot_id"],
+                "additionalProperties": False,
+            }
 
     class BackupPrepareDownload(CatalogCommand):
         name = "backup_prepare_download"
-        descr = "Create a bounded export of one file or a complete snapshot archive."
+        descr = "Stage one file or a complete snapshot archive."
 
-        async def execute(self, snapshot_id: str,
-                          file_path: str | None = None,
-                          **kwargs: Any) -> CommandResult:
-            return await self.apply(_catalog().prepare, snapshot_id=snapshot_id,
-                                    file_path=file_path)
+        async def execute(
+            self,
+            snapshot_id: str = "",
+            file_path: str | None = None,
+            **kwargs: Any,
+        ) -> CommandResult:
+            return await self.apply(
+                _catalog().prepare,
+                snapshot_id=snapshot_id,
+                file_path=file_path,
+            )
 
         @classmethod
         def get_schema(cls) -> dict:
-            return {"type": "object", "properties": {
-                "snapshot_id": {"type": "string"},
-                "file_path": {"type": ["string", "null"], "default": None}
-            }, "required": ["snapshot_id"], "additionalProperties": False}
+            return {
+                "type": "object",
+                "properties": {
+                    "snapshot_id": {"type": "string"},
+                    "file_path": {"type": ["string", "null"], "default": None},
+                },
+                "required": ["snapshot_id"],
+                "additionalProperties": False,
+            }
 
     class BackupDownloadStatus(CatalogCommand):
         name = "backup_download_status"
-        descr = "Inspect a staged export by opaque ID; includes SHA256 and size."
+        descr = "Inspect staged export metadata and SHA256."
 
-        async def execute(self, export_id: str, **kwargs: Any) -> CommandResult:
-            return await self.apply(_catalog().export_status, export_id=export_id)
+        async def execute(
+            self,
+            export_id: str = "",
+            **kwargs: Any,
+        ) -> CommandResult:
+            archive = _catalog()
+            return await self.apply(archive.export_status, export_id=export_id)
 
         @classmethod
         def get_schema(cls) -> dict:
-            return {"type": "object", "properties": {
-                "export_id": {"type": "string"}
-            }, "required": ["export_id"], "additionalProperties": False}
+            return {
+                "type": "object",
+                "properties": {"export_id": {"type": "string"}},
+                "required": ["export_id"],
+                "additionalProperties": False,
+            }
 
     class BackupDeleteExport(CatalogCommand):
         name = "backup_delete_export"
         descr = "Delete staged plaintext export after a verified download."
 
-        async def execute(self, export_id: str, **kwargs: Any) -> CommandResult:
-            return await self.apply(_catalog().delete_export, export_id=export_id)
+        async def execute(
+            self,
+            export_id: str = "",
+            **kwargs: Any,
+        ) -> CommandResult:
+            archive = _catalog()
+            return await self.apply(archive.delete_export, export_id=export_id)
 
         @classmethod
         def get_schema(cls) -> dict:
-            return {"type": "object", "properties": {
-                "export_id": {"type": "string"}
-            }, "required": ["export_id"], "additionalProperties": False}
+            return {
+                "type": "object",
+                "properties": {"export_id": {"type": "string"}},
+                "required": ["export_id"],
+                "additionalProperties": False,
+            }
 
     registry.clear()
-    for cls in (HelpCommand, BackupSnapshots, BackupListFiles,
-                BackupPrepareDownload, BackupDownloadStatus, BackupDeleteExport):
+    for cls in (
+        HelpCommand,
+        InfoCommand,
+        BackupSnapshots,
+        BackupListFiles,
+        BackupPrepareDownload,
+        BackupDownloadStatus,
+        BackupDeleteExport,
+    ):
         registry.register(cls, "custom")
 
 
@@ -130,11 +206,11 @@ def _validate_mtls_config(config: dict) -> None:
     for key in ("cert", "key", "ca"):
         filename = server.get("ssl", {}).get(key)
         if not isinstance(filename, str) or not Path(filename).is_file():
-            raise ValueError("mTLS certificate not installed: server.ssl." + key)
+            raise ValueError("Missing mTLS certificate: server.ssl." + key)
 
 
 def make_app(config_path: str | Path):
-    """Create adapter app, strip unsafe built-ins and wire read-only endpoints."""
+    """Create the secure adapter application with read-only endpoints."""
     config_path = Path(config_path).resolve()
     config = json.loads(config_path.read_text(encoding="utf-8"))
     _validate_mtls_config(config)
@@ -142,10 +218,18 @@ def make_app(config_path: str | Path):
     # password or mounts backup storage. All browser actions stay locked.
     if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") != "1":
         from .admin_password import AuthError, load_record
+
         try:
-            load_record(Path(os.environ.get("ONEDRIVE_ADMIN_HASH_FILE", "/config/admin-password.hash")))
+            load_record(
+                Path(
+                    os.environ.get(
+                        "ONEDRIVE_ADMIN_HASH_FILE",
+                        "/config/admin-password.hash",
+                    )
+                )
+            )
         except AuthError as exc:
-            raise ValueError("Admin password is not configured: " + str(exc)) from exc
+            raise ValueError("Admin password not set: " + str(exc)) from exc
     os.environ["CONFIG_FILE"] = str(config_path)
     os.environ["MCP_CONFIG_FILE"] = str(config_path)
 
@@ -156,23 +240,33 @@ def make_app(config_path: str | Path):
     app = create_app(
         title="OneDrive Backup API",
         description="Read-only backup browse/export over mTLS",
-        version="0.3.3", app_config=config, config_path=str(config_path),
+        version="0.3.3",
+        app_config=config,
+        config_path=str(config_path),
     )
     _register_commands()
 
-    # Framework registers privileged administration/transfer endpoints by default.
-    # Never publish arbitrary server-local source_path transfer operations, reload,
+    # Framework also registers privileged administration/transfer endpoints.
+    # Never publish local-file transfer, reload, or admin endpoints.
     # config editors or command loading on the backup server, even over mTLS.
     # MCP Proxy registration queries GET /commands (get_methods).
     # Registry was already reduced to help and backup_* in _register_commands.
-    allowed = {"/api/jsonrpc", "/api/jsonrpc/batch", "/health", "/commands",
-               "/openapi.json", "/docs", "/redoc"}
+    allowed = {
+        "/api/jsonrpc",
+        "/api/jsonrpc/batch",
+        "/health",
+        "/commands",
+        "/openapi.json",
+        "/docs",
+        "/redoc",
+    }
+    routes = app.router.routes
     app.router.routes = [
-        route for route in app.router.routes
-        if getattr(route, "path", None) in allowed
+        route for route in routes if getattr(route, "path", None) in allowed
     ]
 
     from .ui import install_ui
+
     install_ui(app, _catalog)
 
     def fail(exc: CatalogError) -> HTTPException:
@@ -180,7 +274,11 @@ def make_app(config_path: str | Path):
 
     @app.get("/api/v1/health")
     async def backup_health():
-        return {"status": "ok", "protocol": "mtls", "service": "onedrive-backup"}
+        return {
+            "status": "ok",
+            "protocol": "mtls",
+            "service": "onedrive-backup",
+        }
 
     @app.get("/api/v1/snapshots")
     async def backup_snapshots(limit: int = 100):
@@ -190,8 +288,9 @@ def make_app(config_path: str | Path):
             raise fail(exc) from exc
 
     @app.get("/api/v1/snapshots/{snapshot_id}/files")
-    async def backup_files(snapshot_id: str, prefix: str = "",
-                           offset: int = 0, limit: int = 1000):
+    async def backup_files(
+        snapshot_id: str, prefix: str = "", offset: int = 0, limit: int = 1000
+    ):
         try:
             return await asyncio.to_thread(
                 _catalog().files, snapshot_id, prefix, limit, offset
@@ -207,24 +306,33 @@ def make_app(config_path: str | Path):
                 raise CatalogError("JSON object expected")
             if set(body) - {"snapshot_id", "file_path"}:
                 raise CatalogError("Unknown export parameters")
+            snapshot_id = body.get("snapshot_id")
+            if not isinstance(snapshot_id, str):
+                raise CatalogError("snapshot_id must be a string")
             return await asyncio.to_thread(
-                _catalog().prepare, body.get("snapshot_id"),
+                _catalog().prepare,
+                snapshot_id,
                 body.get("file_path"),
             )
         except CatalogError as exc:
             raise fail(exc) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail="Invalid JSON") from exc
+            raise HTTPException(400, detail="Invalid JSON") from exc
 
     @app.get("/api/v1/exports/{export_id}")
     async def download_export(export_id: str):
         try:
-            meta, filename = await asyncio.to_thread(_catalog().get_export, export_id)
+            archive = _catalog()
+            get_export = archive.get_export
+            meta, filename = await asyncio.to_thread(get_export, export_id)
             return FileResponse(
-                filename, media_type="application/octet-stream",
+                filename,
+                media_type="application/octet-stream",
                 filename=meta["filename"],
-                headers={"X-Content-SHA256": meta["sha256"],
-                         "Cache-Control": "no-store"},
+                headers={
+                    "X-Content-SHA256": meta["sha256"],
+                    "Cache-Control": "no-store",
+                },
             )
         except CatalogError as exc:
             raise fail(exc) from exc
@@ -247,15 +355,19 @@ def make_app(config_path: str | Path):
 
 
 def tls_server_settings(config: dict, config_path: str) -> dict:
-    """Build verified mTLS context; revocation policy is managed by MCP Proxy."""
-    from mcp_proxy_adapter.core.app_factory.ssl_config import build_server_ssl_config
+    """Build verified mTLS context using proxy-managed revocation."""
+    from mcp_proxy_adapter.core.app_factory.ssl_config import (
+        build_server_ssl_config,
+    )
+
     _validate_mtls_config(config)
     settings = build_server_ssl_config(config, config_path=config_path)
     context = settings.get("ssl_context")
     if not isinstance(context, ssl.SSLContext):
         raise RuntimeError("mTLS SSLContext missing from adapter")
-    # CRL validation is centralized in MCP Proxy; enforce client certificate trust.
-    context.verify_flags &= ~(ssl.VERIFY_CRL_CHECK_LEAF | ssl.VERIFY_CRL_CHECK_CHAIN)
+    # The proxy owns CRL validation; enforce client certificate trust.
+    crl_flags = ssl.VERIFY_CRL_CHECK_LEAF | ssl.VERIFY_CRL_CHECK_CHAIN
+    context.verify_flags &= ~crl_flags
     context.verify_mode = ssl.CERT_REQUIRED
     settings["ssl_context"] = context
     settings["verify_client"] = True
@@ -263,12 +375,13 @@ def tls_server_settings(config: dict, config_path: str) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="OneDrive Backup mTLS API server")
+    parser = argparse.ArgumentParser(description="OneDrive Backup mTLS server")
     parser.add_argument("--config", default="/config/server.json")
     parser.add_argument("--backup-config", default="/config/backup.json")
     parser.add_argument("--data", default="/data")
     args = parser.parse_args()
-    os.environ["ONEDRIVE_BACKUP_CONFIG"] = str(Path(args.backup_config).resolve())
+    backup_config = Path(args.backup_config).resolve()
+    os.environ["ONEDRIVE_BACKUP_CONFIG"] = str(backup_config)
     os.environ["ONEDRIVE_BACKUP_DATA"] = str(Path(args.data).resolve())
     path = str(Path(args.config).resolve())
     config = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -277,6 +390,7 @@ def main() -> None:
 
     from mcp_proxy_adapter.core.server_engine import ServerEngineFactory
     from mcp_proxy_adapter.core.logging import setup_logging
+
     settings = tls_server_settings(config, path)
     server = config["server"]
     setup_logging(level=server.get("log_level", "INFO"))
@@ -284,13 +398,16 @@ def main() -> None:
     if engine is None:
         raise RuntimeError("Hypercorn is unavailable")
     engine.run_server(
-        app, {"host": server.get("host", "0.0.0.0"),
-              "port": int(server.get("port", 8050)),
-              "log_level": server.get("log_level", "INFO"),
-              "reload": False, **settings}
+        app,
+        {
+            "host": server.get("host", "0.0.0.0"),
+            "port": int(server.get("port", 8050)),
+            "log_level": server.get("log_level", "INFO"),
+            "reload": False,
+            **settings,
+        },
     )
 
 
 if __name__ == "__main__":
     main()
-
