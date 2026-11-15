@@ -286,12 +286,13 @@ laws:
     is the PRODUCTION pass and runs ONLY on the user's explicit command, in this order: (a) the
     working branch (`local` under file_access local, `cas` under cas), at the DEV version the command
     names — by default the last one whose full DEV pipeline is GREEN — is merged into `main` with
-    everything on it and `main` is pushed; (b) the authoritative checkout is switched to `main`; (c)
+    everything on it, and `main` is pushed — the production dependencies are derived by
+    `build.sh` (`pipeline_environment` (4)); (b) the authoritative checkout is switched to `main`; (c)
     `build.sh --dev no` runs there and REBUILDS everything WITHOUT `-dev` under that same version number: the image `<image>:<version>`
     pushed to Docker Hub, the production Debian package `<svc>-docker`, the client `<client>`
     `<version>` published to PyPI — the Docker Hub push and the client publication UNCONDITIONALLY
-    and MANDATORILY, as in every build pass — every fleet client the project depends on taken as
-    the last PRODUCTION `<client>` published on PyPI. PRODUCTION carries NO `-dev` anywhere: the package
+    and MANDATORILY, as in every build pass — every fleet client the project depends on pinned to
+    the exact version the DEV pipeline tested, under its production name (`pipeline_environment` (4)). PRODUCTION carries NO `-dev` anywhere: the package
     `<svc>-docker`, and, once it is installed, the production container, unit, settings file
     `/etc/default/<svc>`, directories `/etc/<svc>`, `/var/lib/<svc>`, `/var/log/<svc>`, `/opt/<svc>`,
     ports, database and certificates. EVERY setting of a production server points at PRODUCTION
@@ -340,6 +341,44 @@ laws:
     self-signed certificate, a new CA, or a copy of a production certificate and key; a project
     without that CA stops the DEV pass with the exact finding instead of inventing one. See
     `ops/delivery.yaml` `dev_prod`.
+  pipeline_environment: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: writing, changing or running the project's pipeline,
+    its checks, examples or their configuration, its dependency declarations, or a production
+    command, in every project]
+    (1) TARGET VARIABLE: the pipeline's target is chosen by ONE environment variable,
+    `PIPELINE_ENV`, with exactly two values — `dev` on the working branch (`local` / `cas`) and
+    `prod` on `main`. THE BRANCH DECIDES: the pipeline reads the current git branch — `main` is
+    ALWAYS `prod`, every other branch is ALWAYS `dev` — and `PIPELINE_ENV` only carries that
+    value (`build.sh` exports it); it is NEVER a committed file (a merge into `main` would carry
+    `dev` over), and an explicitly set value that contradicts the branch, or any other value, is
+    refused before the first call. With
+    `dev` every check and example tests through the DEV versions — the project's DEV installation,
+    the DEV servers and the `<client>-dev` packages of the fleet services it uses
+    (`fleet_dev_dependencies`); with `prod` it tests the production installation through the
+    production servers and clients, only as the full pipeline `build.sh --dev no` runs after the
+    production deploy (`dev_prod_instances`). (2) NO HARDCODE: every endpoint the pipeline uses — the
+    project's own server and every fleet service: URL, host, port, network name, registration id —
+    has TWO environment variables, `<NAME>_URL_DEV` and `<NAME>_URL_PROD` (likewise `_ID_DEV` /
+    `_ID_PROD` and the like), in ONE COMMITTED file `pipeline/endpoints.env` — never named `.env`
+    and carrying no secret (certificates and keys stay outside git); the pipeline loads that file
+    and the branch picks the `_DEV` or `_PROD` value in ONE module of the pipeline package. The file
+    is the same on both branches, so a merge never changes the target. A hardcoded host, IP, port
+    or URL in a check, example or fixture is a DEFECT. (3) DEPENDENCIES ON THE WORKING BRANCH name the fleet clients by their DEV
+    distributions, `<client>-dev`, at a version NOT LOWER than the one the pipeline tested, so the
+    DEV environment holds no production copy of the same module; the pipeline verifies that the
+    imported client is the `-dev` one at the tested version. (4) PRODUCTION
+    DEPENDENCIES ARE DERIVED BY `build.sh`: the merge into `main` carries the working branch's
+    `<client>-dev` declarations unchanged — nothing is edited or committed on `main` for them, so
+    `main` never diverges from the working branch. `build.sh --dev no` on `main` derives the
+    production dependency set itself: every `<client>-dev` becomes `<client>` pinned to the EXACT
+    version the DEV pipeline tested, taken from the DEV pass's build record — never the latest on
+    PyPI — and the build uses only that set; before any publication it verifies that no artefact
+    metadata names a `-dev` package. It REFUSES when a `-dev` client has no recorded tested version,
+    when the production package of that version is not published, or when a `-dev` name would
+    survive into an artefact. A manual install from the `main` sources is not a production build:
+    production comes only from `build.sh`. A fleet dependency therefore goes to production before
+    the project that uses it.
+    See `ops/testing.yaml` `pipeline_cli.environment` and `ops/delivery.yaml` `dev_prod.build`.
   fleet_dev_dependencies: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any development, build, test, named check, example,
     pipeline run or DEV installation that uses another service of the fleet, in every project]
@@ -366,8 +405,8 @@ laws:
     `ai-formforge`, `doc-store-vvz`, `code-analysis-server-vvz`), never a `-dev` entry; only the
     traffic of the thing under test reaches DEV — the DEV variant is used ONLY to test new
     capabilities and to run pipelines. The production pass
-    (`build.sh --dev no`) is the one exception: it builds with the last PRODUCTION `<client>` of
-    every fleet dependency and its full pipeline runs against the PRODUCTION services. See `ops/delivery.yaml` `fleet_dev_dependencies`.
+    (`build.sh --dev no`) is the one exception: it builds with the PRODUCTION `<client>` of every
+    fleet dependency at the exact version tested in DEV and its full pipeline runs against the PRODUCTION services. See `ops/delivery.yaml` `fleet_dev_dependencies`.
   verify_before_delivery: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before reporting delivery] Run the affected named check after deployment or over
     the real example. RED returns to diagnosis, proof, correction and deployment. When every
