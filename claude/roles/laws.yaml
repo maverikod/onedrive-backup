@@ -759,7 +759,9 @@ laws:
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any build, test deployment or package publication]
     Use only the project-root `build.sh` from the authoritative working checkout and branch:
     `local` under file_access local, `cas` under file_access cas — the production pass
-    (`build.sh --dev no`) from that same checkout switched to `main` (`dev_prod_instances`); never
+    (`build.sh --dev no`) from that same checkout switched to `main` — under file_access cas from a
+    separate production clone of `main` outside the CAS watch directory (`cas_index_is_dev`) —
+    (`dev_prod_instances`); never
     from a linked git worktree or detached HEAD. Every build pass that uploads anything takes a NEW version — the
     previous one plus exactly one, never a gap: Docker Hub and PyPI never take the same version
     twice, so a fix after RED is the next candidate, and only a pass that failed before any upload
@@ -816,8 +818,11 @@ laws:
     production database. (1) IDENTITY: the root `projectid` file carries TWO identifiers of the code
     — `id` for production and `iddev` for development, like the program keys an installer writes
     to a registry; the dev installation uses `iddev` everywhere the production one uses `id`, and
-    they are never equal. A missing `iddev` is created once as a fresh UUID4 and committed; neither
-    identifier is ever changed afterwards. (2) BUILD: the project-root `build.sh` takes the
+    they are never equal. `iddev` is used ONLY by the DEV DEPLOYMENT — the DEV server's
+    installation and registration identity, so the DEV server has another id; the PROJECT keeps its
+    one `id` everywhere else (its CAS project, Plan Manager project, TODOs, bugs and reports), and
+    nothing of the project is switched to `iddev`. A missing `iddev` is created once as a fresh
+    UUID4 and committed; neither identifier is ever changed afterwards. (2) BUILD: the project-root `build.sh` takes the
     parameter `--dev` with exactly TWO values, `yes` and `no`, and `yes` is the DEFAULT — `build.sh`
     and `build.sh --dev yes` are the same DEV pass; any other value is refused before anything is
     built. The DEV pass is the build pass of `single_build_and_publication_flow`: it takes the next
@@ -834,7 +839,7 @@ laws:
     working branch (`local` under file_access local, `cas` under cas), at the DEV version the command
     names — by default the last one whose full DEV pipeline is GREEN — is merged into `main` with
     everything on it, and `main` is pushed — the production dependencies are derived by
-    `build.sh` (`pipeline_environment` (4)); (b) the authoritative checkout is switched to `main`; (c)
+    `build.sh` (`pipeline_environment` (4)); (b) the authoritative checkout is switched to `main` — under file_access cas, whose authoritative checkout is the one the Code Analysis Server indexes, a SEPARATE production clone of `main` outside the CAS watch directory is used instead, because the indexed checkout never leaves the working branch (`cas_index_is_dev`); (c)
     `build.sh --dev no` runs there and REBUILDS everything WITHOUT `-dev` under that same version number: the image `<image>:<version>`
     pushed to Docker Hub, the production Debian package `<svc>-docker`, the client `<client>`
     `<version>` published to PyPI — the Docker Hub push and the client publication UNCONDITIONALLY
@@ -888,6 +893,18 @@ laws:
     self-signed certificate, a new CA, or a copy of a production certificate and key; a project
     without that CA stops the DEV pass with the exact finding instead of inventing one. See
     `ops/delivery.yaml` `dev_prod`.
+  cas_index_is_dev: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any CAS project registration, two-site exchange,
+    branch switch or production command, in every project]
+    The PRODUCTION Code Analysis Server indexes the DEV files of every working project: its project
+    checkout stays on the WORKING branch (`local` under file_access local, mirrored through
+    `two_site_sync`; `cas` under file_access cas) and NEVER checks out `main`, so search, analysis
+    and refactoring always see the code under development. `main` is never synchronised into the
+    CAS project and never indexed. Under file_access local the local checkout may switch to
+    `main` for a production command, because CAS indexes the server mirror of the working branch;
+    under file_access cas the production command builds from a separate clone of `main` outside
+    the CAS watch directory and leaves the indexed checkout on `cas`. A CAS project found on
+    `main`, or an index answer about `main` code, is a DEFECT reported at once.
   pipeline_environment: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: writing, changing or running the project's pipeline,
     its checks, examples or their configuration, its dependency declarations, or a production

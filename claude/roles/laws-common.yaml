@@ -263,6 +263,18 @@ laws:
     to the `tester` stage. The `coder` stage NEVER edits a check; a check weakened by the hand
     that made it pass is self-acceptance. A check that cannot be shown RED on the broken behaviour
     and GREEN on the fixed one measures the wrong quantity; do not add a separate model review.
+  cas_index_is_dev: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any CAS project registration, two-site exchange,
+    branch switch or production command, in every project]
+    The PRODUCTION Code Analysis Server indexes the DEV files of every working project: its project
+    checkout stays on the WORKING branch (`local` under file_access local, mirrored through
+    `two_site_sync`; `cas` under file_access cas) and NEVER checks out `main`, so search, analysis
+    and refactoring always see the code under development. `main` is never synchronised into the
+    CAS project and never indexed. Under file_access local the local checkout may switch to
+    `main` for a production command, because CAS indexes the server mirror of the working branch;
+    under file_access cas the production command builds from a separate clone of `main` outside
+    the CAS watch directory and leaves the indexed checkout on `cas`. A CAS project found on
+    `main`, or an index answer about `main` code, is a DEFECT reported at once.
   deployed_pipeline_green_is_done: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any done claim] A service is done only after its final candidate is deployed to
     `root@192.168.254.26` — with `variables.dev_prod: true` to its DEV installation (deployed by `build.sh`,

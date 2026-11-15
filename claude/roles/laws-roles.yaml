@@ -24,6 +24,7 @@ roles:
     - context_economy
     - assigned_reads_gate
     - logger_exchange
+    - cas_index_is_dev
     - agent_report_in_planner
     - todo_tree_work
     - server_branches_are_mirrors
