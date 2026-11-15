@@ -57,6 +57,7 @@ roles:
     - single_build_and_publication_flow
     - pypi_publication_scope
     - dev_prod_instances
+    - pipeline_environment
     - fleet_dev_dependencies
     - verify_before_delivery
   tester:
@@ -76,6 +77,7 @@ roles:
     - single_build_and_publication_flow
     - pypi_publication_scope
     - dev_prod_instances
+    - pipeline_environment
     - fleet_dev_dependencies
     - verify_before_delivery
   researcher:

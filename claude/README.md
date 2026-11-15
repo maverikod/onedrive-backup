@@ -1,9 +1,9 @@
 # onedrive-backup Claude prompt package
 
 `../CLAUDE.md` is the entrypoint. This directory contains the project-bound
-Claude contract bundle generated from `templates/claude/v1.7.84` by `scripts/bind_bundles.py`.
+Claude contract bundle generated from `templates/claude/v1.7.85` by `scripts/bind_bundles.py`.
 
-Package version: `v1.7.84`
+Package version: `v1.7.85`
 
 ## Layout
 
