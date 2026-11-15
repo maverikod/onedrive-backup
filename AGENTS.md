@@ -11,7 +11,7 @@ are forbidden until a current event selects them. An extra startup read is a con
 
 # onedrive-backup - Codex operating contract
 
-**Prompts template:** `codex-prompts-v1` rev **1.7.86** (2026-11-15)
+**Prompts template:** `codex-prompts-v1` rev **1.7.87** (2026-11-15)
 
 This file is the entrypoint and is loaded automatically at session start.
 
@@ -64,7 +64,7 @@ These are PROHIBITIONS. You have NO discretion over them. You are NOT the except
 13. NEVER write a Plan Manager report outside `researcher` and `plan_todo_api_researcher`.
 14. NEVER write or unfreeze a plan unless the user declared `planning` or the external interface changes; all other work runs on a TODO tree — `laws.todo_tree_work`.
 15. With `dev_prod: true`, NEVER develop or test against production or its database: work runs in DEV — `build.sh` (default `--dev yes`) builds, publishes with the `-dev` suffix and deploys DEV itself, under `iddev`, with its own Debian package, `-dev` host directories, its own database and certificates generated from the project's CA; production happens ONLY on the user's command: everything is merged into `main` and `main` pushed, the checkout switched to `main`, `build.sh --dev no` rebuilds without `-dev` and deploys, one full pipeline runs against production; the work's model logs, the exchange with the user, documents and reports go to production, and the DEV logger takes only DEV servers and the models they call — `laws.dev_prod_instances`.
-16. NEVER test a development against a production service of the fleet: another fleet service is used only through its DEV server and the last `<client>-dev` published on PyPI (the local checkout is compared and a newer unpublished version is reported); tasks, TODOs, reports, bugs and documents are registered in production — `laws.fleet_dev_dependencies`; the pipeline targets by `PIPELINE_ENV` (`dev` on the working branch, `prod` on `main`) with DEV/PROD URLs from the committed `pipeline/endpoints.env` and no hardcode, and `build.sh --dev no` derives the production dependencies (exact tested versions, no `-dev`) — `laws.pipeline_environment`.
+16. NEVER test a development against a production service of the fleet: another fleet service is used only through its DEV server and the last `<client>-dev` published on PyPI (the local checkout is compared and a newer unpublished version is reported); tasks, TODOs, reports, bugs and documents are registered in production — `laws.fleet_dev_dependencies`; the pipeline targets by `PIPELINE_ENV` (`dev` on the working branch, `prod` on `main`) with DEV/PROD URLs from the committed `pipeline/endpoints.env` and no hardcode, and `build.sh --dev no` derives the production dependencies (`>=` the tested versions, no `-dev`); production and DEV share one MCP Proxy — `laws.pipeline_environment`.
 
 ## Orchestrator boundary
 

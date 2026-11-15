@@ -1,5 +1,5 @@
 # onedrive-backup — orchestrator event registry for Codex
-template_version: v1.7.86
+template_version: v1.7.87
 mode_aliases: {planning: [planning, plan], plan_todo_repair: [plan_todo_repair, plan-todo-repair, "исправление TODO после проверки плана"], analysis: [analysis, inspect], stupid_mode: [stupid_mode, stupid-mode, single-model, "Режим тупого"], no_logger_mode: [no_logger_mode, no-logger, "без логгера", "Режим без логгера"], prompt_development: [prompt_development, prompt-development, autonomy], refactoring: [refactoring, implement]}
 registry_contract:
   purpose: This complete startup registry selects files by event; it is not permission to read every path.

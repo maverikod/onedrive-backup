@@ -1,6 +1,6 @@
 # onedrive-backup — AI Logger exchange card for Claude
 # EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
-template_version: v1.7.86
+template_version: v1.7.87
 # Read by EVERY launched agent — every `dispatch_*` event lists it — and by the orchestrator through
 # `agent_dispatch`. It is complete on its own: a role that reads no law excerpt needs nothing else to
 # take its task from the logger and to answer through it. `laws.logger_exchange` points here.
@@ -36,6 +36,7 @@ production_services:
     ai_logger: ailogger
     plan_manager: ai-formforge
     doc_store: doc-store-vvz
+    mcp_proxy: mcp-proxy   # the ONE PRODUCTION proxy for production and DEV registrations (`laws.dev_prod_instances` (9))
     code_analysis: code-analysis-server-vvz   # indexes the DEV files: the working branch, never `main` (`laws.cas_index_is_dev`)
   not_found: >-
     On SERVER_NOT_FOUND re-read `list_servers` and take the PRODUCTION entry of the same service

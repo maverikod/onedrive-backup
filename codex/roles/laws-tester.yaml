@@ -296,8 +296,9 @@ laws:
     `build.sh --dev no` runs there and REBUILDS everything WITHOUT `-dev` under that same version number: the image `<image>:<version>`
     pushed to Docker Hub, the production Debian package `<svc>-docker`, the client `<client>`
     `<version>` published to PyPI — the Docker Hub push and the client publication UNCONDITIONALLY
-    and MANDATORILY, as in every build pass — every fleet client the project depends on pinned to
-    the exact version the DEV pipeline tested, under its production name (`pipeline_environment` (4)). PRODUCTION carries NO `-dev` anywhere: the package
+    and MANDATORILY, as in every build pass — every fleet client the project depends on declared
+    under its production name at a version NOT LOWER than the one the DEV pipeline tested (`>=`,
+    `pipeline_environment` (4)). PRODUCTION carries NO `-dev` anywhere: the package
     `<svc>-docker`, and, once it is installed, the production container, unit, settings file
     `/etc/default/<svc>`, directories `/etc/<svc>`, `/var/lib/<svc>`, `/var/log/<svc>`, `/opt/<svc>`,
     ports, database and certificates. EVERY setting of a production server points at PRODUCTION
@@ -344,7 +345,14 @@ laws:
     the root holds several candidates, it is the one the production certificates verify against.
     The DEV certificates name the `-dev` identity and live in the `-dev` host directories. NEVER a
     self-signed certificate, a new CA, or a copy of a production certificate and key; a project
-    without that CA stops the DEV pass with the exact finding instead of inventing one. See
+    without that CA stops the DEV pass with the exact finding instead of inventing one. (9) ONE MCP PROXY: production and DEV servers register on
+    the SAME MCP Proxy — the one PRODUCTION installation `mcp-proxy`; registration always stays in
+    the production proxy, and a DEV server registers there under its
+    `-dev` server id and its `iddev`, and its `<NAME>_URL_DEV` / `<NAME>_URL_PROD` proxy values in
+    `pipeline/endpoints.env` are the same address. No DEV proxy is deployed for, used by or named in
+    the settings of any other project, and no DEV server ever registers in a DEV proxy; the
+    mcp-server project's own DEV installation exists only as the target under test of its own
+    pipeline. See
     `ops/delivery.yaml` `dev_prod`.
   pipeline_environment: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: writing, changing or running the project's pipeline,
@@ -375,11 +383,11 @@ laws:
     DEPENDENCIES ARE DERIVED BY `build.sh`: the merge into `main` carries the working branch's
     `<client>-dev` declarations unchanged — nothing is edited or committed on `main` for them, so
     `main` never diverges from the working branch. `build.sh --dev no` on `main` derives the
-    production dependency set itself: every `<client>-dev` becomes `<client>` pinned to the EXACT
-    version the DEV pipeline tested, taken from the DEV pass's build record — never the latest on
-    PyPI — and the build uses only that set; before any publication it verifies that no artefact
+    production dependency set itself: every `<client>-dev` becomes `<client> >= V`, V the version the DEV
+    pipeline tested, taken from the DEV pass's build record — the floor is never below the tested
+    version — and the build uses only that set; before any publication it verifies that no artefact
     metadata names a `-dev` package. It REFUSES when a `-dev` client has no recorded tested version,
-    when the production package of that version is not published, or when a `-dev` name would
+    when no production package at or above that version is published, or when a `-dev` name would
     survive into an artefact. A manual install from the `main` sources is not a production build:
     production comes only from `build.sh`. A fleet dependency therefore goes to production before
     the project that uses it.
@@ -411,7 +419,7 @@ laws:
     traffic of the thing under test reaches DEV — the DEV variant is used ONLY to test new
     capabilities and to run pipelines. The production pass
     (`build.sh --dev no`) is the one exception: it builds with the PRODUCTION `<client>` of every
-    fleet dependency at the exact version tested in DEV and its full pipeline runs against the PRODUCTION services. See `ops/delivery.yaml` `fleet_dev_dependencies`.
+    fleet dependency at a version not lower than the one tested in DEV and its full pipeline runs against the PRODUCTION services. See `ops/delivery.yaml` `fleet_dev_dependencies`.
   verify_before_delivery: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before reporting delivery] Run the affected named check after deployment or over
     the real example. RED returns to diagnosis, proof, correction and deployment. When every
