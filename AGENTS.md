@@ -11,7 +11,7 @@ are forbidden until a current event selects them. An extra startup read is a con
 
 # onedrive-backup - Codex operating contract
 
-**Prompts template:** `codex-prompts-v1` rev **1.7.87** (2026-11-15)
+**Prompts template:** `codex-prompts-v1` rev **1.7.88** (2026-11-15)
 
 This file is the entrypoint and is loaded automatically at session start.
 

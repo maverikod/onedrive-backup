@@ -91,13 +91,14 @@ build_and_publication:
       - build the Docker image from the authoritative working branch at the selected version
       - push that exact image and tag to Docker Hub — unconditionally and mandatorily on every pass; a failed push stops the pass
       - build the Debian installation package with that same version; a failed package build stops the pass
-      - build the current project client wheel and sdist with the same version and publish them to PyPI — unconditionally and mandatorily on every pass; a failed upload stops the pass
+      - build the current project client wheel and sdist with the same version and publish them to PyPI — unconditionally and mandatorily on every pass; a failed upload stops the pass, unless `dontpubpypi` is set (`publication_flag`)
     no_image_project:
       - build the current project's wheel and sdist once at the selected version; a client package is published to PyPI in this pass unconditionally, any other library waits for publish_gate
     invariants:
-      - one invocation of build.sh performs the applicable build steps in order with no skip switches or manual substitutions
+      - one invocation of build.sh performs the applicable build steps in order with no switch that skips a step and no manual substitution
       - record exact source branch and commit or working-tree digest, version, image digest, package hashes and exit status
       - no artifact made from a linked worktree may be deployed or published
+  publication_flag: "`dontpubpypi` (environment variable or build-settings key, boolean) is the ONE publication flag and NEVER skips the attempt: with it set, the PyPI publication is still attempted, a failure is reported with its exact error and recorded in the build record, and the build continues instead of aborting; without it a failed publication stops the pass; it never affects the Docker Hub push; a flag that skips an attempt (`SKIP_PUSH`, `SKIP_PYPI`, `SKIP_UPLOAD`, `--skip-push`, or `dontpubpypi` used to skip) is a DEFECT; a failed publication still leaves the work undelivered (`laws.single_build_and_publication_flow`)"
   candidate_check:
     - for an image project, deploy the pushed image and install its Debian package on `root@192.168.254.26` (the DEV installation, deployed by the same `build.sh` invocation, while `dev_prod` is true); verify version, health and registration where applicable
     - deployment to `root@192.168.254.26` is part of debugging and acceptance for a service, not a production release

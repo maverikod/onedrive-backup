@@ -178,7 +178,14 @@ laws:
     package metadata carry the same version. One build pass builds the image and pushes it to
     Docker Hub, builds the Debian package, then builds the current client and publishes it to
     PyPI, in that order — the Docker Hub push and the client publication UNCONDITIONALLY and
-    MANDATORILY on every pass, with no skip switch, condition or question. A library with no Docker
+    MANDATORILY on every pass: no switch, condition or question ever skips the ATTEMPT. The one
+    publication flag is `dontpubpypi` (environment variable or build-settings key, boolean); it
+    only makes a FAILED attempt non-fatal: with it set, build.sh still attempts the PyPI
+    publication, reports and records a failure with its exact error, and continues the build
+    instead of aborting; without it a failed publication stops the pass. `dontpubpypi` never
+    affects the Docker Hub push, and a flag that skips an attempt (`SKIP_PUSH`, `SKIP_PYPI`,
+    `SKIP_UPLOAD`, `--skip-push`, or `dontpubpypi` used to skip) is a DEFECT. A failed publication
+    still leaves the work undelivered (`pypi_publication_scope`). A library with no Docker
     image builds its PyPI artifact in the same single-script discipline and publishes it after the
     user-commanded full GREEN (a client library on every pass). Deploy and install a service
     candidate on `root@192.168.254.26` as part of debugging and acceptance. While `variables.dev_prod` is
