@@ -2,7 +2,7 @@
 
 # EVENT-SELECTED TOOL MECHANICS. This card grants no reads and contains no router.
 
-template_version: v1.7.89
+template_version: v1.7.90
 
 meta:
   workspace: local

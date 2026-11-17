@@ -18,7 +18,7 @@ external_contour_first:
       - "4 CLIENT: implement one complete typed client method per contour item plus a bounded raw-parameter validation invocation for negative cases; all transport, TLS, authentication, retry and correlation stay inside the client"
       - "5 PIPELINE: load the frozen matrix snapshot and wrap the client with one named check per contour item that executes every derived focused case and asserts its result/error contract and side effects; the pipeline never builds a URL or wire message"
       - "6 IMPLEMENT: write one bounded group of related capabilities and code files, run build.sh, deploy/install it on the test server (while `dev_prod` is true the default `--dev yes` pass deploys the DEV installation itself), and run only its mapped named checks; RED returns the entire still-red group to diagnosis and correction, GREEN opens the next group"
-      - "7 ACCEPT: after the whole requested contour is targeted-GREEN, wait for the user command; then run the full pipeline once against the deployed server; build.sh already pushed the image to Docker Hub and published the client to PyPI on every pass; a server PyPI package only with the user's explicit permission; with `dev_prod` true a GREEN full DEV pipeline starts the production pass `build.sh --dev no` AUTOMATICALLY, with no user command (`dev_prod.production_deploy`)"
+      - "7 ACCEPT: after the whole requested contour is targeted-GREEN, run the full pipeline once AUTOMATICALLY, with no user command or question, against the deployed server; build.sh already pushed the image to Docker Hub and published the client to PyPI on every pass; a server PyPI package only with the user's explicit permission; with `dev_prod` true a GREEN full DEV pipeline starts the production pass `build.sh --dev no` AUTOMATICALLY, with no user command (`dev_prod.production_deploy`)"
   library:
     order:
       - "1 TASK: take the requested scope directly from the user or from the active plan"
@@ -27,7 +27,7 @@ external_contour_first:
       - "4 TEST SURFACE: complete the examples or testing script from the frozen contour; an example starts any server it needs from the library's own example application"
       - "5 PIPELINE: load the frozen matrix snapshot and wrap the examples or testing script with one named check per public callable that executes every derived focused case and asserts its result/error contract and side effects"
       - "6 IMPLEMENT: write one bounded group of related capabilities and code files, run build.sh, and run only its mapped named example checks over the built candidate — nothing is deployed to a server; RED returns the entire still-red group to diagnosis and correction, GREEN opens the next group"
-      - "7 ACCEPT: after the whole requested contour is targeted-GREEN, wait for the user command; then run the full pipeline once over all examples and publish the tested package to PyPI — mandatory; the publication is the library's deployment"
+      - "7 ACCEPT: after the whole requested contour is targeted-GREEN, run the full pipeline once AUTOMATICALLY, with no user command or question, over all examples and publish the tested package to PyPI — mandatory; the publication is the library's deployment"
   rules:
     - the immutable checklist covers the whole requested error block or code-file/capability group; a group of one is allowed but is not the default decomposition
     - the project-anchored matrix TODO includes parameter cells, relations and result contracts for every derived case; the candidate is semantically GREEN and explicitly user-authorized before its single freeze and any repository implementation step
@@ -46,7 +46,7 @@ external_api_change:
     - as the first repository changes, refresh pipeline/matrix.yaml including result contracts and update only the affected named pipeline checks including their exact result assertions
     - run those named checks against the unchanged deployed service or current runnable examples and obtain RED
     - only after RED, change the external contour and then its client or examples and product implementation
-    - run build.sh, deploy/install the service candidate or start the library example, and run the same named checks to GREEN; run the full pipeline only on the user command after the complete task is targeted-GREEN
+    - run build.sh, deploy/install the service candidate or start the library example, and run the same named checks to GREEN; run the full pipeline once AUTOMATICALLY, with no user command or question, as soon as the complete task is targeted-GREEN
   forbidden: changing the API, client, examples or implementation before the matrix and affected pipeline checks have been updated and shown RED
 
 bugfix_cycle:
@@ -60,8 +60,8 @@ bugfix_cycle:
     A user-supplied error block is the unit of correction, not a queue of independently reviewed
     single bugs. Until the whole block is targeted-GREEN,
     run ONLY the commands enumerated in that block's immutable checklist — no unrelated named
-    checks and no intermediate full run. After every item is targeted-GREEN, wait for the user command, then run the full pipeline
-    once against the final candidate and publish the tested library package (mandatory; a client was already published by every build pass; a server or application package only with the user's explicit permission). A block of one follows the same rule.
+    checks and no intermediate full run. After every item is targeted-GREEN, run the full pipeline
+    once AUTOMATICALLY, with no user command or question, against the final candidate and publish the tested library package (mandatory; a client was already published by every build pass; a server or application package only with the user's explicit permission). A block of one follows the same rule.
   rules:
     - the fix runs on the TODO tree of `laws.todo_tree_work` with the bug as the root's owner; no plan is read, written or unfrozen
     - a mock, local-only result, diff reading, agent report, commit, build or deploy acknowledgment is not live RED or GREEN
@@ -106,15 +106,15 @@ build_and_publication:
     - for a service or a client library, the pipeline loads the client from the current project's code (a server's own client installed from source); reject a PyPI-installed or stale copy of the project's own client — even the one this pass just published — and verify its source path and version; another fleet service's client is the last published `<client>-dev` (`fleet_dev_dependencies`)
     - run the pipeline from the authoritative working checkout against the deployed server, using only named commands changed or created for this task; local mode runs locally and cas mode runs on CAS through MCP Proxy
     - for a project without a Docker image, run its real local examples with the current project package; a server-bearing example starts and stops its own test server and uses the current client; a client example calls the DEV installation of the live service on `root@192.168.254.26` that it does not own, through the last published `<client>-dev` (`fleet_dev_dependencies`), and deploys nothing there; publish nothing before the full GREEN gate
-    - after all affected named commands are GREEN, wait for an explicit user command before one full pipeline run
+    - after all affected named commands are GREEN, run one full pipeline AUTOMATICALLY, with no user command or question; waiting for or asking for a full-run command is a DEFECT
   publish_gate:
     - the scope of PyPI publication is laws.pypi_publication_scope
-    - only after the user-commanded full pipeline returns GREEN for the exact candidate, publish the already-built library package to PyPI; a client package is not gated here — every build pass published it
+    - only after the full pipeline returns GREEN for the exact candidate, publish the already-built library package to PyPI; a client package is not gated here — every build pass published it
     - "that publication is MANDATORY for a `project_kind: library` package — do it in the same task without asking; a client package is published by EVERY build pass unconditionally; a built client or GREEN library left unpublished is a defect"
     - a server package, the application inside an image, or any package that is run rather than imported (CLI tool, GUI, daemon, service runtime) is published to PyPI ONLY with the user's explicit permission for that exact package and version
     - the same build.sh entrypoint performs publication from the recorded artifact hashes without another build pass or version bump
     - verify the published version and artifact hashes equal the tested candidate and, for an image project, the image and Debian versions
-    - if the full run is not commanded or is RED, report targeted GREEN or exact RED and leave PyPI unpublished
+    - if the full run is RED, report targeted GREEN or exact RED and leave PyPI unpublished
 
 packaging_standard:
   law: laws.service_packaging_standard
@@ -206,12 +206,13 @@ fleet_dev_dependencies:
     install: "ALWAYS the last package published on PyPI — the newest `<client>-dev`; never a source install of another project's client"
     local_newer: "the local code has not been through its DEV pass and its DEV server does not run it: record project, local version and commit, published version in the check result, report the gap, and still install the published package"
     record: the installed client and version and the compared local version go into the build record and the check results
+  production_only_services: "a fleet service the registry marks `production_only` — today `lmrs` and `onedrive-backup` — has no DEV installation and no `<client>-dev`; it runs and is changed ONLY in production; every project, its DEV installation, pipeline, examples and tests included, uses it ONLY through its production server and production `<client>` (newest on PyPI, `>=` the tested version, declared by that name on every branch); `<NAME>_URL_DEV` = `<NAME>_URL_PROD` = the production address; not a production fallback; a `-dev` endpoint or `<client>-dev` of it is a DEFECT (`laws.fleet_dev_dependencies`)"
   own_client: the project's own client is never taken from PyPI — it is the one from the project's own code (`build_and_publication.candidate_check`)
   registration_in_production: "tasks, TODOs, plans, steps, reports, bugs and fixes (Plan Manager), documents (doc-store) and the AI Logger exchange go to PRODUCTION; only the traffic of the thing under test reaches DEV"
   production_exception: "`build.sh --dev no` builds with the PRODUCTION `<client>` of every fleet dependency at a version not lower than the one tested in DEV (`>=`), and its full pipeline runs against the PRODUCTION services"
 
 release:
   law: laws.deployed_pipeline_green_is_done
-  service: "version -> build -> deploy to `root@192.168.254.26` (DEV, deployed by `build.sh` itself with its default `--dev yes`, when `dev_prod` is true) -> health/version/registration -> targeted checks -> user command -> one full pipeline (in DEV) -> with `dev_prod` true, AUTOMATICALLY with no user command, `build.sh --dev no`: rebuild without `-dev` -> production deploy -> one full pipeline against production"
-  library: "version -> build.sh -> targeted example checks -> user command -> one full pipeline over all examples -> PyPI publication by publish_gate"
+  service: "version -> build -> deploy to `root@192.168.254.26` (DEV, deployed by `build.sh` itself with its default `--dev yes`, when `dev_prod` is true) -> health/version/registration -> targeted checks -> one full pipeline (in DEV), automatic -> with `dev_prod` true, AUTOMATICALLY with no user command, `build.sh --dev no`: rebuild without `-dev` -> production deploy -> one full pipeline against production"
+  library: "version -> build.sh -> targeted example checks -> one full pipeline over all examples, automatic -> PyPI publication by publish_gate"
   evidence: the exact command, target, responding version, targeted results and final full-pipeline result

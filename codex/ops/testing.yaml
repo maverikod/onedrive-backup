@@ -9,7 +9,7 @@ rules:
   - every agent receives the immutable checklist for the whole group with every criterion, required evidence and exact mapped named pipeline command
   - local and unit runs are diagnostic; the real service or runnable example supplies RED and GREEN
   - before the first live RED there is no model review; after RED the corrective agent on the rank `laws.cheapest_capable_model` selects diagnoses, proves, fixes, deploys and runs only the same mapped block commands
-  - run the full pipeline once, on the user's command, after the complete requested task or bug block is targeted-GREEN
+  - run the full pipeline once, AUTOMATICALLY, with no user command or question, as soon as the complete requested task or bug block is targeted-GREEN
   - never add verifier agents or branch-attestation rounds around a mechanical pipeline result
   - reuse every GREEN command result while its target version and relevant inputs are unchanged; never rerun it for confidence, after compaction or through another agent
   - when an existing external API changes, the first repository changes are pipeline/matrix.yaml and the affected named checks; those checks must be RED against the unchanged contour before API, client, example or product-code edits begin
@@ -115,16 +115,16 @@ bugfix_check:
     - after root-cause proof and correction, run build.sh, then deploy/install the service candidate or start the library example
     - run only the same mapped block commands
     - RED after a correction is a failure: the first on a rank is corrected again on that rank, the second raises the next correction exactly one rank; GREEN closes the mapped items without model review
-    - after every item in the requested block is GREEN, wait for the user command; then run the full pipeline once
+    - after every item in the requested block is GREEN, run the full pipeline once AUTOMATICALLY, with no user command or question
 
 definition_of_done:
   law: laws.deployed_pipeline_green_is_done
-  service: the final candidate is deployed — while `laws.variables.dev_prod` is true, to its DEV installation (deployed by `build.sh`, default `--dev yes`, `laws.dev_prod_instances`) and never a check against production — is built by build.sh, reports the expected version and registration state, and the user-commanded full pipeline is GREEN against it; its build passes pushed the image to Docker Hub and published the matching client to PyPI
-  library: the locally built candidate's user-commanded full pipeline is GREEN over every declared example, then that exact package is published to PyPI; that publication is the library's deployment
+  service: the final candidate is deployed — while `laws.variables.dev_prod` is true, to its DEV installation (deployed by `build.sh`, default `--dev yes`, `laws.dev_prod_instances`) and never a check against production — is built by build.sh, reports the expected version and registration state, and the automatic full pipeline is GREEN against it; its build passes pushed the image to Docker Hub and published the matching client to PyPI
+  library: the locally built candidate's automatic full pipeline is GREEN over every declared example, then that exact package is published to PyPI; that publication is the library's deployment
   not_done:
     - a local-only or mock result
     - a commit, build, package or deploy acknowledgment without the real named check
     - an agent or model verdict
-    - targeted checks passed but the user-commanded full pipeline did not run; report awaiting command without a done claim
+    - targeted checks passed but the full pipeline did not run; run it at once — waiting for or asking for a command is a DEFECT
     - a skipped check or unreachable service
   evidence: exact command, target, responding version, named-check result and final full-pipeline result

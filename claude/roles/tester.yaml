@@ -33,7 +33,7 @@ must_do:
     the live server before the fix, then run those same commands after deploy; exact RED goes to a
     corrective Claude agent on the tier `laws.cheapest_capable_model` selects and GREEN closes the mapped items
   - treat the whole user-supplied error block as one correction unit; run only its mapped commands
-    until every item is targeted-GREEN, then run the full pipeline once on the user's command
+    until every item is targeted-GREEN, then run the full pipeline once, automatically, with no user command
   - for new code, keep the pipeline a thin wrapper over the client or library example surface
   - report exact commands, host, version and meaningful failure output
 

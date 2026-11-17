@@ -79,7 +79,7 @@ laws:
     After deploying each group, run only the named checks mapped to that group: RED
     returns the entire still-red group to diagnosis, proof, correction and deployment; GREEN opens
     the next group. A group of one is valid but is not the default decomposition. When the complete
-    requested contour is targeted-GREEN, run the full pipeline once on the user's command. The pipeline is the
+    requested contour is targeted-GREEN, the model runs the full pipeline once AUTOMATICALLY, with no user command or question. The pipeline is the
     verifier; do not add a model-verifier ladder, branch-attestation loop or narrative acceptance
     layer. See `ops/delivery.yaml` `external_contour_first`. A bug fix, a refactoring or any change
     that leaves the external interface as it is never enters this law: it runs on the TODO tree of

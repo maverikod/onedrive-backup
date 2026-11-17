@@ -311,7 +311,7 @@ laws:
     After deploying each group, run only the named checks mapped to that group: RED
     returns the entire still-red group to diagnosis, proof, correction and deployment; GREEN opens
     the next group. A group of one is valid but is not the default decomposition. When the complete
-    requested contour is targeted-GREEN, run the full pipeline once on the user's command. The pipeline is the
+    requested contour is targeted-GREEN, the model runs the full pipeline once AUTOMATICALLY, with no user command or question. The pipeline is the
     verifier; do not add a model-verifier ladder, branch-attestation loop or narrative acceptance
     layer. See `ops/delivery.yaml` `external_contour_first`. A bug fix, a refactoring or any change
     that leaves the external interface as it is never enters this law: it runs on the TODO tree of
@@ -328,8 +328,8 @@ laws:
     rebuild the real library example candidate; (7) run ONLY those same block commands. RED is a
     failure: the first on a tier repeats steps 3-7 on that tier, the second on a tier moves the
     next correction one Claude rank higher and repeats steps 3-7. GREEN closes the mapped checklist items without model review. A
-    user-supplied block uses the same loop, not a new orchestration scheme. Run the full pipeline
-    once only after every item in the block is targeted-GREEN, and only on the user's command. A mock, local-only result, diff,
+    user-supplied block uses the same loop, not a new orchestration scheme. As soon as every item in the block is targeted-GREEN, the model runs the full pipeline once
+    AUTOMATICALLY, with no user command or question — never earlier. A mock, local-only result, diff,
     agent report, commit, build or deploy acknowledgment is not RED or GREEN. See
     `ops/delivery.yaml` `bugfix_cycle`.
   project_matrix_todo_required: >-

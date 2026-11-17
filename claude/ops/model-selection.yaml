@@ -107,7 +107,7 @@ checklist:
     - no agent or orchestrator may delete, weaken, waive, reorder or mark an item not applicable
 
 acceptance:
-  implementation: mapped named pipeline commands on the real thing; one full pipeline, on the user's command, after the complete block is targeted-GREEN
+  implementation: mapped named pipeline commands on the real thing; one full pipeline, automatic with no user command, after the complete block is targeted-GREEN
   plans_and_docs: checklist evidence returned by the assigned Claude agent for the user to accept
   forbidden: pre-RED model review, model-verifier ladders, narrative certification, a tier raised by a RED alone
 

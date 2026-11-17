@@ -53,7 +53,7 @@ laws:
     After deploying each group, run only the named checks mapped to that group: RED
     returns the entire still-red group to diagnosis, proof, correction and deployment; GREEN opens
     the next group. A group of one is valid but is not the default decomposition. When the complete
-    requested contour is targeted-GREEN, run the full pipeline once on the user's command. The pipeline is the
+    requested contour is targeted-GREEN, the model runs the full pipeline once AUTOMATICALLY, with no user command or question. The pipeline is the
     verifier; do not add a model-verifier ladder, branch-attestation loop or narrative acceptance
     layer. See `ops/delivery.yaml` `external_contour_first`. A bug fix, a refactoring or any change
     that leaves the external interface as it is never enters this law: it runs on the TODO tree of
@@ -70,8 +70,8 @@ laws:
     rebuild the real library example candidate; (7) run ONLY those same block commands. RED is a
     failure: the first on a tier repeats steps 3-7 on that tier, the second on a tier moves the
     next correction one Claude rank higher and repeats steps 3-7. GREEN closes the mapped checklist items without model review. A
-    user-supplied block uses the same loop, not a new orchestration scheme. Run the full pipeline
-    once only after every item in the block is targeted-GREEN, and only on the user's command. A mock, local-only result, diff,
+    user-supplied block uses the same loop, not a new orchestration scheme. As soon as every item in the block is targeted-GREEN, the model runs the full pipeline once
+    AUTOMATICALLY, with no user command or question — never earlier. A mock, local-only result, diff,
     agent report, commit, build or deploy acknowledgment is not RED or GREEN. See
     `ops/delivery.yaml` `bugfix_cycle`.
   external_contour_coverage: >-
@@ -235,8 +235,7 @@ laws:
     affects the Docker Hub push, and a flag that skips an attempt (`SKIP_PUSH`, `SKIP_PYPI`,
     `SKIP_UPLOAD`, `--skip-push`, or `dontpubpypi` used to skip) is a DEFECT. A failed publication
     still leaves the work undelivered (`pypi_publication_scope`). A library with no Docker
-    image builds its PyPI artifact in the same single-script discipline and publishes it after the
-    user-commanded full GREEN (a client library on every pass). Deploy and install a service
+    image builds its PyPI artifact in the same single-script discipline and publishes it after the full GREEN (a client library on every pass). Deploy and install a service
     candidate on `root@192.168.254.26` as part of debugging and acceptance. While `variables.dev_prod` is
     `true`, `build.sh` takes `--dev yes|no` with `yes` by default: the default DEV pass is this build
     pass with every uploaded artefact suffixed `-dev` (image tag `<version>-dev`, client `<client>-dev`)
@@ -249,8 +248,8 @@ laws:
     PROJECT'S CODE — for a server with its own client (`client_package/`, `client/` or a paired
     client checkout), that client installed from source — and NEVER a PyPI-installed client, not
     even the one this pass has just published; a client of ANOTHER fleet service is the last
-    published `<client>-dev` of `fleet_dev_dependencies`. A full pipeline run requires a separate explicit
-    user command after targeted GREEN. Only after that full run is GREEN does the same script
+    published `<client>-dev` of `fleet_dev_dependencies`. The full pipeline runs once AUTOMATICALLY, with no user command or question, as soon as the whole requested task
+    or block is targeted-GREEN; waiting for or asking for a full-run command is a DEFECT. Only after that full run is GREEN does the same script
     publish the already-built library package to PyPI — mandatorily, under
     `pypi_publication_scope` — without rebuilding or changing the version; a server or
     application package goes to PyPI only with the user's explicit permission. See
@@ -262,8 +261,7 @@ laws:
     EVERY `build.sh` pass, UNCONDITIONALLY and MANDATORILY, in the same pass that pushes the server
     image to Docker Hub: never gated on a pipeline result, never skipped, never asked about.
     LIBRARIES — the package of a `project_kind: library` project that is not a client, even when it
-    also ships commands — are published MANDATORILY as soon as the user-commanded full pipeline is
-    GREEN for the exact candidate, by `build.sh`, in the same task, without asking. Either way the
+    also ships commands — are published MANDATORILY as soon as the full pipeline is GREEN for the exact candidate, by `build.sh`, in the same task, without asking. Either way the
     work is not delivered until the published version and artifact hashes are verified; a built
     client or a GREEN library left unpublished is a DEFECT, never a question put to the user. No
     check ever uses a PyPI-installed copy of the project's own client: the pipeline takes it from
@@ -392,10 +390,11 @@ laws:
     and carrying no secret (certificates and keys stay outside git); the pipeline loads that file
     and the branch picks the `_DEV` or `_PROD` value in ONE module of the pipeline package. The file
     is the same on both branches, so a merge never changes the target. A hardcoded host, IP, port
-    or URL in a check, example or fixture is a DEFECT. (3) DEPENDENCIES ON THE WORKING BRANCH name the fleet clients by their DEV
-    distributions, `<client>-dev`, at a version NOT LOWER than the one the pipeline tested, so the
-    DEV environment holds no production copy of the same module; the pipeline verifies that the
-    imported client is the `-dev` one at the tested version. (4) PRODUCTION
+    or URL in a check, example or fixture is a DEFECT. (3) DEPENDENCIES ON THE WORKING BRANCH name the fleet clients by their DEV distributions, `<client>-dev`, at a version NOT LOWER than the one the pipeline tested
+    — except the client of a production-only service (`fleet_dev_dependencies`), declared on every branch
+    by its production name `<client> >= V` and kept unchanged by `build.sh --dev no` — so the
+    DEV environment holds no production copy of the same module; the pipeline verifies that the imported client is the `-dev` one (the production one for a
+    production-only service) at the tested version. (4) PRODUCTION
     DEPENDENCIES ARE DERIVED BY `build.sh`: the merge into `main` carries the working branch's
     `<client>-dev` declarations unchanged — nothing is edited or committed on `main` for them, so
     `main` never diverges from the working branch. `build.sh --dev no` on `main` derives the
@@ -415,9 +414,16 @@ laws:
     its examples — uses another fleet service, it uses ONLY that service's DEV client and DEV
     server: the DEV installation's settings, the pipeline, the examples and every test point at the
     service's DEV installation (its `-dev` network name, DEV port and DEV registration), never at
-    its production endpoint, and a production endpoint is refused before the first call. A service
-    without a reachable DEV installation makes the affected check RED and is reported as a blocker
-    with evidence; it never falls back to production. THE DEV CLIENT: in DEV mode check BOTH
+    its production endpoint, and a production endpoint is refused before the first call. A service without a reachable DEV installation makes the affected check RED and is reported as a
+    blocker with evidence; it never falls back to production. PRODUCTION-ONLY SERVICES are the one
+    exception: a fleet service the registry marks `production_only` — today `lmrs` and `onedrive-backup` — has NO
+    DEV installation and NO `<client>-dev`; it runs and is changed ONLY in production. Every
+    project — its DEV installation, pipeline, examples and tests included — uses such a service
+    ONLY through its PRODUCTION server and its production client `<client>` (the newest published
+    on PyPI, at a version not lower than the one tested); its `<NAME>_URL_DEV` and `<NAME>_URL_PROD`
+    in `pipeline/endpoints.env` hold the same production address. That is not a production
+    fallback and is never reported as one; a `-dev` endpoint or a `<client>-dev` of such a service
+    is a DEFECT. THE DEV CLIENT: in DEV mode check BOTH
     sources — PyPI (the newest published `<client>-dev`) and the service's LOCAL project checkout
     (`~/projects/tools/<checkout>`, its current branch, the version from its single version
     source) — and INSTALL THE LAST PACKAGE PUBLISHED ON PyPI, the newest `<client>-dev`, never a
@@ -439,5 +445,5 @@ laws:
   verify_before_delivery: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before reporting delivery] Run the affected named check after deployment or over
     the real example. RED returns to diagnosis, proof, correction and deployment. When every
-    requested item is targeted-GREEN, run the full pipeline once on the user's command. Report the exact command,
+    requested item is targeted-GREEN, run the full pipeline once AUTOMATICALLY, with no user command or question. Report the exact command,
     target, responding version and result.
