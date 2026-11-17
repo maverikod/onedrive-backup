@@ -11,7 +11,7 @@ are forbidden until a current event selects them. An extra startup read is a con
 
 # onedrive-backup - Claude operating contract
 
-**Prompts template:** `claude-prompts-v1` rev **1.7.91** (2026-11-17)
+**Prompts template:** `claude-prompts-v1` rev **1.7.92** (2026-11-17)
 
 This file is the entrypoint and is loaded automatically at session start.
 
@@ -62,7 +62,7 @@ These are PROHIBITIONS. You have NO discretion over them. You are NOT the except
     per session — `laws.logger_exchange`. Files only in the user-confirmed `no_logger_mode`.
 13. NEVER write a Plan Manager report outside `researcher` and `plan_todo_api_researcher`.
 14. NEVER write or unfreeze a plan unless the user declared `planning` or the external interface changes; all other work runs on a TODO tree — `laws.todo_tree_work`.
-15. With `dev_prod: true`, NEVER develop or test against production or its database: work runs in DEV — `build.sh` (default `--dev yes`) builds, publishes with the `-dev` suffix and deploys DEV itself, under `iddev`, with its own Debian package, `-dev` host directories, its own database and certificates generated from the project's CA; production goes out AUTOMATICALLY right after the full DEV pipeline is GREEN, with no user command or question — the model itself merges everything into `main` and pushes `main`, the checkout switched to `main`, `build.sh --dev no` rebuilds without `-dev` and deploys, one full pipeline runs against production; the work's model logs, the exchange with the user, documents and reports go to production, and the DEV logger takes only DEV servers and the models they call — `laws.dev_prod_instances`.
+15. With `dev_prod: true`, NEVER develop or test against production or its database: work runs in DEV — `build.sh` (default `--dev yes`) builds, publishes with the `-dev` suffix and deploys DEV itself, under `iddev`, with its own Debian package, `-dev` host directories, its own database and certificates generated from the project's CA; production goes out AUTOMATICALLY right after the full DEV pipeline is GREEN, with no user command or question — the model itself merges everything into `main` and pushes `main`, the checkout switched to `main`, `build.sh --dev no` rebuilds without `-dev` and deploys, the same named checks that were GREEN in DEV run against production — the full production pipeline ONLY on the user's command; the work's model logs, the exchange with the user, documents and reports go to production, and the DEV logger takes only DEV servers and the models they call — `laws.dev_prod_instances`.
 16. NEVER test a development against a production service of the fleet — except a production-only service (`lmrs` and `onedrive-backup`), which has no DEV and is used ONLY through its production server and production `<client>`: another fleet service is used only through its DEV server and the last `<client>-dev` published on PyPI (the local checkout is compared and a newer unpublished version is reported); tasks, TODOs, reports, bugs and documents are registered in production — `laws.fleet_dev_dependencies`; the pipeline targets by `PIPELINE_ENV` (`dev` on the working branch, `prod` on `main`) with DEV/PROD URLs from the committed `pipeline/endpoints.env` and no hardcode, and `build.sh --dev no` derives the production dependencies (`>=` the tested versions, no `-dev`); production and DEV share one MCP Proxy — `laws.pipeline_environment`.
 17. NEVER call `lmrs` directly, in any situation — no `lmrs-client`, lmrs URL, proxy call or probe, no bypass for debugging or an outage: lmrs models are reached ONLY through macsc (`mac-server`, project `model-access-core`); only model-access-core and the lmrs project itself call lmrs — `laws.lmrs_only_through_macsc`.
 
@@ -121,6 +121,7 @@ Do not read the other runtime's prompt files unless the task explicitly requires
 <!-- project-specific sections (kept across template versions; edit here) -->
 ## OneDrive Backup — project and code standards
 - Production-only service, no dev instance and no insecure HTTP fallback.
+- Full pipeline: every check here runs against production, so the full pipeline is a production full run and runs ONLY on the user's explicit command, never automatically after targeted GREEN (v1.7.92).
 - One source of version: VERSION. Docker image, Debian package and client must use the identical release version.
 - CAS project ID: f6130c8b-1fde-4a35-bdae-e857dfbd6555. Git remote: git@github.com:maverikod/onedrive-backup.git, branch cas.
 - Inspect changes before writing. Git staging/commit/push only via CAS Git commands.

@@ -21,7 +21,7 @@ pipeline_cli:
   run_all: "python -m pipeline"
   run_one: "python -m pipeline <check-name>"
   list_checks: "python -m pipeline --list"
-  environment: "`PIPELINE_ENV` = `dev` (working branch) | `prod` (`main`, only the full pipeline `build.sh --dev no` runs after the production deploy); decided by the current branch — `main` is always `prod`, any other branch always `dev`; a contradicting explicit value is refused; exported by `build.sh`, never a committed file; every endpoint has `<NAME>_URL_DEV` / `<NAME>_URL_PROD` in the committed `pipeline/endpoints.env` (never `.env`, no secrets) and the branch picks one in one pipeline module — no hardcode (`laws.pipeline_environment`)"
+  environment: "`PIPELINE_ENV` = `dev` (working branch) | `prod` (`main`, only after the production deploy of `build.sh --dev no`: the same named checks that were GREEN in DEV, automatically, and the full pipeline only on the user's explicit command); decided by the current branch — `main` is always `prod`, any other branch always `dev`; a contradicting explicit value is refused; exported by `build.sh`, never a committed file; every endpoint has `<NAME>_URL_DEV` / `<NAME>_URL_PROD` in the committed `pipeline/endpoints.env` (never `.env`, no secrets) and the branch picks one in one pipeline module — no hardcode (`laws.pipeline_environment`)"
   layout:
     package: "pipeline/"
     entrypoint: "pipeline/main.py"

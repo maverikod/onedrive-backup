@@ -301,8 +301,9 @@ laws:
     `root@192.168.254.26` — with `variables.dev_prod: true` to its DEV installation (deployed by `build.sh`,
     default `--dev yes`, registered under `iddev`) — reports the expected version and registration state, every
     affected named check is GREEN, and the full pipeline, run once AUTOMATICALLY, is then GREEN against it; production then gets it AUTOMATICALLY, with no user command, under `dev_prod_instances` —
-    rebuilt without `-dev`, deployed, and checked by one full pipeline against production — and
-    with `dev_prod` true the work is done only when that production pipeline is GREEN too. A library is done only
+    rebuilt without `-dev`, deployed, and checked against production by the same named checks that were GREEN in DEV — and
+    with `dev_prod` true the work is done only when those production checks are GREEN too; the full
+    pipeline against production runs only on the user's explicit command and is not part of done. A library is done only
     after the same sequence over its real examples. A local result, commit, build, package,
     deploy acknowledgment, skipped check, unreachable service or model verdict is not delivery.
   exact_failure_reporting: >-

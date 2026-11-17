@@ -196,8 +196,8 @@ laws:
     pass with every uploaded artefact suffixed `-dev` (image tag `<version>-dev`, client `<client>-dev`)
     and the DEV Debian package, and it ends by deploying the DEV installation on `root@192.168.254.26`
     AUTOMATICALLY; `build.sh --dev no` is the PRODUCTION pass and runs
-    AUTOMATICALLY — the model itself starts it, with no user command, permission or question, right after the full DEV pipeline of that version is GREEN: it REBUILDS without `-dev`, deploys production and then runs the full pipeline against
-    it (`dev_prod_instances`). A library is never
+    AUTOMATICALLY — the model itself starts it, with no user command, permission or question, right after the full DEV pipeline of that version is GREEN: it REBUILDS without `-dev`, deploys production and then runs the same named checks that were GREEN in DEV against
+    it — the full production pipeline only on the user's explicit command (`dev_prod_instances`). A library is never
     deployed there — its PyPI publication is its deployment (`library_examples_are_the_pipeline`).
     Run only changed or new named pipeline commands; the pipeline uses the client from the CURRENT
     PROJECT'S CODE — for a server with its own client (`client_package/`, `client/` or a paired
@@ -230,9 +230,9 @@ laws:
     or `projectid` action while `variables.dev_prod` is `true`; with `false` this law does not apply]
     The project runs as TWO separate installations of the same code on `root@192.168.254.26`: PRODUCTION and DEV. Development,
     debugging and testing are done ONLY in DEV — every "deployed service", "live server", "real
-    instance" or "candidate deploy" in this contract means the DEV installation. NEVER run a named
-    check or the pipeline against production — the ONE exception is the full pipeline that
-    `build.sh --dev no` runs right after the automatic production deploy — and NEVER point the dev installation or a test at the
+    instance" or "candidate deploy" in this contract means the DEV installation. NEVER run a named check or the pipeline against production — the ONLY exceptions follow the
+    automatic production deploy: the same named checks that were GREEN in DEV for this work, run AUTOMATICALLY, and the full
+    pipeline against production, run ONLY on the user's explicit command — and NEVER point the dev installation or a test at the
     production database. (1) IDENTITY: the root `projectid` file carries TWO identifiers of the code
     — `id` for production and `iddev` for development, like the program keys an installer writes
     to a registry; the dev installation uses `iddev` everywhere the production one uses `id`, and
@@ -270,11 +270,17 @@ laws:
     servers only — logger, Code Analysis Server, Plan Manager, doc-store and every other fleet
     service it calls; a production settings file, config template or environment that names a
     `-dev` (or legacy `dev` / `_dev`) endpoint is a DEFECT, and `build.sh --dev no` refuses to deploy
-    it. The same invocation then DEPLOYS production, proves health, the expected version and
-    registration under `id`, and RUNS THE FULL PIPELINE against production in production mode — the
-    only check that ever targets production: the pipeline targets DEV by default and accepts the
-    production target only when `build.sh --dev no` invokes it after the production deploy. A RED
-    production pipeline is reported at once with its exact output; the previous image and spec stay
+    it. The same invocation then DEPLOYS production and proves health, the expected version and
+    registration under `id`. Right after that, still on `main`, the model AUTOMATICALLY runs against
+    production, in production mode, THE SAME NAMED CHECKS THAT WERE RUN AND GREEN IN DEV for this
+    work — the affected named checks of the task, each as `python -m pipeline <name>` — and NOT
+    the full pipeline: the FULL PIPELINE against production runs ONLY on the user's explicit
+    command (user, 2026-11-17: "прод полный прогон запускается только по команде пользователя.
+    После зеленого дев идут теже проверки, что и на дев"), never on its own, never as part of the
+    production pass and never as a done check. These are the only checks that ever target
+    production: the pipeline targets DEV by default and accepts the production target only on
+    `main` (`PIPELINE_ENV=prod`) against the production installation that reports the version
+    `build.sh --dev no` has just deployed. A RED production check is reported at once with its exact output; the previous image and spec stay
     on the host for rollback (`service_packaging_standard`). (d) Afterwards the checkout returns to
     the working branch. (3) PORTS: every port of the dev installation, the database container's
     included, is the production port + 20000 when that stays within the valid port range (≤
@@ -336,9 +342,9 @@ laws:
     refused before the first call. With
     `dev` every check and example tests through the DEV versions — the project's DEV installation,
     the DEV servers and the `<client>-dev` packages of the fleet services it uses
-    (`fleet_dev_dependencies`); with `prod` it tests the production installation through the
-    production servers and clients, only as the full pipeline `build.sh --dev no` runs after the
-    production deploy (`dev_prod_instances`). (2) NO HARDCODE: every endpoint the pipeline uses — the
+    (`fleet_dev_dependencies`); with `prod` it tests the production installation through the production servers and clients,
+    only after the production deploy of `build.sh --dev no`: the same named checks that were GREEN in DEV, automatically, and the
+    full pipeline only on the user's explicit command (`dev_prod_instances`). (2) NO HARDCODE: every endpoint the pipeline uses — the
     project's own server and every fleet service: URL, host, port, network name, registration id —
     has TWO environment variables, `<NAME>_URL_DEV` and `<NAME>_URL_PROD` (likewise `_ID_DEV` /
     `_ID_PROD` and the like), in ONE COMMITTED file `pipeline/endpoints.env` — never named `.env`
@@ -377,6 +383,9 @@ laws:
     ONLY through its PRODUCTION server and its production client `<client>` (the newest published
     on PyPI, at a version not lower than the one tested); its `<NAME>_URL_DEV` and `<NAME>_URL_PROD`
     in `pipeline/endpoints.env` hold the same production address. That is not a production fallback and is never reported as one; a `-dev` endpoint or a `<client>-dev` of such a service is a DEFECT.
+    In the OWN project of a production-only service every check runs against production, so its
+    full pipeline is a production full run: it runs ONLY on the user's explicit command, never
+    automatically — after targeted GREEN the work reports and waits for that command (v1.7.92).
     `lmrs` is never called directly at all: its models are reached ONLY through macsc
     (`lmrs_only_through_macsc`). THE DEV CLIENT: in DEV mode check BOTH
     sources — PyPI (the newest published `<client>-dev`) and the service's LOCAL project checkout
@@ -396,7 +405,8 @@ laws:
     traffic of the thing under test reaches DEV — the DEV variant is used ONLY to test new
     capabilities and to run pipelines. The production pass
     (`build.sh --dev no`) is the one exception: it builds with the PRODUCTION `<client>` of every
-    fleet dependency at a version not lower than the one tested in DEV and its full pipeline runs against the PRODUCTION services. See `ops/delivery.yaml` `fleet_dev_dependencies`.
+    fleet dependency at a version not lower than the one tested in DEV and its production checks
+    (`dev_prod_instances`) run against the PRODUCTION services. See `ops/delivery.yaml` `fleet_dev_dependencies`.
   verify_before_delivery: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before reporting delivery] Run the affected named check after deployment or over
     the real example. RED returns to diagnosis, proof, correction and deployment. When every
