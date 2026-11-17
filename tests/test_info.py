@@ -11,9 +11,7 @@ import types
 import unittest
 from unittest.mock import patch
 
-REFERENCE = importlib.import_module(
-    "onedrive_api.command_reference"
-).REFERENCE
+REFERENCE = importlib.import_module("onedrive_api.command_reference").REFERENCE
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +23,7 @@ class ReferenceContractTests(unittest.TestCase):
 
     def setUp(self) -> None:
         """Load the production implementation without external dependencies."""
+
         class FakeCommand:
             @classmethod
             def get_schema(cls) -> dict:
@@ -37,9 +36,7 @@ class ReferenceContractTests(unittest.TestCase):
 
             @classmethod
             def metadata(cls) -> dict:
-                return {
-                    "parameters": cls._default_parameters_from_schema()
-                }
+                return {"parameters": cls._default_parameters_from_schema()}
 
         class FakeResult:
             def __init__(self, success: bool, data=None):
@@ -68,30 +65,37 @@ class ReferenceContractTests(unittest.TestCase):
             "backup_prepare_download",
             "backup_download_status",
             "backup_delete_export",
+            "backup_sites_list",
+            "backup_libraries_list",
+            "backup_discovery_status",
             "help",
         ):
-            cls = type(name, (FakeCommand,), {
-                "name": name,
-                "descr": name + " description",
-                "category": (
-                    "backup" if name.startswith("backup_")
-                    else "documentation"
-                ),
-                "version": "0.3.4",
-                "author": "OneDrive Backup",
-                "get_schema": classmethod(
-                    lambda klass: {
-                        "type": "object",
-                        "properties": {
-                            "limit": {
-                                "type": "integer",
-                                "default": 100,
-                            }
-                        },
-                        "additionalProperties": False,
-                    }
-                ),
-            })
+            category = "backup"
+            if not name.startswith("backup_"):
+                category = "documentation"
+            cls = type(
+                name,
+                (FakeCommand,),
+                {
+                    "name": name,
+                    "descr": name + " description",
+                    "category": category,
+                    "version": "0.3.4",
+                    "author": "OneDrive Backup",
+                    "get_schema": classmethod(
+                        lambda klass: {
+                            "type": "object",
+                            "properties": {
+                                "limit": {
+                                    "type": "integer",
+                                    "default": 100,
+                                }
+                            },
+                            "additionalProperties": False,
+                        }
+                    ),
+                },
+            )
             files[name] = cls
 
         stubs = {
@@ -103,10 +107,13 @@ class ReferenceContractTests(unittest.TestCase):
         for key, values in (
             ("base", {"Command": FakeCommand}),
             ("command_registry", {"registry": registry}),
-            ("result", {
-                "CommandResult": FakeResult,
-                "ErrorResult": FakeError,
-            }),
+            (
+                "result",
+                {
+                    "CommandResult": FakeResult,
+                    "ErrorResult": FakeError,
+                },
+            ),
         ):
             package = types.ModuleType("mcp_proxy_adapter.commands." + key)
             for field, value in values.items():
@@ -170,9 +177,7 @@ class ReferenceContractTests(unittest.TestCase):
         last = first.data["total_pages"]
         for invalid in (0, -1, last + 1, True, "1", 1.5):
             with self.subTest(page=invalid):
-                result = asyncio.run(
-                    self.command.execute(page=invalid)
-                )
+                result = asyncio.run(self.command.execute(page=invalid))
                 self.assertFalse(result.success)
                 self.assertEqual(result.code, 400)
 
