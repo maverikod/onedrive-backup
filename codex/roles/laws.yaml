@@ -978,9 +978,9 @@ laws:
     project — its DEV installation, pipeline, examples and tests included — uses such a service
     ONLY through its PRODUCTION server and its production client `<client>` (the newest published
     on PyPI, at a version not lower than the one tested); its `<NAME>_URL_DEV` and `<NAME>_URL_PROD`
-    in `pipeline/endpoints.env` hold the same production address. That is not a production
-    fallback and is never reported as one; a `-dev` endpoint or a `<client>-dev` of such a service
-    is a DEFECT. THE DEV CLIENT: in DEV mode check BOTH
+    in `pipeline/endpoints.env` hold the same production address. That is not a production fallback and is never reported as one; a `-dev` endpoint or a `<client>-dev` of such a service is a DEFECT.
+    `lmrs` is never called directly at all: its models are reached ONLY through macsc
+    (`lmrs_only_through_macsc`). THE DEV CLIENT: in DEV mode check BOTH
     sources — PyPI (the newest published `<client>-dev`) and the service's LOCAL project checkout
     (`~/projects/tools/<checkout>`, its current branch, the version from its single version
     source) — and INSTALL THE LAST PACKAGE PUBLISHED ON PyPI, the newest `<client>-dev`, never a
@@ -999,6 +999,26 @@ laws:
     capabilities and to run pipelines. The production pass
     (`build.sh --dev no`) is the one exception: it builds with the PRODUCTION `<client>` of every
     fleet dependency at a version not lower than the one tested in DEV and its full pipeline runs against the PRODUCTION services. See `ops/delivery.yaml` `fleet_dev_dependencies`.
+  lmrs_only_through_macsc: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any code, setting, dependency, check, example,
+    pipeline, script, agent tool call or manual command that would reach the lmrs model server,
+    in every project]
+    NOBODY CALLS lmrs DIRECTLY, IN ANY SITUATION (user, 2026-11-17: "запрети прямое обращение к
+    lmrs в любых ситуациях. Только через macsc"). Every request to the lmrs models goes ONLY
+    through macsc — the Model Access Core server of project `model-access-core` (`mac-server`;
+    `mac-server-dev` for a caller under development) — and macsc's own client. Forbidden
+    everywhere else: installing or importing `lmrs-client` or any lmrs client code; an lmrs URL,
+    host, port or registration id (`lmrs`, `https://lmrs:8012`) in code, settings, config
+    templates, `pipeline/endpoints.env`, checks, examples or fixtures; an MCP Proxy `call_server`
+    or `help` aimed at `lmrs`; a curl, ssh or socket probe of the lmrs API; and any fallback,
+    shortcut or "just this once" that bypasses macsc — debugging, an outage or a missing macsc
+    provider included. The ONLY direct callers are: (1) project `model-access-core` — the macsc
+    server as lmrs's provider, and that project's own checks of that provider; (2) project `lmrs`
+    for its own server — its pipeline, the post-deploy health/version proof of its `build.sh`, and
+    its debugging. A direct lmrs call anywhere else is a DEFECT and never a fallback; when macsc
+    lacks the lmrs provider or a capability, the caller's check is RED and a bug is filed against
+    `model-access-core`, never worked around. See `ops/delivery.yaml`
+    `fleet_dev_dependencies.lmrs_only_through_macsc`.
   deployed_pipeline_green_is_done: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any done claim] A service is done only after its final candidate is deployed to
     `root@192.168.254.26` — with `variables.dev_prod: true` to its DEV installation (deployed by `build.sh`,

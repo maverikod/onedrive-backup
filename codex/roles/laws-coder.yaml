@@ -376,9 +376,9 @@ laws:
     project — its DEV installation, pipeline, examples and tests included — uses such a service
     ONLY through its PRODUCTION server and its production client `<client>` (the newest published
     on PyPI, at a version not lower than the one tested); its `<NAME>_URL_DEV` and `<NAME>_URL_PROD`
-    in `pipeline/endpoints.env` hold the same production address. That is not a production
-    fallback and is never reported as one; a `-dev` endpoint or a `<client>-dev` of such a service
-    is a DEFECT. THE DEV CLIENT: in DEV mode check BOTH
+    in `pipeline/endpoints.env` hold the same production address. That is not a production fallback and is never reported as one; a `-dev` endpoint or a `<client>-dev` of such a service is a DEFECT.
+    `lmrs` is never called directly at all: its models are reached ONLY through macsc
+    (`lmrs_only_through_macsc`). THE DEV CLIENT: in DEV mode check BOTH
     sources — PyPI (the newest published `<client>-dev`) and the service's LOCAL project checkout
     (`~/projects/tools/<checkout>`, its current branch, the version from its single version
     source) — and INSTALL THE LAST PACKAGE PUBLISHED ON PyPI, the newest `<client>-dev`, never a

@@ -1,5 +1,5 @@
 # onedrive-backup — common laws for every role stage
-template_version: v1.7.90
+template_version: v1.7.91
 startup_contract:
   required_reads: [this file, triggers.yaml]
   exact_scope: >-
