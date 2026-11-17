@@ -122,8 +122,8 @@ laws:
     PROCESS — the verification environment, not a production release target — so building,
     deploying, restarting and running the pipeline there against your own service is ordinary
     work, `root` included, and is never a question put to the user. With `variables.dev_prod: true`
-    that free work is on its DEV installation; its own PRODUCTION installation and database change only
-    on the user's explicit command under `dev_prod_instances`. That same host carries PRODUCTION DATABASES and
+    that free work is on its DEV installation; its own PRODUCTION installation and database change only through the AUTOMATIC production pass of
+    `dev_prod_instances`, after the full DEV pipeline is GREEN. That same host carries PRODUCTION DATABASES and
     other projects' live services — which is why the line is per PROJECT, not per host. OUTSIDE
     the boundary every other project is STRICTLY READ-ONLY on every host and through every
     surface. You MAY read, search, analyse, reproduce and diagnose. You MAY NOT write: no edit,
@@ -166,8 +166,9 @@ laws:
     transition it already authorizes. See `ops/verification-discipline.yaml`.
   server_branches_are_mirrors: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any push or site-to-site synchronisation] Push and synchronisation happen ONLY on
-    the user's explicit command, with one standing exception: the mandatory `cas`+`local` exchange
-    of `two_site_sync`, which needs no command. Inside that exchange the integration branch is
+    the user's explicit command, with two standing exceptions that need no command: the mandatory `cas`+`local` exchange of
+    `two_site_sync`, and the merge into and push of `main` by the AUTOMATIC production pass of
+    `dev_prod_instances`. Inside that exchange the integration branch is
     merged and its conflicts resolved, while the other site's non-integration branch (the server's
     `local` when the work site is local, the local `cas` when the work site is CAS) is a disposable
     mirror: overwrite it from GitHub without analysing or preserving them, its differences being
@@ -265,23 +266,23 @@ laws:
     and GREEN on the fixed one measures the wrong quantity; do not add a separate model review.
   cas_index_is_dev: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any CAS project registration, two-site exchange,
-    branch switch or production command, in every project]
+    branch switch or production pass, in every project]
     The PRODUCTION Code Analysis Server indexes the DEV files of every working project: its project
     checkout stays on the WORKING branch (`local` under file_access local, mirrored through
     `two_site_sync`; `cas` under file_access cas) and NEVER checks out `main`, so search, analysis
     and refactoring always see the code under development. `main` is never synchronised into the
     CAS project and never indexed. Under file_access local the local checkout may switch to
-    `main` for a production command, because CAS indexes the server mirror of the working branch;
-    under file_access cas the production command builds from a separate clone of `main` outside
+    `main` for the production pass, because CAS indexes the server mirror of the working branch;
+    under file_access cas the production pass builds from a separate clone of `main` outside
     the CAS watch directory and leaves the indexed checkout on `cas`. A CAS project found on
     `main`, or an index answer about `main` code, is a DEFECT reported at once.
   deployed_pipeline_green_is_done: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any done claim] A service is done only after its final candidate is deployed to
     `root@192.168.254.26` — with `variables.dev_prod: true` to its DEV installation (deployed by `build.sh`,
     default `--dev yes`, registered under `iddev`) — reports the expected version and registration state, every
-    affected named check is GREEN, and the user-commanded full pipeline then runs GREEN once against it; production
-    then gets it only on the user's explicit command under `dev_prod_instances` — rebuilt without
-    `-dev`, deployed, and checked by one full pipeline against production. A library is done only
+    affected named check is GREEN, and the user-commanded full pipeline then runs GREEN once against it; production then gets it AUTOMATICALLY, with no user command, under `dev_prod_instances` —
+    rebuilt without `-dev`, deployed, and checked by one full pipeline against production — and
+    with `dev_prod` true the work is done only when that production pipeline is GREEN too. A library is done only
     after the same sequence over its real examples. A local result, commit, build, package,
     deploy acknowledgment, skipped check, unreachable service or model verdict is not delivery.
   exact_failure_reporting: >-

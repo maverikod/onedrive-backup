@@ -7,12 +7,13 @@ laws:
     progress. Under `local`, local branches are authoritative; under `cas`, CAS branches are
     authoritative. Prepare and verify work on the active site. NEVER edit `main` directly or
     rewrite published history. Push, promotion and every site-to-site synchronisation wait for
-    the user's explicit command, except the mandatory `cas`+`local` exchange of `two_site_sync`.
+    the user's explicit command, except the mandatory `cas`+`local` exchange of `two_site_sync`
+    and, for a `dev_prod` service, the AUTOMATIC production pass of `dev_prod_instances`.
     A merge into `main` and a push of `main` happen ONLY with the user's explicit permission, and
     only after a new version is released (version bump, build, deploy) and the FULL pipeline run
-    on that deployed version is GREEN. For a `dev_prod` service the user's production command is
-    that permission: the DEV-proven working branch is merged into `main`, `main` is pushed, and
-    production is built from `main` (`dev_prod_instances`).
+    on that deployed version is GREEN. For a `dev_prod` service a GREEN full DEV pipeline IS that permission and no user command is
+    needed: the production pass merges the DEV-proven working branch into `main`, pushes `main`
+    and builds production from `main` AUTOMATICALLY (`dev_prod_instances`).
   two_site_sync: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before the first agent unit of every block, and
     whenever the two sites must be brought together, in a project registered on the Code Analysis
@@ -167,7 +168,10 @@ laws:
     is never invented: the card's eight points bind either way.
   single_build_and_publication_flow: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any build, test deployment or package publication]
-    Use only the project-root `build.sh` from the authoritative working checkout and branch:
+    Use only the project-root `build.sh`, and the MODEL RUNS IT ITSELF: running `build.sh` is
+    MANDATORY for every build — DEV pass and production pass alike — and it is never handed to
+    the user, never left for a human to start and never asked about. Run it from the
+    authoritative working checkout and branch:
     `local` under file_access local, `cas` under file_access cas — the production pass
     (`build.sh --dev no`) from that same checkout switched to `main` — under file_access cas from a
     separate production clone of `main` outside the CAS watch directory (`cas_index_is_dev`) —
@@ -193,8 +197,8 @@ laws:
     `true`, `build.sh` takes `--dev yes|no` with `yes` by default: the default DEV pass is this build
     pass with every uploaded artefact suffixed `-dev` (image tag `<version>-dev`, client `<client>-dev`)
     and the DEV Debian package, and it ends by deploying the DEV installation on `root@192.168.254.26`
-    AUTOMATICALLY; `build.sh --dev no` is the PRODUCTION pass and runs ONLY on the user's explicit
-    command: it REBUILDS without `-dev`, deploys production and then runs the full pipeline against
+    AUTOMATICALLY; `build.sh --dev no` is the PRODUCTION pass and runs
+    AUTOMATICALLY — the model itself starts it, with no user command, permission or question, right after the full DEV pipeline of that version is GREEN: it REBUILDS without `-dev`, deploys production and then runs the full pipeline against
     it (`dev_prod_instances`). A library is never
     deployed there — its PyPI publication is its deployment (`library_examples_are_the_pipeline`).
     Run only changed or new named pipeline commands; the pipeline uses the client from the CURRENT
@@ -231,7 +235,7 @@ laws:
     debugging and testing are done ONLY in DEV — every "deployed service", "live server", "real
     instance" or "candidate deploy" in this contract means the DEV installation. NEVER run a named
     check or the pipeline against production — the ONE exception is the full pipeline that
-    `build.sh --dev no` runs right after the user-commanded production deploy — and NEVER point the dev installation or a test at the
+    `build.sh --dev no` runs right after the automatic production deploy — and NEVER point the dev installation or a test at the
     production database. (1) IDENTITY: the root `projectid` file carries TWO identifiers of the code
     — `id` for production and `iddev` for development, like the program keys an installer writes
     to a registry; the dev installation uses `iddev` everywhere the production one uses `id`, and
@@ -252,9 +256,9 @@ laws:
     suffix is ALWAYS `-dev` — never `dev`, `_dev` or `.dev0` — and labels the ARTEFACTS (image tag,
     Debian package name, client distribution name) only; the code — the
     server's response, the client's `_version.py` — carries the bare `<version>`. `build.sh --dev no`
-    is the PRODUCTION pass and runs ONLY on the user's explicit command, in this order: (a) the
-    working branch (`local` under file_access local, `cas` under cas), at the DEV version the command
-    names — by default the last one whose full DEV pipeline is GREEN — is merged into `main` with
+    is the PRODUCTION pass and runs AUTOMATICALLY — the model itself starts it, with no user command, permission or question, right after the full DEV pipeline of that version is GREEN, in this order: (a) the
+    working branch (`local` under file_access local, `cas` under cas), at that DEV version — the one
+    whose full DEV pipeline has just gone GREEN — is merged into `main` with
     everything on it, and `main` is pushed — the production dependencies are derived by
     `build.sh` (`pipeline_environment` (4)); (b) the authoritative checkout is switched to `main` — under file_access cas, whose authoritative checkout is the one the Code Analysis Server indexes, a SEPARATE production clone of `main` outside the CAS watch directory is used instead, because the indexed checkout never leaves the working branch (`cas_index_is_dev`); (c)
     `build.sh --dev no` runs there and REBUILDS everything WITHOUT `-dev` under that same version number: the image `<image>:<version>`
@@ -291,10 +295,14 @@ laws:
     the image included), logs, keys, image spec and runtime: `/etc/<svc>` -> `/etc/<svc>-dev`,
     `/var/lib/<svc>` -> `/var/lib/<svc>-dev`, `/var/log/<svc>` -> `/var/log/<svc>-dev`,
     `/opt/<svc>` -> `/opt/<svc>-dev`; DEV never reads or writes a production directory. (6)
-    PRODUCTION IS BUILT, DEPLOYED AND CHECKED ONLY ON THE USER'S EXPLICIT COMMAND — never
-    automatically, never as a step of another task, never because a full DEV pipeline is GREEN. A
-    production command is also the user's permission for `main`: it merges the working branch into
-    `main`, pushes `main` and builds production from `main` — nothing else touches `main`. (7) THE WORK IS SEPARATED
+    PRODUCTION GOES OUT AUTOMATICALLY AFTER THE FULL DEV PIPELINE IS GREEN — no user command,
+    permission or confirmation is required, waited for or asked for: as soon as the full DEV
+    pipeline of a version is GREEN, the model itself runs `build.sh --dev no` in the same task.
+    Never before that GREEN: not on targeted GREEN alone, not after a RED or unfinished full DEV
+    run, not for a version whose full DEV run did not pass. Waiting for a production command,
+    asking for one or leaving `build.sh --dev no` to the user is a DEFECT. The GREEN full DEV
+    pipeline is also the permission for `main`: the production pass merges the working branch
+    into `main`, pushes `main` and builds production from `main` — nothing else touches `main`. (7) THE WORK IS SEPARATED
     FROM THE TEST SERVERS: the WORK goes to PRODUCTION — every model log of the development process
     (the session of `logger_exchange`, every task, answer and agent message), the exchange with the
     user, every document and every report are written to the PRODUCTION AI Logger, doc-store and
@@ -321,7 +329,7 @@ laws:
   pipeline_environment: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: writing, changing or running the project's pipeline,
     its checks, examples or their configuration, its dependency declarations, or a production
-    command, in every project]
+    pass, in every project]
     (1) TARGET VARIABLE: the pipeline's target is chosen by ONE environment variable,
     `PIPELINE_ENV`, with exactly two values — `dev` on the working branch (`local` / `cas`) and
     `prod` on `main`. THE BRANCH DECIDES: the pipeline reads the current git branch — `main` is
