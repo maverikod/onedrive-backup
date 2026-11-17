@@ -4,7 +4,7 @@
   "mirror_dir": "/data/mirror",
   "repository_dir": "/data/restic-repo",
   "password_file": "/secrets/restic-password",
-  "lock_file": "/secrets/backup.lock",
+  "lock_file": "/data/backup.lock",
   "log_file": null,
   "required_mountpoint": "/data",
   "keep_daily": 14,
