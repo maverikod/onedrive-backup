@@ -429,7 +429,7 @@ laws:
     in `pipeline/endpoints.env` hold the same production address. That is not a production fallback and is never reported as one; a `-dev` endpoint or a `<client>-dev` of such a service is a DEFECT.
     In the OWN project of a production-only service every check runs against production, so its
     full pipeline is a production full run: it runs ONLY on the user's explicit command, never
-    automatically — after targeted GREEN the work reports and waits for that command (v1.7.92).
+    automatically — after targeted GREEN the work reports and waits for that command (v1.7.93).
     `lmrs` is never called directly at all: its models are reached ONLY through macsc
     (`lmrs_only_through_macsc`). THE DEV CLIENT: in DEV mode check BOTH
     sources — PyPI (the newest published `<client>-dev`) and the service's LOCAL project checkout

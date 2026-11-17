@@ -11,7 +11,7 @@ are forbidden until a current event selects them. An extra startup read is a con
 
 # onedrive-backup - Claude operating contract
 
-**Prompts template:** `claude-prompts-v1` rev **1.7.92** (2026-11-17)
+**Prompts template:** `claude-prompts-v1` rev **1.7.93** (2026-11-17)
 
 This file is the entrypoint and is loaded automatically at session start.
 
