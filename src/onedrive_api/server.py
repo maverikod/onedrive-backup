@@ -410,10 +410,11 @@ def make_app(config_path: str | Path):
     ]
 
     from .ui import install_ui
+    from .sharepoint_discovery import DiscoveryError, SharePointInventory
 
     install_ui(app, _catalog)
 
-    def fail(exc: CatalogError) -> HTTPException:
+    def fail(exc: CatalogError | DiscoveryError) -> HTTPException:
         return HTTPException(status_code=exc.status, detail=str(exc))
 
     @app.get("/api/v1/health")
@@ -423,6 +424,52 @@ def make_app(config_path: str | Path):
             "protocol": "mtls",
             "service": "onedrive-backup",
         }
+
+    def sharepoint_store() -> SharePointInventory:
+        """Resolve the private source inventory on the backup volume."""
+        base = Path(os.environ.get("ONEDRIVE_BACKUP_DATA", "/data"))
+        return SharePointInventory(base / "sharepoint")
+
+    @app.get("/api/v1/discovery/status")
+    async def sharepoint_discovery_status():
+        """Return nonsecret completeness and readiness information."""
+        if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1":
+            return {
+                "ready": False, "complete": False,
+                "state": "SCAFFOLD_ONLY",
+            }
+        try:
+            return await asyncio.to_thread(sharepoint_store().status)
+        except DiscoveryError as exc:
+            raise fail(exc) from exc
+
+    @app.get("/api/v1/sites")
+    async def sharepoint_sites(
+        limit: int = 100, offset: int = 0, query: str = "",
+    ):
+        """Browse completed SharePoint site discovery results."""
+        if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1":
+            raise HTTPException(503, detail="SCAFFOLD_ONLY")
+        try:
+            return await asyncio.to_thread(
+                sharepoint_store().sites, limit, offset, query
+            )
+        except DiscoveryError as exc:
+            raise fail(exc) from exc
+
+    @app.get("/api/v1/sites/{site_id}/libraries")
+    async def sharepoint_libraries(
+        site_id: str, limit: int = 100, offset: int = 0,
+    ):
+        """Browse libraries within one stable site identifier."""
+        if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1":
+            raise HTTPException(503, detail="SCAFFOLD_ONLY")
+        try:
+            return await asyncio.to_thread(
+                sharepoint_store().libraries, site_id, limit, offset
+            )
+        except DiscoveryError as exc:
+            raise fail(exc) from exc
 
     @app.get("/api/v1/snapshots")
     async def backup_snapshots(limit: int = 100):
