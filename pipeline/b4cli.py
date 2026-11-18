@@ -8,7 +8,7 @@ odbcli contract these checks hold the implementation to (tester reading of matri
   sites [--limit --offset --query], libraries SITE_ID [--limit --offset], discovery-status, health,
   fetch EXPORT_ID --output PATH [--force] [--delete-after], download SNAPSHOT_ID --output PATH [--path] [--force]
   [--keep-export], call COMMAND [--params-json JSON], download-link EXPORT_ID, and download-begin EXPORT_ID for the
-  command backup_download_begin (the matrix has no O row for it: reported as a gap).
+  command backup_download_begin (row O16, revision 4).
   stdout is JSON; exit 0 on success, 1 on an authentication failure, 2 on a usage error, other non-zero on a server error.
 '''
 
@@ -24,7 +24,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-from pipeline import b4base as base, b4client, cmdcases, live
+from pipeline import b4base as base, b4client, cmdcases, credentials, live
 from pipeline.b4base import NO_CREDS
 from pipeline.report import Report
 
@@ -38,6 +38,10 @@ BASELINE = {'help': [], 'info': [], 'snapshots': [], 'files': ['abcdef12'], 'pre
             'delete': [base.ZERO_ID], 'sites': [], 'libraries': ['site-1'], 'discovery-status': [], 'health': [],
             'download-link': [base.ZERO_ID]}
 NEEDS_S1 = ('snapshots', 'files', 'prepare', 'sites', 'libraries')
+ODBCLI_ONLY = ('health', 'fetch', 'download', 'call', 'download-link')
+BEGIN_KEYS = ('transfer_id', 'filename', 'size_bytes', 'checksum_algorithm', 'checksum_value', 'compression', 'expires_at', 'transport')
+BAD_IDS = (('uppercase hex', 'ABCDEF01' * 4), ('31 characters', '0' * 31), ('33 characters', '0' * 33), ('empty', ''),
+           ('non-hex', 'g' * 32))
 
 
 def entry(report: Report):
@@ -203,8 +207,15 @@ def odbcli_auth() -> None:
     report.finish('odbcli_auth')
 
 
+def _subcommands(main) -> list[str] | None:
+    '''Return the subcommand names odbcli lists in its own help, or None when it lists none.'''
+    code, out, err = run_cli(main, ['--help'])
+    found = re.search(r'[{]([a-z0-9_,-]+)[}]', out + err)
+    return sorted(found.group(1).split(',')) if found else None
+
+
 def odbcli_surface() -> None:
-    '''OS1: every live server command is an odbcli subcommand with all its arguments (parity against the live help).'''
+    '''OS1 (revision 4, 10.1): the odbcli subcommands cover EVERY live server command (11) with all arguments; a live command without a subcommand, or a subcommand with no live command other than the odbcli-only O11-O15, is RED.'''
     report = Report()
     main = entry(report)
     try:
@@ -212,18 +223,99 @@ def odbcli_surface() -> None:
     except live.LiveUnreachable as exc:
         report.env.append('help: not executed, production service unreachable: %s' % exc)
         commands = []
-    wanted = sorted(set(commands) | {'backup_download_begin'})
+    if commands and commands != sorted(base.COMMANDS):
+        report.product.append('OS1 the live help lists %d commands %s, expected exactly the 11 commands of rows M1..M11 %s' % (len(commands), commands, sorted(base.COMMANDS)))
+    wanted = {command: SUBCOMMAND.get(command, command.replace('_', '-')) for command in commands}
     if main is not None:
-        for command in wanted:
-            sub = SUBCOMMAND.get(command, command.replace('_', '-'))
+        listed = _subcommands(main)
+        if listed is None:
+            report.product.append('OS1 odbcli --help does not list its subcommands, so the parity with the live commands cannot be established')
+        else:
+            missing = sorted(set(wanted.values()) - set(listed))
+            extra = sorted(set(listed) - set(wanted.values()) - set(ODBCLI_ONLY))
+            if missing:
+                report.product.append('OS1 live server commands without an odbcli subcommand: %s' % missing)
+            if extra:
+                report.product.append('OS1 odbcli subcommands with no live server command (only the odbcli-only O11-O15 %s are allowed): %s' % (list(ODBCLI_ONLY), extra))
+        for command, sub in wanted.items():
             code, out, err = run_cli(main, [sub, '--help'])
             if code != 0:
-                report.product.append('OS1 server command %s has no odbcli subcommand %s (exit %r)%s' % (command, sub, code, '' if command in commands else ' - the command itself is not registered yet' ))
+                report.product.append('OS1 server command %s: odbcli %s --help exit %r, expected 0' % (command, sub, code))
                 continue
-            names = base.command_params(command) if command in commands else []
-            _help_names(report, main, sub, 'OS1 ' + command, names)
-        code, out, err = run_cli(main, ['health', '--help'])
-        if code != 0:
-            report.product.append('OS1 odbcli has no health subcommand (O11)')
-    report.info.append('gap: the matrix has no O row for odbcli download-begin (command backup_download_begin, decision 2 asks for every server command)')
+            _help_names(report, main, sub, 'OS1 ' + command, base.command_params(command))
+        for sub in ODBCLI_ONLY:
+            code, out, err = run_cli(main, [sub, '--help'])
+            if code != 0:
+                report.product.append('OS1 odbcli-only subcommand %s: --help exit %r, expected 0 (rows O11-O15)' % (sub, code))
     report.finish('odbcli_surface')
+
+
+def _no_secret(report: Report, label: str, out: str, err: str) -> None:
+    '''Neither the login, the password nor the token appears in stdout or stderr (O16 contract; the values are never printed).'''
+    if any(secret and (secret in out or secret in err) for secret in credentials.secret_values()):
+        report.product.append('%s: the login, the password or the token appears in stdout or stderr (forbidden in every case)' % label)
+
+
+def _begin_success(report: Report, main) -> None:
+    '''O16 success on an S1 service: one JSON object of the M11 shape, exit 0, empty stderr, the export itself is kept.'''
+    made = cmdcases._prepare_small(report, 'odbcli_download_begin')
+    if not made:
+        return
+    snapshot_id, path, meta = made
+    export_id = meta.get('export_id', base.ZERO_ID)
+    try:
+        code, out, err = run_cli(main, global_args() + ['download-begin', export_id])
+        _no_secret(report, 'O16 baseline', out, err)
+        if code != 0 or err.strip():
+            report.product.append('O16 baseline odbcli download-begin: exit %r stderr %r, expected exit 0 and an empty stderr' % (code, err.strip()[:100]))
+            return
+        try:
+            data = json.loads(out)
+        except ValueError:
+            report.product.append('O16 baseline: stdout is not exactly one JSON object: %r' % out[:80])
+            return
+        missing = [key for key in BEGIN_KEYS if key not in data] if isinstance(data, dict) else list(BEGIN_KEYS)
+        if missing:
+            report.product.append('O16 baseline: the JSON object lacks %s of the M11 result' % missing)
+            return
+        if data['checksum_algorithm'] != 'sha256' or data['checksum_value'] != meta.get('sha256') or data['compression'] != 'identity':
+            report.product.append('O16 baseline: checksum_algorithm %r checksum_value %r compression %r differ from sha256, the export sha256 and identity' % (data['checksum_algorithm'], data['checksum_value'], data['compression']))
+        if data['size_bytes'] != meta.get('size_bytes') or data['filename'] != meta.get('filename') or not isinstance(data['transport'], dict) or data['transport'].get('chunk_method') != 'GET':
+            report.product.append('O16 baseline: size_bytes, filename or transport.chunk_method differ from the export metadata and GET')
+        kind, code2, message, status_data = live.request('backup_download_status', {'export_id': export_id})
+        if kind != 'success':
+            report.product.append('O16 baseline: the export was deleted or broken by download-begin (status answers %s %s)' % (kind, code2))
+    finally:
+        live.request('backup_delete_export', {'export_id': export_id})
+
+
+def odbcli_download_begin() -> None:
+    '''O16 (revision 4, 10.1): odbcli download-begin EXPORT_ID for the command backup_download_begin (M11); argparse 2, server refusal 1, success one JSON object, no secret printed.'''
+    report = Report()
+    main = entry(report)
+    if main is not None:
+        _help_names(report, main, 'download-begin', 'O16', ['export_id'])
+        _usage_cases(report, main, 'download-begin', 'O16', ['id'])
+        code, out, err = run_cli(main, global_args() + ['download-begin', base.ZERO_ID, 'extra-argument'])
+        if code != 2:
+            report.product.append('O16 odbcli download-begin with a second positional argument: exit %r, expected the usage error 2' % code)
+        for label, value in BAD_IDS:
+            code, out, err = run_cli(main, global_args() + ['download-begin', value])
+            _no_secret(report, 'O16 %s' % label, out, err)
+            if code != 1 or out.strip() or not (err.strip() and ('400' in err or '32602' in err)):
+                report.product.append('O16 odbcli download-begin %s: exit %r stdout %r stderr %r, expected exit 1, empty stdout and a stderr naming the refusal 400 or -32602' % (label, code, out.strip()[:40], err.strip()[:100]))
+        try:
+            state = live.service_state()
+        except live.LiveUnreachable as exc:
+            report.env.append('production service unreachable: %s' % exc)
+            state = None
+        code, out, err = run_cli(main, global_args() + ['download-begin', base.ZERO_ID])
+        _no_secret(report, 'O16 unknown export', out, err)
+        wanted = '404' if state == 'S1' else '503'
+        if state is not None and (code != 1 or out.strip() or wanted not in err):
+            report.product.append('O16 odbcli download-begin of an unknown export on an %s service: exit %r stdout %r stderr %r, expected exit 1, empty stdout and %s' % (state, code, out.strip()[:40], err.strip()[:100], wanted))
+        if state == 'S1':
+            _begin_success(report, main)
+        elif state is not None:
+            report.state.append('O16 baseline odbcli download-begin of a prepared export needs an S1 service (host directory, container mount, restic password, login and password, finished inventory) but production answers %s' % state)
+    report.finish('odbcli_download_begin')

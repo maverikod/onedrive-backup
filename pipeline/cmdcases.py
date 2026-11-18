@@ -90,6 +90,10 @@ def _judge_invalid(report: Report, desc: str, reply, expect: str, name: str) -> 
         _judge_rpc(report, desc, reply, 'type', True, name)
     elif expect == 'V':
         _judge_rpc(report, desc, reply, 'value', True, name)
+    elif expect == 'U601':
+        if not (kind == 'rpc_error' and code == -32601 and isinstance(data, dict) and data.get('violation') == 'value'):
+            report.product.append('%s: expected adapter error -32601 with violation=value (unknown command name, M1 cmdname_invalid_1), got %s'
+                                  % (desc, _brief(*reply)))
     elif expect == 'C400':
         if not (kind == 'command_error' and code == 400):
             report.product.append('%s: expected command error 400, got %s' % (desc, _brief(*reply)))
@@ -311,11 +315,7 @@ def _execute(report: Report, row: dict, case: dict, contract: dict, state) -> No
         elif expect in ('C404', 'C404S'):
             _s1(report, row['id'], cid, desc)
         else:
-            reply = live.request(row['command'], sent)
-            if expect == 'C400' and sent.get(name) == '' and reply[0] == 'rpc_error' and reply[1] == -32602 and isinstance(reply[3], dict) and reply[3].get('violation') in ('type', 'value'):
-                report.info.append('%s: live schema refuses the empty value at the adapter (-32602) before the command error 400 of cell C400' % desc)
-            else:
-                _judge_invalid(report, desc, reply, expect, name)
+            _judge_invalid(report, desc, live.request(row['command'], sent), expect, name)
     elif cid == 'S0_scaffold_gate':
         kind, code, message, data = live.request(row['command'], sent)
         if not (kind == 'command_error' and code == 503 and 'scaffold' in message.lower()):

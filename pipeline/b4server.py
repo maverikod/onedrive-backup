@@ -12,12 +12,15 @@ import json
 import os
 import re
 import shutil
+import socket
 import ssl
 import subprocess
 import tempfile
+import urllib.parse
 
 from pipeline import b4base as base, cmdcases, live
 from pipeline.b4base import JSON_HEADERS, NO_CREDS, ZERO_ID, Q
+from pipeline.environment import PipelineEnvError, endpoint
 from pipeline.report import Report
 
 SERVER = 'src/onedrive_api/server.py'
@@ -76,21 +79,29 @@ def rest_removed() -> None:
     report.finish('rest_removed')
 
 
-def ws_closed() -> None:
-    '''F10: /ws stays closed (decision 6, adapter bug c0438b53): plain GET answers 404 (401 before the token gate), the Upgrade handshake answers 404 or 403 (the ASGI server refuses it before the app, live-captured), never 101.'''
-    report = Report()
+def _ws_cases(report: Report, prefix: str) -> None:
+    '''F10 (revision 4, 10.2): exact statuses and no tolerance.
+
+    Plain GET /ws answers 404 with the run token and 401 without it (the token gate of AU1). A WebSocket Upgrade handshake
+    answers 403 with and without the token (refused by the ASGI server itself), never 101: no handshake completes.
+    '''
     for label, headers in (('GET /ws', {}), ('GET /ws with a WebSocket Upgrade handshake', UPGRADE)):
-        for auth in ((False, True) if live.token() else (False,)):
-            tag = '%s %s' % (label, 'with token' if auth and live.token() else 'without token')
-            got = _try(report, tag, base.probe, 'GET', '/ws', None, headers, auth)
-            if got is None:
+        for auth in (False, True):
+            tag = '%s %s %s' % (prefix, label, 'with token' if auth else 'without token')
+            if auth and not live.token():
+                report.state.append('%s: needs the token T: %s' % (tag, NO_CREDS))
                 continue
-            allowed = (404,) if (auth and live.token()) else (404, 401)
-            if headers is UPGRADE:
-                allowed = allowed + (403,)
-            if got[0] not in allowed:
-                report.product.append('%s: answered %d %s, expected %s (the /ws route must stay filtered out, F10)'
-                                      % (tag, got[0], base.brief(got[2]), ' or '.join(map(str, allowed))))
+            wanted = 403 if headers is UPGRADE else (404 if auth else 401)
+            got = _try(report, tag, base.probe, 'GET', '/ws', None, headers, auth)
+            if got is not None and got[0] != wanted:
+                report.product.append('%s: answered %d %s, expected exactly %d (the /ws route stays closed, F10; never 101)'
+                                      % (tag, got[0], base.brief(got[2]), wanted))
+
+
+def ws_closed() -> None:
+    '''F10: /ws stays closed (decision 6, adapter bug c0438b53): plain GET 404 with the token and 401 without it, the Upgrade handshake 403 with and without the token, never 101.'''
+    report = Report()
+    _ws_cases(report, 'F10')
     report.finish('ws_closed')
 
 
@@ -147,26 +158,65 @@ def surface_framework_routes() -> None:
                 report.product.append('%s: the route schema still holds %s' % (row, found))
     else:
         report.info.append('F8, F9: route presence is not provable without /openapi.json (F5 is RED); the behaviour of both routes is asserted by download_link and transfer_confinement')
-    for label, method, path in (('F10 GET /ws', 'GET', '/ws'), ('F11 GET /api/transfer/uploads', 'GET', '/api/transfer/uploads'),
+    _ws_cases(report, 'F10')
+    for label, method, path in (('F11 GET /api/transfer/uploads', 'GET', '/api/transfer/uploads'),
                                 ('F11 POST /api/transfer/uploads', 'POST', '/api/transfer/uploads')):
         expect(label, method, path, (404,), b'{}' if method == 'POST' else None, JSON_HEADERS if method == 'POST' else None)
     report.finish('surface_framework_routes')
 
 
+def _proxy_identity() -> tuple[str, str]:
+    '''Return the MCP Proxy host name from endpoints.env and its address from DNS (the name when DNS cannot resolve it).'''
+    try:
+        host = urllib.parse.urlsplit(endpoint('MCP_PROXY_URL')).hostname or ''
+    except PipelineEnvError:
+        host = ''
+    try:
+        return host, socket.gethostbyname(host)
+    except OSError:
+        return host, host
+
+
+def spoof_header_sets() -> list[tuple[str, dict]]:
+    '''Request headers that name the MCP Proxy; a direct peer carrying them gains nothing (R18: transport peer only).'''
+    name, address = _proxy_identity()
+    single = (('X-Forwarded-For', {'X-Forwarded-For': address}), ('Forwarded', {'Forwarded': 'for=%s;host=%s' % (address, name)}),
+              ('X-Real-IP', {'X-Real-IP': address}), ('Host', {'Host': name}))
+    merged: dict = {}
+    for _, headers in single:
+        merged.update(headers)
+    return list(single) + [('all four', merged)]
+
+
+def _unauthorized(status: int, decoded) -> bool:
+    error = decoded.get('error') if isinstance(decoded, dict) else None
+    return status == 401 and isinstance(error, dict) and error.get('code') == 401 and error.get('type') == 'authentication_error'
+
+
 def auth_token() -> None:
-    '''AU1..AU3: /api/jsonrpc without or with a wrong token answers 401 (authentication_error), the right token T runs the command.'''
+    '''AU1..AU3, scope = the DIRECT peer (R18): no token, an empty token, spoofed proxy headers and a wrong token answer 401; the right token T runs the command.'''
     report = Report()
     cfg = base.src_line('config/server.json', 'use_token')
-    for row, label, token in (('AU1', 'no token', None), ('AU2', 'a wrong token', 'not-the-token')):
-        got = _try(report, row + ' ' + label, base.rpc, 'help', {}, token)
+    denied = [('AU1 no token', None, None), ('AU1 empty X-API-Key value', '', None)]
+    denied += [('AU1 no token and spoofed %s' % label, None, headers) for label, headers in spoof_header_sets()]
+    denied += [('AU2 a wrong token', 'not-the-token', None), ('AU2 a wrong token and spoofed headers', 'not-the-token', spoof_header_sets()[-1][1])]
+    for label, token, extra in denied:
+        got = _try(report, label, base.rpc, 'help', {}, token, extra)
         if got is None:
             continue
         status, decoded = got
-        error = decoded.get('error') if isinstance(decoded, dict) else None
         if status != 401:
-            report.product.append('%s POST /api/jsonrpc help with %s: answered %d, expected 401 (auth.use_token is false at %s, decision 5)' % (row, label, status, cfg))
-        elif not (isinstance(error, dict) and error.get('code') == 401 and error.get('type') == 'authentication_error'):
-            report.product.append('%s: 401 body %r, expected {error: {code: 401, type: authentication_error}}' % (row, decoded))
+            report.product.append('%s POST /api/jsonrpc help: answered %d, expected 401 (a direct peer needs the token T, R18; auth.use_token at %s)' % (label, status, cfg))
+        elif not _unauthorized(status, decoded):
+            report.product.append('%s: 401 body %r, expected {error: {code: 401, type: authentication_error}}' % (label, decoded))
+    one = json.dumps({'jsonrpc': '2.0', 'method': 'help', 'params': {}, 'id': 1}).encode('utf-8')
+    transfer = json.dumps({'source_path': '/x', 'filename': 'x.bin', 'compression': 'identity'}).encode('utf-8')
+    for label, method, path, body in (('AU1 POST /api/jsonrpc/batch without token', 'POST', '/api/jsonrpc/batch', b'[' + one + b']'),
+                                      ('AU1 GET /downloads/<id>/<name> without token', 'GET', '/downloads/%s/x.bin' % ZERO_ID, None),
+                                      ('AU1 POST /api/transfer/downloads without token', 'POST', '/api/transfer/downloads', transfer)):
+        got = _try(report, label, base.probe, method, path, body, JSON_HEADERS if body else None, False)
+        if got is not None and got[0] != 401:
+            report.product.append('%s: answered %d %s, expected 401 (every direct request needs the token T)' % (label, got[0], base.brief(got[2])))
     if live.token():
         got = _try(report, 'AU3 correct token', base.rpc, 'help', {}, live.token())
         if got is not None and not (got[0] == 200 and isinstance(got[1], dict) and got[1].get('result', {}).get('success') is True):
@@ -280,7 +330,7 @@ def _attempt(context: ssl.SSLContext) -> str:
 
 
 def mtls_auth() -> None:
-    '''PX10: no client certificate and an untrusted one are refused, the trusted pair is served (R7).'''
+    '''PX10 (R7, R18): no client certificate and an untrusted one are refused for every peer, the trusted pair is served; mTLS alone does not admit a direct peer.'''
     report = Report()
     ca, cert, key = live._tls_files()
     if not all(os.path.isfile(item) for item in (ca, cert, key)):
@@ -308,4 +358,7 @@ def mtls_auth() -> None:
     good = _try(report, 'trusted pair', _attempt, live._context())
     if good is not None and good != 'served: 200':
         report.product.append('the trusted client pair got %s, expected served: 200' % good)
+    got = _try(report, 'trusted pair without token', base.rpc, 'help', {}, None)
+    if got is not None and got[0] != 401:
+        report.product.append('the trusted client pair without the token T on POST /api/jsonrpc: answered %d, expected 401 (mTLS is mandatory for every peer, the token T for a direct peer, R7)' % got[0])
     report.finish('mtls_auth')

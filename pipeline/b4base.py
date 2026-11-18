@@ -8,9 +8,10 @@ is login and password from the server configuration, carried as the token T = ba
 the X-API-Key header (the dynamic adapter token is not in scope); (6) /ws stays closed; (7) the live version
 equals VERSION.
 
-The pipeline run holds the credentials only in its environment: ONEDRIVE_BACKUP_LOGIN and
-ONEDRIVE_BACKUP_PASSWORD, or a ready token in ONEDRIVE_BACKUP_TOKEN. Nothing of it is committed. A case that needs
-them and does not find them is a STATE finding, never skipped.
+The pipeline run holds the credentials only as ONEDRIVE_BACKUP_LOGIN and ONEDRIVE_BACKUP_PASSWORD, read through
+pipeline.credentials (a git-ignored 0600 env file named by ONEDRIVE_BACKUP_CREDENTIALS_FILE, or the same two variables in the
+environment of the run). Nothing of it is committed. A case that needs them and does not find them is RED as STATE or
+ENVIRONMENT (R17), never PRODUCT and never skipped.
 '''
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import ssl
 import urllib.parse
 from pathlib import Path
 
-from pipeline import live
+from pipeline import credentials, live
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = ROOT / 'client' / 'onedrive_backup_client'
@@ -30,8 +31,7 @@ TOKEN_HEADER = 'X-API-Key'
 Q = chr(34)
 ZERO_ID = '0' * 32
 JSON_HEADERS = {'Content-Type': 'application/json'}
-NO_CREDS = ('the pipeline run holds no credentials (set ONEDRIVE_BACKUP_LOGIN and ONEDRIVE_BACKUP_PASSWORD,'
-            ' or ONEDRIVE_BACKUP_TOKEN, in the environment of the run)')
+NO_CREDS = 'the run credentials are unusable: ' + (credentials.problem() or 'no problem found')
 URL_PATTERN = '/downloads/<32 lowercase hex>/<filename>'
 COMMANDS = ('help', 'info', 'backup_snapshots', 'backup_list_files', 'backup_prepare_download', 'backup_download_status',
             'backup_delete_export', 'backup_sites_list', 'backup_libraries_list', 'backup_discovery_status',
@@ -84,11 +84,13 @@ def probe(method: str, path: str, body: bytes | None = None, headers: dict | Non
     return http_request(method, path, body, merged)
 
 
-def rpc(command: str, params: dict | None = None, token: str | None = None) -> tuple[int, object]:
-    '''POST one JSON-RPC request with an explicit token (None sends no token header).'''
+def rpc(command: str, params: dict | None = None, token: str | None = None, extra: dict | None = None) -> tuple[int, object]:
+    '''POST one JSON-RPC request with an explicit token (None sends no token header) and optional extra headers.'''
     headers = dict(JSON_HEADERS)
     if token is not None:
         headers[TOKEN_HEADER] = token
+    if extra:
+        headers.update(extra)
     body = json.dumps({'jsonrpc': '2.0', 'method': command, 'params': params or {}, 'id': 1}).encode('utf-8')
     status, _, raw = http_request('POST', '/api/jsonrpc', body, headers)
     try:

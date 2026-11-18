@@ -10,7 +10,6 @@ checks report as an ENVIRONMENT result, separately from a product result.
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import ssl
@@ -18,6 +17,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from pipeline import credentials
 from pipeline.environment import PipelineEnvError, endpoint
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,14 +58,11 @@ def base_url() -> str:
 
 
 def token() -> str | None:
-    '''Return the interim token T = base64(login:password) of the run credentials (decision D3), or None.'''
-    given = os.environ.get('ONEDRIVE_BACKUP_TOKEN')
-    if given:
-        return given
-    login, password = os.environ.get('ONEDRIVE_BACKUP_LOGIN'), os.environ.get('ONEDRIVE_BACKUP_PASSWORD')
-    if login and password:
-        return base64.b64encode((login + ':' + password).encode('utf-8')).decode('ascii')
-    return None
+    '''Return the interim token T = base64(login:password) of the run credentials (decision D3, row PX11), or None.
+
+    The login and the password are the only inputs (pipeline.credentials); a ready-made token variable is not an input.
+    '''
+    return credentials.token()
 
 
 def call(command: str, params: dict | None = None, timeout: int = 60) -> dict:

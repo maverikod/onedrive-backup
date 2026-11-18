@@ -26,7 +26,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from pipeline import b4base as base, cmdcases, live, matrix
+from pipeline import b4base as base, cmdcases, credentials, live, matrix
 from pipeline.b4base import NO_CREDS, PACKAGE_DIR, ROOT
 from pipeline.report import Report
 
@@ -79,10 +79,9 @@ def make_client(module, report: Report, creds: bool = True):
     '''Build BackupClient against production with keyword arguments of the contract; None after a finding.'''
     ca, cert, key = live._tls_files()
     kwargs = {'url': live.base_url(), 'ca': ca, 'cert': cert, 'key': key, 'timeout': 30}
-    if creds and os.environ.get('ONEDRIVE_BACKUP_LOGIN') and os.environ.get('ONEDRIVE_BACKUP_PASSWORD'):
-        kwargs.update(login=os.environ['ONEDRIVE_BACKUP_LOGIN'], password=os.environ['ONEDRIVE_BACKUP_PASSWORD'])
-    elif creds and live.token():
-        kwargs['token'] = live.token()
+    if creds and credentials.token():
+        login, password = credentials.load()
+        kwargs.update(login=login, password=password)
     params = inspect.signature(module.BackupClient).parameters
     missing = [name for name in CTOR if name not in params]
     if missing:

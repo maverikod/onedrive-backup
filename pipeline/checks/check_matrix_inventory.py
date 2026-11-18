@@ -4,6 +4,10 @@ Mode: source-static. The pipeline cannot reach the deployed service, so the CURR
 route rows are compared with the registration code in src/onedrive_api/server.py. The comparison
 with the live help and OpenAPI surface belongs to the planned live checks (cmd_*, surface_*).
 A pending check is a stub that always FAILS; this check proves that it fails and never passes.
+
+Tags: CURRENT, PLANNED(block) and RETIRED(block). A RETIRED row (capability removed by an approved decision delivered by that
+block) must be ABSENT from the registration code, must name a registered implemented check that asserts the absence, and is
+excluded from the CURRENT comparison; a RETIRED row found registered is RED. Every CURRENT mcp row carries its command class.
 '''
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SURFACES = ('mcp', 'rest', 'framework', 'client', 'cli', 'odbcli', 'ui', 'vue', 'auth', 'platform',
             'version', 'pipeline')
 BLOCKS = ('B1', 'B2', 'B3', 'B4', 'UI-VUE')
-TAG = re.compile(r'^(CURRENT|PLANNED[(](B1|B2|B3|B4|UI-VUE)[)])$')
+TAG = re.compile(r'^(CURRENT|(PLANNED|RETIRED)[(](B1|B2|B3|B4|UI-VUE)[)])$')
 STATUSES = ('legacy', 'implemented', 'pending', 'deprecated')
 ROW_KEYS = ('id', 'surface', 'name', 'tag', 'source', 'checks')
 PARAM_KEYS = ('types', 'required', 'default', 'constraints', 'valid', 'invalid')
@@ -40,7 +44,10 @@ def _source_problems(data: dict, problems: list[str]) -> None:
             if names and len(names) == len(node.iter.elts):
                 registered |= set(names)
     rows = [row for row in data['rows'] if row['tag'] == 'CURRENT']
-    classes = {row['class'] for row in rows if row['surface'] == 'mcp'}
+    for row in rows:
+        if row['surface'] == 'mcp' and not row.get('class'):
+            problems.append('source: CURRENT mcp row %s carries no registered command class' % row['id'])
+    classes = {row['class'] for row in rows if row['surface'] == 'mcp' and row.get('class')}
     if classes != registered:
         problems.append('source: registered command classes %s differ from CURRENT mcp rows %s'
                         % (sorted(registered), sorted(classes)))
@@ -54,6 +61,14 @@ def _source_problems(data: dict, problems: list[str]) -> None:
     if routes != rest:
         problems.append('source: server.py REST routes %s differ from CURRENT rest rows %s'
                         % (sorted(routes), sorted(rest)))
+    status = {entry.get('name'): entry.get('status') for entry in data['checks']}
+    for row in (item for item in data['rows'] if str(item.get('tag')).startswith('RETIRED(')):
+        if (row.get('method'), row.get('path')) in routes:
+            problems.append('source: RETIRED row %s (%s %s) is still registered in server.py' % (row['id'], row.get('method'), row.get('path')))
+        if row.get('surface') == 'mcp' and (row.get('command') in in_server or row.get('class') in registered):
+            problems.append('source: RETIRED row %s command %s is still registered in server.py' % (row['id'], row.get('command')))
+        if not any(status.get(name) == 'implemented' for name in row.get('checks', [])):
+            problems.append('row %s: RETIRED but names no implemented check that asserts the absence' % row['id'])
 
 
 def _row_problems(data: dict, names: dict[str, dict], problems: list[str]) -> Counter:
@@ -74,8 +89,9 @@ def _row_problems(data: dict, names: dict[str, dict], problems: list[str]) -> Co
         if row.get('surface') not in SURFACES:
             problems.append('row %s: unknown surface %r' % (rid, row.get('surface')))
         if not TAG.match(str(row.get('tag'))):
-            problems.append('row %s: tag %r is not CURRENT or PLANNED(block)' % (rid, row.get('tag')))
-        counts['%s/%s' % (row.get('surface'), 'CURRENT' if row.get('tag') == 'CURRENT' else 'PLANNED')] += 1
+            problems.append('row %s: tag %r is not CURRENT, PLANNED(block) or RETIRED(block)' % (rid, row.get('tag')))
+        kind = str(row.get('tag', '')).split('(')[0]
+        counts['%s/%s' % (row.get('surface'), kind if kind in ('CURRENT', 'RETIRED') else 'PLANNED')] += 1
         if not row.get('checks'):
             problems.append('row %s: no named check' % rid)
         for name in row.get('checks', []):
