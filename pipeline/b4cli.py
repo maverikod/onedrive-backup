@@ -9,7 +9,7 @@ odbcli contract these checks hold the implementation to (tester reading of matri
   fetch EXPORT_ID --output PATH [--force] [--delete-after], download SNAPSHOT_ID --output PATH [--path] [--force]
   [--keep-export], call COMMAND [--params-json JSON], download-link EXPORT_ID, and download-begin EXPORT_ID for the
   command backup_download_begin (row O16, revision 4).
-  stdout is JSON; exit 0 on success, 1 on an authentication failure, 2 on a usage error, other non-zero on a server error.
+  stdout is JSON; exit 0 on success, 1 on a server error or an authentication failure (rows O6, O7, O15, O16), 2 on a usage error.
 '''
 
 from __future__ import annotations
@@ -122,8 +122,10 @@ def _baseline(report: Report, main, sub: str, label: str, state) -> None:
                     report.product.append('%s baseline odbcli %s: the JSON output omits the live commands %s' % (label, sub, missing))
     elif state == 'S0' and sub in NEEDS_S1 and '503' in (out + err):
         report.state.append('%s baseline odbcli %s: needs an S1 service but production answers S0 (503)' % (label, sub))
-    elif sub in ('status', 'delete', 'download-link') and '404' in (out + err) and code not in (1, 2):
-        pass
+    elif sub in ('status', 'delete', 'download-link') and state in ('S0', 'S1') and code == 1 and '404' in err:
+        # rows O6, O7, O15: exit 1 and stderr text for a server error; R6 and the M6 case S0_unknown_export_404: the zero id is a well-formed unknown id, 404
+        if state == 'S0':
+            report.state.append('%s baseline odbcli %s: the success baseline needs a prepared export on an S1 service; S0 answers the matrix case S0_unknown_export_404 (exit 1, 404)' % (label, sub))
     else:
         report.product.append('%s baseline odbcli %s: exit %r %s' % (label, sub, code, (out + err).strip()[:120]))
 
@@ -311,6 +313,7 @@ def odbcli_download_begin() -> None:
             state = None
         code, out, err = run_cli(main, global_args() + ['download-begin', base.ZERO_ID])
         _no_secret(report, 'O16 unknown export', out, err)
+        # MATRIX GAP (reported, not edited): the O16 cell unknown_export says 404 (S1) or 503 (S0) while R6, M6 S0_unknown_export_404 and M11 say 404 for a well-formed unknown id in S0
         wanted = '404' if state == 'S1' else '503'
         if state is not None and (code != 1 or out.strip() or wanted not in err):
             report.product.append('O16 odbcli download-begin of an unknown export on an %s service: exit %r stdout %r stderr %r, expected exit 1, empty stdout and %s' % (state, code, out.strip()[:40], err.strip()[:100], wanted))
