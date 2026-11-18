@@ -10,6 +10,7 @@ checks report as an ENVIRONMENT result, separately from a product result.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import ssl
@@ -22,6 +23,7 @@ from pipeline.environment import PipelineEnvError, endpoint
 ROOT = Path(__file__).resolve().parents[1]
 CERT_TREE = ROOT / 'mtls-certs' / 'for-proxy'
 BASE_ENDPOINT = 'ONEDRIVE_BACKUP_URL'
+TOKEN_HEADER = 'X-API-Key'
 
 
 class LiveUnreachable(RuntimeError):
@@ -55,12 +57,25 @@ def base_url() -> str:
         raise LiveUnreachable('no service endpoint: %s' % exc)
 
 
+def token() -> str | None:
+    '''Return the interim token T = base64(login:password) of the run credentials (decision D3), or None.'''
+    given = os.environ.get('ONEDRIVE_BACKUP_TOKEN')
+    if given:
+        return given
+    login, password = os.environ.get('ONEDRIVE_BACKUP_LOGIN'), os.environ.get('ONEDRIVE_BACKUP_PASSWORD')
+    if login and password:
+        return base64.b64encode((login + ':' + password).encode('utf-8')).decode('ascii')
+    return None
+
+
 def call(command: str, params: dict | None = None, timeout: int = 60) -> dict:
     '''Send one JSON-RPC request to /api/jsonrpc and return the decoded reply object.'''
     url = base_url().rstrip('/') + '/api/jsonrpc'
     body = json.dumps({'jsonrpc': '2.0', 'method': command, 'params': params or {}, 'id': 1}).encode('utf-8')
-    request = urllib.request.Request(url, data=body, method='POST',
-                                     headers={'Content-Type': 'application/json'})
+    headers = {'Content-Type': 'application/json'}
+    if token():
+        headers[TOKEN_HEADER] = token()
+    request = urllib.request.Request(url, data=body, method='POST', headers=headers)
     context = _context()
     status = 200
     try:

@@ -16,16 +16,16 @@ from __future__ import annotations
 import json
 import re
 
-from pipeline import fixtures, live, matrix
+from pipeline import b4base, fixtures, live, matrix
 from pipeline.report import Report
 
 CONCRETE = {
     '8 hex digits': 'abcdef12', '64 hex digits': 'abcdef12' * 8, '7 hex digits': 'abcdef1', '65 hex digits': 'a' * 65,
     '32 lowercase hex digits': '0' * 32, '32 uppercase hex digits': 'ABCDEF01' * 4, '31 hex digits': '0' * 31,
     '33 hex digits': '0' * 33, 'a path with a backslash': 'a' + chr(92) + 'b', 'path of a directory': 'dir',
-    'path missing in the snapshot': 'no/such/file.txt',
+    'path missing in the snapshot': 'no/such/file.txt', '129 characters': 'q' * 129, '301 characters': 'q' * 301, '300 characters': 'q' * 300, '128 characters': 'q' * 128,
 }
-BASE = {'snapshot_id': 'abcdef12', 'export_id': '0' * 32}
+BASE = {'snapshot_id': 'abcdef12', 'export_id': '0' * 32, 'site_id': 'site-1'}
 PARAM_CASE = re.compile('([a-z_]+)_(invalid|valid)_([0-9]+)')
 EXPORT_ID = re.compile('[0-9a-f]{32}')
 SHA256 = re.compile('[0-9a-f]{64}')
@@ -34,8 +34,15 @@ S1_NEEDS = ('the case needs an S1 service (host data directory, container /data 
             ' login and password, finished inventory) but production answers %s')
 
 
+def _total_pages() -> int:
+    kind, code, message, data = live.request('info', {})
+    return data.get('total_pages', 1) if kind == 'success' and isinstance(data, dict) else 1
+
+
 def resolve(value):
     '''Turn a matrix placeholder such as 7 hex digits into a concrete value.'''
+    if value in ('total_pages', 'total_pages+1'):
+        return _total_pages() + (1 if value.endswith('+1') else 0)
     return CONCRETE.get(value, value) if isinstance(value, str) else value
 
 
@@ -87,7 +94,8 @@ def _judge_invalid(report: Report, desc: str, reply, expect: str, name: str) -> 
         if not (kind == 'command_error' and code == 400):
             report.product.append('%s: expected command error 400, got %s' % (desc, _brief(*reply)))
     else:
-        rpc = kind == 'rpc_error' and code == -32602 and isinstance(data, dict) and data.get('violation') in ('type', 'value')
+        rpc = kind == 'rpc_error' and code in (-32602, -32601) and isinstance(data, dict) and data.get('violation') in ('type', 'value')
+        rpc = rpc and (code == -32602 or data.get('violation') == 'value')
         if not (rpc or (kind == 'command_error' and code == 400)):
             report.product.append('%s: expected adapter error -32602 (type or value) or command error 400, got %s'
                                   % (desc, _brief(*reply)))
@@ -118,6 +126,9 @@ def _meta_problems(meta, snapshot_id: str, path) -> list[str]:
         problems.append('snapshot_id or path differ from the request')
     if type(meta['size_bytes']) is not int:
         problems.append('size_bytes is not an integer')
+    url = meta.get('url')
+    if not (isinstance(url, str) and re.fullmatch('/downloads/[0-9a-f]{32}/[^/]+', url) and url == '/downloads/%s/%s' % (meta['export_id'], meta['filename'])):
+        problems.append('url %r is not /downloads/<export_id>/<filename> (block B4, rows M5 and M6)' % (url,))
     if path is None and not (str(meta['filename']).startswith('onedrive-') and str(meta['filename']).endswith('.tar.gz')):
         problems.append('archive filename is not onedrive-<12 hex>.tar.gz')
     return problems
@@ -219,6 +230,39 @@ def _s1(report: Report, row_id: str, cid: str, desc: str) -> None:
         report.state.append('%s: no S1 executor for this case' % desc)
 
 
+def _meta_case(report: Report, row_id: str, cid: str, desc: str, sent: dict) -> None:
+    '''Cases of help (M1) and info (M2): both commands answer in every state, so they run on an S0 service too.'''
+    kind, code, message, data = live.request(row_id == 'M1' and 'help' or 'info', sent)
+    if kind != 'success' or not isinstance(data, dict):
+        report.product.append('%s: expected success data, got %s' % (desc, _brief(kind, code, message, data)))
+    elif row_id == 'M1' and cid == 'baseline':
+        names = sorted(data.get('commands', {})) if isinstance(data.get('commands'), dict) else None
+        if names != sorted(b4base.COMMANDS):
+            report.product.append('%s: help lists %s, expected the 11 commands of rows M1..M11' % (desc, names))
+        if (data.get('tool_info') or {}).get('version') != b4base.version():
+            report.product.append('%s: help reports version %r, expected VERSION %r (decision 7)' % (desc, (data.get('tool_info') or {}).get('version'), b4base.version()))
+    elif row_id == 'M1':
+        meta = data.get('metadata') or {}
+        if meta.get('name') != 'info' or 'page' not in (meta.get('parameters') or {}):
+            report.product.append('%s: expected the metadata of info with its page parameter, got %s' % (desc, str(meta)[:120]))
+    else:
+        total = data.get('total_pages')
+        wanted = sent.get('page', 1)
+        if cid == 'baseline' and type(total) is int:
+            release = b4base.version()
+            stale: dict = {}
+            for page in range(1, total + 1):
+                k2, c2, m2, d2 = live.request('info', {'page': page})
+                text = d2.get('content', '') if k2 == 'success' and isinstance(d2, dict) else ''
+                for found in re.findall('[0-9]+[.][0-9]+[.][0-9]+', text):
+                    if found.startswith(release.rsplit('.', 1)[0] + '.') and found != release:
+                        stale.setdefault(found, []).append(page)
+            if stale:
+                report.product.append('%s: the info manual names releases %s of the series of VERSION %s on pages (decision 7)' % (desc, stale, release))
+        if data.get('page') != wanted or type(total) is not int or total < 1 or not isinstance(data.get('content'), str) or not data.get('title'):
+            report.product.append('%s: expected {page: %s, total_pages >= 1, title, kind, content}, got %s' % (desc, wanted, str(data)[:120]))
+
+
 def _fixture_case(report: Report, row_id: str, cid: str) -> None:
     '''Run the cases the live API cannot construct on the real Catalog over a fake restic.'''
     if cid == 'over_limit_413':
@@ -253,23 +297,42 @@ def _execute(report: Report, row: dict, case: dict, contract: dict, state) -> No
     if case['state'] == 'S0' and state != 'S0':
         report.info.append('%s: an S0 case cannot run on a service that is %s; covered by prepare_order and scaffold_gate_states' % (desc, state))
         return
-    if cid.startswith('omit_'):
+    if row_id in ('M1', 'M2') and case['state'] == 'S1':
+        _meta_case(report, row_id, cid, desc, sent)
+    elif cid.startswith('omit_'):
         _judge_rpc(report, desc, live.request(row['command'], sent), 'missing', False, cid[len('omit_'):])
     elif cid == 'unknown_param':
         _judge_rpc(report, desc, live.request(row['command'], sent), 'unknown', False, None)
     elif PARAM_CASE.fullmatch(cid) and PARAM_CASE.fullmatch(cid).group(2) == 'invalid':
         name, index = PARAM_CASE.fullmatch(cid).group(1), PARAM_CASE.fullmatch(cid).group(3)
         expect = row['params'][name]['invalid'][int(index)]['expect']
-        if expect == 'C404' and state != 'S1':
+        if expect in ('C404', 'C404S') and state != 'S1':
             report.state.append('%s: %s' % (desc, S1_NEEDS % state))
-        elif expect == 'C404':
+        elif expect in ('C404', 'C404S'):
             _s1(report, row['id'], cid, desc)
         else:
-            _judge_invalid(report, desc, live.request(row['command'], sent), expect, name)
+            reply = live.request(row['command'], sent)
+            if expect == 'C400' and sent.get(name) == '' and reply[0] == 'rpc_error' and reply[1] == -32602 and isinstance(reply[3], dict) and reply[3].get('violation') in ('type', 'value'):
+                report.info.append('%s: live schema refuses the empty value at the adapter (-32602) before the command error 400 of cell C400' % desc)
+            else:
+                _judge_invalid(report, desc, reply, expect, name)
     elif cid == 'S0_scaffold_gate':
         kind, code, message, data = live.request(row['command'], sent)
         if not (kind == 'command_error' and code == 503 and 'scaffold' in message.lower()):
             report.product.append('%s: expected command error 503 naming scaffold mode, got %s' % (desc, _brief(kind, code, message, data)))
+    elif cid == 'S0_scaffold_503':
+        kind, code, message, data = live.request(row['command'], sent)
+        if not (kind == 'command_error' and code == 503 and 'SCAFFOLD_ONLY' in message):
+            report.product.append('%s: expected command error 503 SCAFFOLD_ONLY, got %s' % (desc, _brief(kind, code, message, data)))
+    elif cid == 'invalid_site_id_precedes_readiness':
+        sent['site_id'] = resolve(row['params']['site_id']['invalid'][2]['value'])
+        kind, code, message, data = live.request(row['command'], sent)
+        if not (kind == 'command_error' and code == 400):
+            report.product.append('%s with site_id %r: the format must be refused with command error 400 before the readiness 503 (R5), got %s' % (desc, sent['site_id'], _brief(kind, code, message, data)))
+    elif cid == 'S0_scaffold_status_200':
+        kind, code, message, data = live.request(row['command'], sent)
+        if not (kind == 'success' and isinstance(data, dict) and data.get('ready') is False and data.get('complete') is False and data.get('state') == 'SCAFFOLD_ONLY'):
+            report.product.append('%s: expected 200 {ready: false, complete: false, state: SCAFFOLD_ONLY}, got %s' % (desc, _brief(kind, code, message, data)))
     elif cid == 'S0_invalid_limit_precedes_gate':
         kind, code, message, data = live.request(row['command'], sent)
         if kind not in ('rpc_error', 'command_error') or code == 503:
@@ -321,5 +384,10 @@ def run_row(row_id: str, name: str) -> None:
             report.env.append('%s %s: not executed, production service unreachable: %s' % (row_id, case['id'], exc))
     if row_id == 'M3':
         _tag_fixture(report)
+    if row_id in ('M5', 'M6') and state is not None:
+        kind, code, message, data = live.request('help', {'cmdname': row['command']})
+        documented = ((data.get('metadata') or {}).get('return_value') or {}).get('success', {}).get('data', {}) if kind == 'success' and isinstance(data, dict) else {}
+        if 'url' not in documented:
+            report.product.append('%s: the help metadata documents the success fields %s and no url (block B4 adds the field url = /downloads/<export_id>/<filename>)' % (row['command'], sorted(documented) if isinstance(documented, dict) else documented))
     report.info.append('%d cases of row %s executed' % (len(row['cases']), row_id))
     report.finish(name)
