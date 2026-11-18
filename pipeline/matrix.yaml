@@ -434,12 +434,12 @@
   {"name": "ui_surface", "blocks": ["UI-VUE"], "rows": ["U1"], "status": "deprecated", "replaced_by": "vue_static_serve"},
   {"name": "unit_tests", "blocks": ["B2"], "rows": ["PX4"], "status": "legacy"},
   {"name": "version_consistency", "blocks": ["B1"], "rows": ["VR1"], "status": "implemented"},
-  {"name": "vue_auth", "blocks": ["UI-VUE"], "rows": ["V2"], "status": "pending"},
-  {"name": "vue_build", "blocks": ["UI-VUE"], "rows": ["V6"], "status": "pending"},
-  {"name": "vue_command_calls", "blocks": ["UI-VUE"], "rows": ["V4"], "status": "pending"},
-  {"name": "vue_command_contract", "blocks": ["UI-VUE"], "rows": ["V3"], "status": "pending"},
-  {"name": "vue_download", "blocks": ["UI-VUE"], "rows": ["V5"], "status": "pending"},
-  {"name": "vue_static_serve", "blocks": ["UI-VUE"], "rows": ["V1"], "status": "pending"},
+  {"name": "vue_auth", "blocks": ["UI-VUE"], "rows": ["V2"], "status": "implemented"},
+  {"name": "vue_build", "blocks": ["UI-VUE"], "rows": ["V6"], "status": "implemented"},
+  {"name": "vue_command_calls", "blocks": ["UI-VUE"], "rows": ["V4"], "status": "implemented"},
+  {"name": "vue_command_contract", "blocks": ["UI-VUE"], "rows": ["V3"], "status": "implemented"},
+  {"name": "vue_download", "blocks": ["UI-VUE"], "rows": ["V5"], "status": "implemented"},
+  {"name": "vue_static_serve", "blocks": ["UI-VUE"], "rows": ["V1"], "status": "implemented"},
   {"name": "wrapper_args", "blocks": ["B3"], "rows": ["PL4"], "status": "implemented"},
   {"name": "ws_closed", "blocks": ["B4"], "rows": ["F10"], "status": "implemented"}
  ]

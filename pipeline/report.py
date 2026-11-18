@@ -11,7 +11,7 @@ from pipeline.checks import CheckFailure
 # cases that need T RED as STATE or ENVIRONMENT, never PRODUCT, never skipped and never a pass.
 TOKEN_CHECKS = ('auth_token', 'cmd_', 'client_cmd_', 'odbcli_', 'download_link', 'transfer_confinement', 'client_download',
                 'client_auth', 'client_call_raw', 'client_fetch_integrity', 'ws_closed', 'surface_framework_routes',
-                'rest_removed')
+                'rest_removed', 'vue_')
 # A finding that only reports what the token gate answered to a request that carried no usable token.
 GATE_ANSWER = re.compile(r'(answered|got|code=|HTTP|status) ?401|ClientAuthenticationError|authentication_error')
 
@@ -39,6 +39,7 @@ class Report:
         self.state: list[str] = []
         self.env: list[str] = []
         self.info: list[str] = []
+        self.gap: list[str] = []
 
     def _classify_run_environment(self, name: str) -> None:
         problem = credentials.problem() if needs_token(name) else None
@@ -57,10 +58,12 @@ class Report:
         self._classify_run_environment(name)
         for line in self.info:
             print('[INFO]', line, flush=True)
-        if not (self.product or self.state or self.env):
+        if not (self.product or self.state or self.env or self.gap):
             return
         lines = ['[PRODUCT] ' + item for item in self.product]
         lines += ['[STATE] ' + item for item in self.state]
         lines += ['[ENVIRONMENT] ' + item for item in self.env]
-        raise CheckFailure('%s: %d product violation(s), %d state RED(s), %d environment error(s):\n  %s'
-                           % (name, len(self.product), len(self.state), len(self.env), '\n  '.join(lines)))
+        lines += ['[GAP] ' + item for item in self.gap]
+        extra = ', %d matrix-gap assertion(s) pending' % len(self.gap) if self.gap else ''
+        raise CheckFailure('%s: %d product violation(s), %d state RED(s), %d environment error(s)%s:\n  %s'
+                           % (name, len(self.product), len(self.state), len(self.env), extra, '\n  '.join(lines)))
