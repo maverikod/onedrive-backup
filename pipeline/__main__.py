@@ -93,22 +93,31 @@ def smoke_mtls() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from pipeline import checks as named_checks
+
+    matrix_names = tuple(named_checks.all_names())
     parser = argparse.ArgumentParser(description="OneDrive backup verification pipeline")
-    parser.add_argument("check", nargs="?", choices=CHECKS + EXTRA)
+    parser.add_argument("check", nargs="?", choices=CHECKS + EXTRA + matrix_names)
     parser.add_argument("--list", action="store_true")
     args = parser.parse_args(argv)
     if args.list:
-        for name in CHECKS + EXTRA:
+        for name in CHECKS + EXTRA + matrix_names:
             print(name)
         return 0
-    selected = [args.check] if args.check else list(CHECKS)
+    selected = [args.check] if args.check else list(CHECKS) + list(matrix_names)
     for name in selected:
         print("[CHECK]", name, flush=True)
-        globals()[name]()
+        if name in matrix_names:
+            try:
+                named_checks.run(name)
+            except named_checks.CheckFailure as exc:
+                print("[RED]", name, "-", exc, flush=True)
+                return 1
+        else:
+            globals()[name]()
         print("[GREEN]", name, flush=True)
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
