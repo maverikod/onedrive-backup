@@ -1,5 +1,6 @@
 # OneDrive Backup: file paths only; never store tokens or private key values here.
-ONEDRIVE_IMAGE=vasilyvz/onedrive-backup:0.3.3
+# The Docker image defaults to /usr/lib/onedrive-backup/image-spec.
+# Optional override: ONEDRIVE_IMAGE=your-repository:tag
 ONEDRIVE_CONTAINER=onedrive-backup
 ONEDRIVE_NETWORK=smart-assistant
 ONEDRIVE_CONFIG_DIR=/etc/onedrive-backup

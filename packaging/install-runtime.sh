@@ -85,8 +85,11 @@ if pat:
         raise SystemExit("install-runtime: Docker Hub authentication failed")
 PY_LOGIN
 fi
-if ! docker pull "$ONEDRIVE_IMAGE" >/dev/null; then
-    docker image inspect "$ONEDRIVE_IMAGE" >/dev/null || {
+image_spec=/usr/lib/onedrive-backup/image-spec
+[[ -s "$image_spec" ]] || { echo "Missing package image-spec" >&2; exit 2; }
+image="${ONEDRIVE_IMAGE:-$(cat "$image_spec")}"
+if ! docker pull "$image" >/dev/null; then
+    docker image inspect "$image" >/dev/null || {
         echo "install-runtime: required Docker image unavailable" >&2
         exit 12
     }
