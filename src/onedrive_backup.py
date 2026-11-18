@@ -124,7 +124,7 @@ def preflight(cfg: Dict[str, Any]) -> None:
     mountpoint = cfg["required_mountpoint"]
     if mountpoint:
         if not mountpoint.is_mount():
-            raise BackupError(f"Диск бэкапов не смонтирован: {mountpoint}")
+            raise BackupError(f"STORAGE_NOT_MOUNTED: Диск бэкапов не смонтирован: {mountpoint}")
         for field in ("mirror_dir", "repository_dir"):
             if not ensure_child(mountpoint, cfg[field]):
                 raise BackupError(f"{field} должен быть внутри {mountpoint}")

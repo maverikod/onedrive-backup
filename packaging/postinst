@@ -68,6 +68,19 @@ PY_MIGRATE_CRL
     chmod 0644 "$default"
     chown root:root "$default"
   fi
+  # The backup data directory is a plain host directory owned by the service user. Create it
+  # when absent so the fail-closed start does not take the service down; never touch an
+  # existing one.
+  data_dir=/srv/backup/onedrive
+  configured="$(sed -n 's/^ONEDRIVE_DATA_DIR=//p' "$default" | tail -n 1 | tr -d '"')"
+  if [ -n "$configured" ]; then data_dir="$configured"; fi
+  case "$data_dir" in
+    /*) ;;
+    *) echo 'onedrive-backup: ONEDRIVE_DATA_DIR must be absolute' >&2; exit 2 ;;
+  esac
+  if [ ! -e "$data_dir" ]; then
+    install -d -m 0750 -o onedrive-backup -g onedrive-backup "$data_dir"
+  fi
   if /usr/lib/onedrive-backup/install-runtime.sh; then
     if [ -d /run/systemd/system ]; then
       systemctl daemon-reload

@@ -22,6 +22,7 @@ from onedrive_backup import load_config, BackupError
 
 SNAPSHOT_RE = re.compile(r"^[0-9a-fA-F]{8,64}$")
 EXPORT_RE = re.compile(r"^[0-9a-f]{32}$")
+SOURCE_TAGS = ("onedrive", "sharepoint")
 
 
 class CatalogError(Exception):
@@ -117,15 +118,30 @@ class Catalog:
             raise CatalogError("Restic failed: " + proc.stderr.strip()[:350], 503)
         return proc.stdout
 
+    @staticmethod
+    def _source_of(item: object) -> str | None:
+        """Return the backup source (onedrive or sharepoint) named by the snapshot tags."""
+        tags = item.get("tags") if isinstance(item, dict) else None
+        if not isinstance(tags, list):
+            return None
+        return next((tag for tag in SOURCE_TAGS if tag in tags), None)
+
+    def _with_source(self, item: dict) -> dict:
+        return {**item, "source": self._source_of(item)}
+
     def snapshots(self, limit: int = 100) -> dict:
         if type(limit) is not int or not 1 <= limit <= 1000:
             raise CatalogError("limit must be 1..1000")
         try:
-            items = json.loads(self._run(["snapshots", "--json", "--tag", "onedrive"]))
+            arguments = ["snapshots", "--json"]
+            for tag in SOURCE_TAGS:
+                arguments += ["--tag", tag]
+            items = json.loads(self._run(arguments))
         except (ValueError, TypeError) as exc:
             raise CatalogError("Invalid restic snapshot JSON", 503) from exc
         if not isinstance(items, list):
             raise CatalogError("Invalid restic snapshot format", 503)
+        items = [self._with_source(item) for item in items if self._source_of(item)]
         items.sort(key=lambda x: x.get("time", ""), reverse=True)
         return {"items": items[:limit], "count": len(items)}
 
@@ -254,13 +270,16 @@ class Catalog:
                 raise CatalogError("Snapshot archive failed or timed out", 503) from exc
 
     def prepare(self, snapshot_id: str, file_path: str | None = None) -> dict:
+        # Validate every input before any side effect, also while storage is gated.
         snapshot_id = self._check_snapshot(snapshot_id)
+        relative = self._check_path(file_path) if file_path is not None else None
+        self._config()
         self.exports.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self._sweep_expired()
         nodes = self._all_nodes(snapshot_id)
         selected: dict | None = None
         total_size = 0
-        if file_path is not None:
-            relative = self._check_path(file_path)
+        if relative is not None:
             selected = next((n for n in nodes
                              if n["path"] == relative and n["type"] == "file"), None)
             if selected is None:
@@ -300,6 +319,30 @@ class Catalog:
             self._metadata_path(export_id).unlink(missing_ok=True)
             raise
 
+    def _remove_export(self, export_id: str) -> None:
+        """Delete the data and the metadata of one export; absent files are not an error."""
+        for archive in (False, True):
+            self._output_path(export_id, archive=archive).unlink(missing_ok=True)
+        self._metadata_path(export_id).unlink(missing_ok=True)
+
+    def _sweep_expired(self) -> None:
+        """Remove every expired export, queried or not; unreadable metadata is left alone."""
+        now = datetime.now(timezone.utc)
+        for meta_path in self.exports.glob("*.json"):
+            export_id = meta_path.stem
+            if not EXPORT_RE.fullmatch(export_id):
+                continue
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                expired = datetime.fromisoformat(meta["expires_at"]) < now
+            except (ValueError, KeyError, TypeError, OSError):
+                continue
+            if expired:
+                try:
+                    self._remove_export(export_id)
+                except OSError:
+                    continue
+
     def get_export(self, export_id: str) -> tuple[dict, Path]:
         export_id = self._check_export(export_id)
         meta_path = self._metadata_path(export_id)
@@ -309,6 +352,7 @@ class Catalog:
                 raise CatalogError("Invalid export metadata", 503)
             expire = datetime.fromisoformat(meta["expires_at"])
             if expire < datetime.now(timezone.utc):
+                self._remove_export(export_id)
                 raise CatalogError("Export has expired", 410)
             filename = self._output_path(export_id, archive=meta["path"] is None)
             if not filename.is_file() or filename.is_symlink():

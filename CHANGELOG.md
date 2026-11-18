@@ -1,3 +1,12 @@
+## 0.3.7 — B3 product fixes
+
+- The host wrapper passes every argument to docker-run.sh unchanged; no argument still means status.
+- The catalog lists OneDrive and SharePoint snapshots with a source marker.
+- Export preparation validates its inputs before any side effect; expired exports are removed.
+- The host backup directory is a plain directory owned by onedrive-backup (created by the package
+  install); the mount point is checked inside the container and refused with STORAGE_NOT_MOUNTED.
+- The container always binds the host data directory at /data; the scaffold flag follows the secrets.
+
 ## 0.3.6 — Single version source and adapter 8.11.16
 - VERSION is the single source of the release version: the server reads it at runtime through
   onedrive_api.version (help, info, OpenAPI and command metadata); the Docker image carries it

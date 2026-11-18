@@ -5,7 +5,7 @@ TLS server-name verification and trusted client certificates are mandatory. CRL 
 Use `onedrive-backup-client --help` for all operations.
 
 ```bash
-python3 -m pip install onedrive_backup_client-0.3.6-py3-none-any.whl
+python3 -m pip install onedrive_backup_client-0.3.7-py3-none-any.whl
 onedrive-backup-client --config client.json snapshots
 onedrive-backup-client --config client.json files <snapshot_id>
 onedrive-backup-client --config client.json download <snapshot_id> --path Documents/file.pdf --output file.pdf

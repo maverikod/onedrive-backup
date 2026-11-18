@@ -9,6 +9,17 @@ config="${ONEDRIVE_CONFIG_DIR:-/etc/onedrive-backup}"
 data="${ONEDRIVE_DATA_DIR:-/srv/backup/onedrive}"
 secrets="${ONEDRIVE_SECRET_DIR:-/var/lib/onedrive-backup/secrets}"
 fail() { echo "onedrive-backup-docker: $*" >&2; exit 1; }
+# The host backup directory is a plain directory owned by the service user; whether /data is a
+# mount point is checked inside the container. Every cause has its own refusal text.
+check_data_dir() {
+  local mode
+  [[ -e "$data" ]] || fail "Host data directory does not exist: $data"
+  [[ -d "$data" && ! -L "$data" ]] || fail "Host data path is not a plain directory: $data"
+  [[ "$(stat -c %u "$data")" = "$(id -u onedrive-backup)" ]] || fail "Host data directory is not owned by onedrive-backup: $data"
+  mode="$(stat -c %a "$data")"
+  (( (8#$mode & 8#200) != 0 )) || fail "Host data directory is not writable by its owner: $data"
+  (( (8#$mode & 8#002) == 0 )) || fail "Host data directory is world-writable: $data"
+}
 case "$action" in
   stop)
     docker rm -f "$name" >/dev/null 2>&1 || true
@@ -21,7 +32,7 @@ case "$action" in
     ;;
   discover)
     [[ "${2:-}" = "" || "${2:-}" = "--dry-run" ]] || fail "Unknown discover argument"
-    mountpoint -q "/srv/backup" || fail "Backup disk not mounted"
+    check_data_dir
     test -s "$secrets/rclone.conf" || fail "rclone.conf unavailable"
     docker inspect "$name" --format "{{.State.Running}}" | grep -qx true || fail "Container is not running"
     if [[ "${2:-}" = "--dry-run" ]]; then
@@ -32,7 +43,7 @@ case "$action" in
     ;;
   init|check)
     [[ "$#" -eq 1 ]] || fail "Unexpected argument"
-    mountpoint -q "/srv/backup" || fail "Backup disk not mounted"
+    check_data_dir
     test -s "$secrets/rclone.conf" || fail "rclone.conf unavailable"
     test -s "$secrets/restic-password" || fail "restic-password unavailable"
     docker inspect "$name" --format '{{.State.Running}}' | grep -qx true || fail "Container is not running"
@@ -41,7 +52,7 @@ case "$action" in
     ;;
   backup)
     [[ "$#" -eq 1 || ( "$#" -eq 2 && "${2:-}" = "--dry-run" ) ]] || fail "Usage: backup [--dry-run]"
-    mountpoint -q "/srv/backup" || fail "Backup disk not mounted"
+    check_data_dir
     test -s "$secrets/rclone.conf" || fail "rclone.conf unavailable"
     test -s "$secrets/restic-password" || fail "restic-password unavailable"
     docker inspect "$name" --format '{{.State.Running}}' | grep -qx true || fail "Container is not running"
@@ -62,19 +73,14 @@ case "$action" in
       scaffold=1
       echo "Admin password unset: UI authentication will remain locked"
     fi
-    if ! mountpoint -q "/srv/backup"; then
-      scaffold=1
-      data="$ONEDRIVE_SCAFFOLD_DATA_DIR"
-      install -d -m 0700 -o onedrive-backup -g onedrive-backup "$data"
-      echo "Backup disk not mounted: using empty scaffold data"
-    fi
+    # Fail closed: a missing or unsafe host data directory never degrades into scaffold data.
+    check_data_dir
     if ! test -s "$secrets/rclone.conf" || ! test -s "$secrets/restic-password"; then
       scaffold=1
       echo "Backup credentials not ready: restricted scaffold"
     fi
     test -s "$config/server.json" || fail "Missing server.json"
     test -s "$config/backup.json" || fail "Missing backup.json"
-    test -d "$data" || fail "Missing backup data volume"
     docker network inspect "$network" >/dev/null || fail "Missing Docker network $network"
     docker image inspect "$image" >/dev/null || docker pull "$image"
     docker rm -f "$name" >/dev/null 2>&1 || true
