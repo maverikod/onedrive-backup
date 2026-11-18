@@ -34,6 +34,7 @@ def shell_syntax() -> None:
 
 
 def config_contract() -> None:
+    from pipeline.environment import endpoint
     main = json.loads((ROOT / "config/server.json").read_text())
     backup = json.loads((ROOT / "config/backup.json").read_text())
     assert main["server"]["protocol"] == "mtls", "mTLS server required"
@@ -41,8 +42,8 @@ def config_contract() -> None:
     assert main["registration"]["server_id"] == "onedrive-backup"
     assert main["registration"]["enabled"] is True
     assert main["registration"]["protocol"] == "mtls"
-    assert main["registration"]["register_url"] == "https://mcp-proxy:3004/register"
-    assert main["registration"]["heartbeat"]["url"] == "https://mcp-proxy:3004/proxy/heartbeat"
+    assert main["registration"]["register_url"] == endpoint("MCP_PROXY_REGISTER_URL")
+    assert main["registration"]["heartbeat"]["url"] == endpoint("MCP_PROXY_HEARTBEAT_URL")
     for field in ("cert", "key", "ca"):
         assert main["server"]["ssl"][field].startswith("/config/certs/")
     for field in ("cert", "key"):
