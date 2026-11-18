@@ -313,10 +313,9 @@ def odbcli_download_begin() -> None:
             state = None
         code, out, err = run_cli(main, global_args() + ['download-begin', base.ZERO_ID])
         _no_secret(report, 'O16 unknown export', out, err)
-        # MATRIX GAP (reported, not edited): the O16 cell unknown_export says 404 (S1) or 503 (S0) while R6, M6 S0_unknown_export_404 and M11 say 404 for a well-formed unknown id in S0
-        wanted = '404' if state == 'S1' else '503'
-        if state is not None and (code != 1 or out.strip() or wanted not in err):
-            report.product.append('O16 odbcli download-begin of an unknown export on an %s service: exit %r stdout %r stderr %r, expected exit 1, empty stdout and %s' % (state, code, out.strip()[:40], err.strip()[:100], wanted))
+        # O16 unknown_export (revision 4b, 10.10): a well-formed unknown id is 404 in S0 and in S1; R6, the S0 gate is not consulted
+        if state is not None and (code != 1 or out.strip() or '404' not in err):
+            report.product.append('O16 odbcli download-begin of an unknown export on an %s service: exit %r stdout %r stderr %r, expected exit 1, empty stdout and 404' % (state, code, out.strip()[:40], err.strip()[:100]))
         if state == 'S1':
             _begin_success(report, main)
         elif state is not None:
