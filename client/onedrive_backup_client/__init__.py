@@ -1,7 +1,7 @@
-"""Python client for the OneDrive Backup API."""
-__version__ = "0.3.9"
+'''Python client for the OneDrive Backup command API.'''
+__version__ = '0.3.10'
 
-from .api import BackupClient, ClientError
+from .api import BackupClient
+from .errors import ClientAuthenticationError, ClientError
 
-__all__ = ["BackupClient", "ClientError", "__version__"]
-
+__all__ = ['BackupClient', 'ClientAuthenticationError', 'ClientError', '__version__']

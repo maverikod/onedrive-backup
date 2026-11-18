@@ -1,3 +1,12 @@
+## 0.3.10 — B4 client: JsonRpcClient wrapper and odbcli
+
+- The Python client `BackupClient` is a thin wrapper over the mcp-proxy-adapter 8.11.16 `JsonRpcClient`: no own TLS or
+  HTTP transport, one method per server command, `call`, `raw_call`, login and password or token authentication.
+- Downloads verify size and SHA-256 and replace the output atomically: `fetch` and `download` by the adapter transfer
+  service (`backup_download_begin`), `fetch_link` and `download_link` by the temporary uuid4 link.
+- New console command `odbcli` (every server command with all its arguments, plus health, fetch, download, call,
+  download-link, download-begin); the REST-era `onedrive-backup-client` command is removed.
+
 ## 0.3.9 — B4 MCP Proxy peer admission
 
 - The MCP Proxy peer is admitted on its mTLS transport identity alone, with no token, on every route it reaches, whether

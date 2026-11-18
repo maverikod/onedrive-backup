@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.9 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.10 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,10 +6,10 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.9, Python 3.12,
+- Docker image: vasilyvz/onedrive-backup:0.3.10, Python 3.12,
   mcp-proxy-adapter 8.11.16, HTTPS/mTLS TCP port 8050.
-- Debian host package: dist/onedrive-backup_0.3.9_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.9-py3-none-any.whl.
+- Debian host package: dist/onedrive-backup_0.3.10_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.10-py3-none-any.whl.
 - Verification: python -m pipeline; after image build: python -m pipeline smoke_mtls.
 
 Build all release artifacts on CAS host via ./build.sh. It tests the code,
@@ -78,7 +78,7 @@ On a CAS build host:
 
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.9_all.deb
+    sudo apt install ./onedrive-backup_0.3.10_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
@@ -136,20 +136,29 @@ maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.9-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.10-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 
 Set the internal HTTPS URL, trusted CA, client CRT and client key in client.json.
 
-    onedrive-backup-client health
-    onedrive-backup-client snapshots
-    onedrive-backup-client files SNAPSHOT --prefix Documents
-    onedrive-backup-client prepare SNAPSHOT --path Documents/file.pdf
-    onedrive-backup-client status EXPORT_ID
-    onedrive-backup-client fetch EXPORT_ID --output file.pdf
-    onedrive-backup-client download SNAPSHOT --output snapshot.tar.gz
-    onedrive-backup-client delete EXPORT_ID
+    odbcli health
+    odbcli snapshots
+    odbcli files SNAPSHOT --prefix Documents
+    odbcli prepare SNAPSHOT --path Documents/file.pdf
+    odbcli status EXPORT_ID
+    odbcli download-link EXPORT_ID
+    odbcli download-begin EXPORT_ID
+    odbcli fetch EXPORT_ID --output file.pdf
+    odbcli download SNAPSHOT --output snapshot.tar.gz
+    odbcli delete EXPORT_ID
+    odbcli call backup_snapshots --params-json '{"limit": 5}'
+
+The Python client (BackupClient) is a thin wrapper over the mcp-proxy-adapter JsonRpcClient and `odbcli` is
+built on it: one method and one subcommand per server command, plus call, raw_call, health, fetch, download and
+download-link. Authentication is login and password (token base64(login:password)) or a ready token; the mTLS
+client certificate is mandatory. Downloads go through the adapter transfer service or the temporary link, and the
+size and SHA-256 of the export are verified before the atomic replace of the output.
 
 Client validates hostname, trusted CA and mutual TLS on every connection.
 Before committing an output, it validates downloaded length and SHA-256,

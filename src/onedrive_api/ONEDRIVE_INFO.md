@@ -223,17 +223,19 @@ sudo onedrive-backup-docker check
 Wheel `onedrive_backup_client-<VERSION>-py3-none-any.whl` собирается локально. `~/.config/onedrive-backup/client.json` содержит внутренний HTTPS URL, пути к доверенному CA и клиентской паре cert/key, timeout. Клиент должен иметь сетевой доступ к контейнеру (или контролируемому шлюзу) и корректные TLS credentials.
 
 ```bash
-onedrive-backup-client health
-onedrive-backup-client snapshots
-onedrive-backup-client files SNAPSHOT --prefix Documents --limit 100
-onedrive-backup-client prepare SNAPSHOT --path Documents/file.pdf
-onedrive-backup-client status EXPORT_ID
-onedrive-backup-client fetch EXPORT_ID --output file.pdf
-onedrive-backup-client download SNAPSHOT --output snapshot.tar.gz
-onedrive-backup-client delete EXPORT_ID
+odbcli health
+odbcli snapshots
+odbcli files SNAPSHOT --prefix Documents --limit 100
+odbcli prepare SNAPSHOT --path Documents/file.pdf
+odbcli status EXPORT_ID
+odbcli download-link EXPORT_ID
+odbcli download-begin EXPORT_ID
+odbcli fetch EXPORT_ID --output file.pdf
+odbcli download SNAPSHOT --output snapshot.tar.gz
+odbcli delete EXPORT_ID
 ```
 
-Клиент потоково скачивает файл, проверяет размер и SHA-256, после чего атомарно переименовывает временный файл. `--force` позволяет заменить уже существующий файл. Проверки TLS и hostname должны оставаться включёнными.
+Клиент - тонкая обертка над JsonRpcClient библиотеки mcp-proxy-adapter, `odbcli` построен на клиенте. Вход: login и password (токен base64(login:password)) или готовый токен; клиентский сертификат mTLS обязателен. Скачивание идет через transfer-сервис адаптера или временную ссылку; размер и SHA-256 проверяются, после чего временный файл атомарно переименовывается. `--force` позволяет заменить уже существующий файл. Проверки TLS и hostname должны оставаться включёнными.
 
 ## Восстановление и контрольный прогон
 
