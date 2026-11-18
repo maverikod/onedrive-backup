@@ -4,32 +4,38 @@
 
 ## Назначение и ограничения системы
 
-OneDrive Backup — сервер резервного копирования Microsoft OneDrive Business (Microsoft 365) на Ubuntu. Он использует `rclone` для локального зеркала, `restic` для зашифрованных и версионированных снимков и FastAPI c `mcp-proxy-adapter` для доступа к каталогу. Пользовательский интерфейс встроен в FastAPI; есть самостоятельный консольный Python-клиент.
+`onedrive-backup` — существующее имя production-сервера резервного копирования **файлов библиотек SharePoint Online** организации Microsoft 365. Сайты и библиотеки обнаруживаются через Microsoft Graph в режиме app-only. Источник используется только на чтение; восстановление допускается только локально, без загрузки в SharePoint.
 
-OneDrive служит **только источником**. По умолчанию резервируется один настроенный rclone remote, а не все пользователи организации Microsoft 365. Функции массового обнаружения пользователей и полномасштабного экспорта тенанта не реализованы.
+Граница резервирования: документы и каталоги библиотек. **Не входят** SharePoint Lists, страницы сайтов, ACL/права, настройки, workflows и исходная история версий SharePoint. Версии restic фиксируют состояния файлов только с момента запуска собственного backup.
 
-Регистрационные данные Microsoft Entra ID пока не предоставлены. Работоспособность инфраструктуры, TLS и MCP Proxy можно проверить в ограниченном режиме каркаса, но это не подтверждает наличие снимков.
+В 0.3.6 реализованы Graph discovery и базовый CLI для отдельных зеркал/снимков библиотек. Команды MCP для обнаружения доступны, но реальный Graph и резервирование ещё не приняты: нет проверенного диска `/srv/backup`, restic-password и контрольного восстановления. Systemd timer отключён. Старый каталог выгрузок пока не адаптирован для полноценной навигации сайт → библиотека → снимок.
 
-Система разрабатывается и поставляется как **production-only**. Отдельный DEV-сервер не разворачивается.
+Сервис поставляется как production-only; HTTP API доступен внутри Docker-сети под обязательным mTLS, без опубликованного порта хоста.
 
 ## Архитектура и поток данных
 
 ```text
-Microsoft OneDrive Business
-       | rclone sync (не записывает в источник)
-       v
-/data/mirror — локальное зеркало
-       | restic backup --tag onedrive
-       v
-/data/restic-repo — зашифрованный репозиторий
-       | restic snapshots / ls / dump / restore
-       v
-Каталог снимков -> FastAPI + UI + JSON-RPC -> MCP Proxy / Python-клиент
+Microsoft Graph: /sites/getAllSites → /sites/{siteId}/drives
+             | полная пагинация и проверка coverage
+             v
+/data/sharepoint/inventory.json — стабильные site_id / drive_id
+             | каждый цикл discovery проверяется заново
+             v
+rclone onedrive: --onedrive-drive-id <drive_id> (только чтение)
+             | отдельное зеркало по SHA-256(site_id)/SHA-256(drive_id)
+             v
+/data/mirror/sharepoint/<site-key>/<drive-key>
+             | restic backup с тегами sharepoint, site-*, drive-*
+             v
+/data/restic-repo — зашифрованные версионные снимки
+             | каталог и экспорт (полная интеграция SharePoint в работе)
+             v
+FastAPI / MCP Proxy / Web UI
 ```
 
-Код: `src/onedrive_backup.py` — резервирование; `src/onedrive_api/server.py` — API и регистрация; `catalog.py` — каталог restic и подготовка выгрузок; `ui.py` — HTML-кабинет; `admin_password.py` — пароль admin; `info_command.py` и `command_reference.py` — справка.
+`src/onedrive_api/sharepoint_discovery.py` отвечает за полный обход и безопасную инвентаризацию; `sharepoint_backup.py` выполняет цикл по библиотекам, `sharepoint_discover_cli.py` запускает discovery. `src/onedrive_backup.py` сохраняет общий низкоуровневый механизм restic, preflight и блокировку. При неполном обходе Graph ни один rclone sync не запускается. При ошибке библиотеки задание завершается ошибкой, без `forget/prune`.
 
-Передача через MCP предназначена для метаданных и управления выгрузкой; бинарные файлы скачиваются по HTTPS REST. Произвольный доступ к файловой системе хоста не предоставляется.
+Каталог и HTML UI пока содержат прежние однодисковые механизмы. Их расширение до site/library snapshot и Vue 3 — отдельные незавершённые работы.
 
 ## Как вызываются MCP-команды
 
@@ -155,60 +161,48 @@ MCP Proxy проверяет `/health` и обращается к `GET /commands
 
 Зеркало не является резервной копией само по себе: восстановление предыдущих версий обеспечивается restic. Пароль restic храните отдельно и сохраняйте безопасную копию: его утрата делает расшифровку невозможной. Не устанавливайте `required_mountpoint=null` как обход отсутствующего диска.
 
+## Конфигурация backup.json и политики хранения
+
+`/config/backup.json` содержит `onedrive_remote="onedrive:"` (только корень, без папок), `rclone_config="/secrets/rclone.conf"`, `password_file="/secrets/restic-password"`, `mirror_dir="/data/mirror"`, `repository_dir="/data/restic-repo"`, `lock_file="/data/backup.lock"` и `required_mountpoint="/data"`.
+
+Опции `max_delete=100`, `transfers=4`, `checkers=8` ограничивают синхронизацию. `allow_empty_source=false` не позволяет принять неожиданно пустую библиотеку за удалённые файлы. Библиотеки выбираются по стабильному Graph `drive_id`; пути зеркал строятся из SHA-256 `site_id` и `drive_id`, а не из отображаемых названий.
+
+Политика 14 ежедневных / 8 еженедельных / 12 ежемесячных снимков предусмотрена, но **автоматический forget/prune для многобиблиотечного SharePoint ещё не включён**. Очистку нельзя разрешать до полного backup/restore E2E и корректной обработки исчезнувших библиотек. Не ослабляйте проверку mountpoint.
+
 ## Microsoft Entra ID и секреты резервирования
 
-Tenant ID, Client ID, Client Secret пока **не предоставлены**; штатная unattended-авторизация OneDrive Business будет настраиваться отдельно. Конфигурация rclone должна содержать разрешённый OneDrive remote `onedrive:`, доступный из процесса резервного копирования.
+Источник работает только с Microsoft Graph app-only (Tenant ID, Client ID, Client Secret **VALUE**), с администраторским согласием на read-only Application permissions, в частности `Sites.Read.All` и документированный доступ к файлам (`Files.Read.All` или совместимый read-only уровень). Права на запись не требуются и не разрешаются.
 
-`rclone.conf` и файл пароля restic — отдельные от Docker Hub credentials секреты. Они должны находиться в каталоге, недоступном посторонним, с минимальными файловыми правами и монтироваться в контейнер под `/secrets`. Перед разрешением backup проверьте чтение конфигурации внутри контейнера, работу rclone и точный объём OneDrive.
+`/secrets/rclone.conf` имеет режим 0600 и монтируется **только для чтения**. Он должен содержать раздел `[onedrive]` с `type=onedrive`, `client_credentials=true`, `tenant`, `client_id`, `client_secret`. `restic-password` хранится отдельно, вне репозитория и Docker-образа, с правами 0600. Файлы не копируются в Git, пакеты, stdout или TODO.
 
-Не записывайте регистрационные данные Microsoft 365 в `/etc/default`, Docker image, .deb, stdout или Git.
+`GET /sites/getAllSites` и `GET /sites/{siteId}/drives` выполняются до backup, с обработкой полной пагинации. Неполный обход делает readiness отрицательным. Live-проверка прав и unattended rclone ещё не выполнена; сведения о сконфигурированном приложении сами по себе не подтверждают доступ к сайтам.
 
 ## Команды локального резервного копирования
 
-Движок `src/onedrive_backup.py` поддерживает `init`, `backup`, `backup --dry-run`, `snapshots` и `check`. Прямой пример внутри корректно настроенного контейнера:
+Начиная с 0.3.6, host runner `onedrive-backup-docker` поддерживает `start`, `stop`, `status`, `ports`, `discover [--dry-run]`, `init`, `backup [--dry-run]`, `check`. Он всегда проверяет `/srv/backup`, наличие секретов и состояние рабочего контейнера; в scaffold запуск backup/init/check запрещён.
+
+`discover` запускает чтение всех сайтов и библиотек, при полном результате атомарно обновляет `/data/sharepoint/inventory.json`; `--dry-run` не изменяет каталог. `backup` заново запускает Graph discovery, затем обходит библиотеки через `rclone` с конкретным `--onedrive-drive-id` и делает отдельные restic snapshots с тегами сайта и библиотеки. `backup --dry-run` проверяет источники и выводит предполагаемые действия без создания зеркал и снимков.
+
+Примеры (только после настройки и проверки диска):
 
 ```bash
-python -m onedrive_backup --config /config/backup.json init
-python -m onedrive_backup --config /config/backup.json backup --dry-run
-python -m onedrive_backup --config /config/backup.json backup
-python -m onedrive_backup --config /config/backup.json snapshots
-python -m onedrive_backup --config /config/backup.json check
+sudo onedrive-backup-docker discover --dry-run
+sudo onedrive-backup-docker discover
+sudo onedrive-backup-docker init
+sudo onedrive-backup-docker backup --dry-run
+sudo onedrive-backup-docker backup
+sudo onedrive-backup-docker check
 ```
 
-`init` запускается один раз для пустого restic-репозитория. `backup --dry-run` проверяет синхронизацию без изменения зеркала и снимков. Реальный `backup` выполняет rclone sync с ограничением массового удаления `max_delete`, затем restic backup, а после успеха — forget/prune по политике хранения. При ошибке rclone снимок не создаётся. Файловая блокировка `flock` не допускает параллельных запусков.
-
-Документированные в старых версиях оболочки команды `onedrive-backup-docker backup/init` следует сверить с установленным runner: доступный сейчас shell runner обслуживает start/stop/status/ports; backup через него не реализован.
+При ошибке Graph, пустом источнике, отказе rclone или restic цикл завершаетcя неуспехом. При частичном выполнении уже созданные снимки остаются в restic, но `forget/prune` не вызывается. Исходный SharePoint никогда не изменяется.
 
 ## Systemd, расписание и безопасность запуска
 
-`onedrive-backup-api.service` управляет контейнером и использует `/etc/default/onedrive-backup`. Тип `oneshot` с `RemainAfterExit=yes`: статус active означает успех запуска контроллера; фактическое состояние контейнера необходимо проверить отдельно.
+`onedrive-backup-api.service` управляет контейнером с mTLS. `onedrive-backup.service` вызывает host runner `onedrive-backup-docker backup` — один цикл discovery + синхронизация всех найденных библиотек + restic snapshots. `onedrive-backup.timer` содержит базовый календарь 02:30 с разбросом до 15 минут, `Persistent=true`. Функция настройки календаря и отслеживания отдельных jobs через MCP ещё не реализована.
 
-`onedrive-backup.service` — разовый backup unit; `onedrive-backup.timer` — ежедневный timer примерно на 02:30 с случайной задержкой до 15 минут. До настройки OneDrive и проверки рабочего механизма запуска backup unit **не включайте таймер**.
+**Таймер оставлен disabled/inactive.** Перед его включением требуется подтверждённый `/srv/backup`, app-only Graph доступ, `rclone.conf`, `restic-password`, инициализированный restic, полный dry-run, успешный первый снимок, `check` и контрольное восстановление с проверкой SHA-256. Глобальная блокировка `/data/backup.lock` исключает параллельные циклы.
 
-```bash
-sudo systemctl status onedrive-backup-api.service
-sudo docker inspect onedrive-backup
-sudo docker logs --tail 100 onedrive-backup
-sudo onedrive-backup-docker status
-sudo onedrive-backup-docker ports
-```
-
-Не применяйте массовый Docker prune, удаление volumes или очистку restic-repo без предварительной оценки хранилища.
-
-## REST API и безопасность экспорта
-
-Под mTLS доступны:
-- `GET /api/v1/health` — состояние API.
-- `GET /api/v1/snapshots?limit=100` — снимки.
-- `GET /api/v1/snapshots/{snapshot_id}/files` с prefix, offset, limit.
-- `POST /api/v1/exports` с snapshot_id, необязательным file_path.
-- `GET /api/v1/exports/{export_id}` — байты файла.
-- `GET /api/v1/exports/{export_id}/status` — метаданные.
-- `DELETE /api/v1/exports/{export_id}` — удалить выгрузку.
-
-`export_id` непрозрачен; нельзя передавать в API путь к произвольному файлу хоста. При выгрузке полного снимка создаётся `tar.gz`. По умолчанию лимит экспорта 10 GiB (`ONEDRIVE_MAX_EXPORT_BYTES`), срок жизни 24 часа.
-
-**Выгрузки содержат plaintext**, несмотря на зашифрованный исходный restic. После скачивания проверяйте размер и SHA-256, затем удаляйте временную выгрузку. Просроченный export возвращает 410, неизвестный — 404, превышение лимита — 413.
+Команды проверки: `systemctl status onedrive-backup-api.service`, `systemctl is-enabled onedrive-backup.timer`, `docker inspect onedrive-backup`, `onedrive-backup-docker status`. Состояние API `active` или успешный mTLS handshake сами по себе не подтверждают работающий backup.
 
 ## HTML-интерфейс и авторизация admin
 
