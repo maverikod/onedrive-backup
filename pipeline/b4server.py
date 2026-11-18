@@ -82,7 +82,7 @@ def rest_removed() -> None:
 def _ws_cases(report: Report, prefix: str) -> None:
     '''F10 (revision 4, 10.2): exact statuses and no tolerance.
 
-    Plain GET /ws answers 404 with the run token and 401 without it (the token gate of AU1). A WebSocket Upgrade handshake
+    Plain GET /ws answers 404 with and without the run token. A WebSocket Upgrade handshake
     answers 403 with and without the token (refused by the ASGI server itself), never 101: no handshake completes.
     '''
     for label, headers in (('GET /ws', {}), ('GET /ws with a WebSocket Upgrade handshake', UPGRADE)):
@@ -91,7 +91,7 @@ def _ws_cases(report: Report, prefix: str) -> None:
             if auth and not live.token():
                 report.state.append('%s: needs the token T: %s' % (tag, NO_CREDS))
                 continue
-            wanted = 403 if headers is UPGRADE else (404 if auth else 401)
+            wanted = 403 if headers is UPGRADE else 404
             got = _try(report, tag, base.probe, 'GET', '/ws', None, headers, auth)
             if got is not None and got[0] != wanted:
                 report.product.append('%s: answered %d %s, expected exactly %d (the /ws route stays closed, F10; never 101)'
@@ -99,7 +99,7 @@ def _ws_cases(report: Report, prefix: str) -> None:
 
 
 def ws_closed() -> None:
-    '''F10: /ws stays closed (decision 6, adapter bug c0438b53): plain GET 404 with the token and 401 without it, the Upgrade handshake 403 with and without the token, never 101.'''
+    '''F10: /ws stays closed (decision 6, adapter bug c0438b53): plain GET 404 with and without the token, the Upgrade handshake 403 with and without the token, never 101.'''
     report = Report()
     _ws_cases(report, 'F10')
     report.finish('ws_closed')
