@@ -6,7 +6,9 @@ import argparse
 import asyncio
 import base64
 import json
+import logging
 import os
+import secrets
 import socket
 import time
 from pathlib import Path
@@ -15,6 +17,8 @@ from typing import Any
 
 from .catalog import EXPORT_RE, Catalog, CatalogError
 from .version import read_version
+
+LOG = logging.getLogger(__name__)
 
 
 def _catalog() -> Catalog:
@@ -48,40 +52,55 @@ ALLOWED_ROUTES = frozenset({
 
 
 def api_token() -> str | None:
-    """Return the interim API token T = base64(login:password), or None when none is provisioned.
+    """Return the interim API token T = base64(login:password), or None when no valid one is provisioned.
 
     The credentials are one line login:password in a private file of the host secrets directory
-    (mode 0600, owner of the service), never in the committed configuration. A malformed file is
-    refused; an absent file leaves the server locked because every request then fails the token gate.
+    (mode 0600, owner of the service), never in the committed configuration. An absent, empty or
+    malformed file yields None: no direct peer can then authenticate (every request without a token
+    answers 401), while the service still starts and serves the MCP Proxy peer (AU5, R18).
     """
     path = Path(os.environ.get(CREDENTIALS_FILE_ENV, DEFAULT_CREDENTIALS_FILE))
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return None
     lines = text.splitlines()
     login, sep, password = (lines[0] if lines else "").partition(":")
     if not (sep and login and password):
-        raise ValueError("API credentials file must hold one line login:password")
+        LOG.warning("API credentials file holds no line login:password: no direct peer can authenticate")
+        return None
     return base64.b64encode((login + ":" + password).encode("utf-8")).decode("ascii")
 
 
-def secure_auth(config: dict) -> None:
-    """Enforce the adapter token gate: use_token must be on and the only token is T of the credentials file."""
+def secure_auth(config: dict) -> str:
+    """Enforce the adapter token gate and return the internal proxy token.
+
+    auth.use_token must be on. The framework refuses to start without a token, so the accepted tokens are
+    always the internal token, a random per-process secret that only ProxyTrustMiddleware presents (it
+    exists whether or not the credentials file does), plus T of the credentials file when one is provisioned.
+    A direct peer needs T; the MCP Proxy peer is admitted by the middleware on its transport identity alone.
+    """
     auth = config.get("auth")
     if not isinstance(auth, dict) or auth.get("use_token") is not True:
         raise ValueError("Production server MUST set auth.use_token=true")
+    internal = secrets.token_urlsafe(32)
+    tokens = {internal: ["other"]}
     token = api_token()
-    auth["tokens"] = {token: ["other"]} if token else {}
+    if token:
+        tokens[token] = ["other"]
+    auth["tokens"] = tokens
+    return internal
 
 
 class ProxyTrustMiddleware:
-    """ASGI middleware: a request whose peer is the MCP Proxy host carries the API token.
+    """ASGI middleware: the MCP Proxy peer is admitted on its transport identity, with no token from it.
 
-    MCP Proxy forwards commands without a token. Its callers are authorized by the proxy itself (OAuth
-    and access lists) and the connection is already mutual TLS, so a request from the proxy host is
-    admitted by adding the token header; every other peer must present the token. Without configured
-    hosts or without a provisioned token nothing is added and the gate stays closed.
+    Every connection is already mutual TLS (a trusted client certificate is mandatory). MCP Proxy forwards
+    commands without a token; its callers are authorized by the proxy itself (OAuth and access lists). A request
+    whose transport peer address is one of the addresses of the configured proxy host names carries the internal
+    token, which no other peer knows, so it passes the token gate on every route whether or not the
+    api-credentials secret exists. Every other peer must present T. Without configured hosts nobody is admitted
+    without a token (fail closed), and request headers (X-Forwarded-For, Forwarded, X-Real-IP, Host) grant nothing.
     """
 
     CACHE_SECONDS = 30.0
@@ -111,6 +130,7 @@ class ProxyTrustMiddleware:
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] == "http" and self.token and self.hosts:
+            # The transport peer of the mTLS connection only; no request header is ever read for identity.
             peer = (scope.get("client") or (None,))[0]
             if peer and peer in await self._proxy_addresses():
                 headers = [(k, v) for k, v in scope["headers"] if k.lower() != b"x-api-key"]
@@ -542,7 +562,7 @@ def make_app(config_path: str | Path):
             )
         except AuthError as exc:
             raise ValueError("Admin password not set: " + str(exc)) from exc
-    secure_auth(config)
+    proxy_token = secure_auth(config)
     transfer = validate_transfer(config)
     os.environ["CONFIG_FILE"] = str(config_path)
     os.environ["MCP_CONFIG_FILE"] = str(config_path)
@@ -576,10 +596,10 @@ def make_app(config_path: str | Path):
     from .ui import install_ui
 
     install_ui(app, _catalog)
-    # Added last, so it runs first: it must put the token on a proxy request before the token gate.
+    # Added last, so it runs first: it must put the internal token on a proxy peer request before the token gate.
     trust = config.get("proxy_trust")
     hosts = trust.get("hosts", []) if isinstance(trust, dict) else []
-    app.add_middleware(ProxyTrustMiddleware, hosts=hosts, token=next(iter(config["auth"]["tokens"]), None))
+    app.add_middleware(ProxyTrustMiddleware, hosts=hosts, token=proxy_token)
 
     return app
 

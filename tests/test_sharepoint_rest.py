@@ -86,25 +86,32 @@ class TokenGateTests(ServerFixture):
         expected = base64.b64encode(b"debug:not-a-real-password").decode("ascii")
         self.assertEqual(server.api_token(), expected)
 
-    def test_absent_credentials_leave_no_token(self) -> None:
+    def test_absent_credentials_leave_no_token_but_an_internal_one(self) -> None:
         self.credentials.unlink()
         self.assertIsNone(server.api_token())
         config = self.config()
-        server.secure_auth(config)
-        self.assertEqual(config["auth"]["tokens"], {})
+        internal = server.secure_auth(config)
+        self.assertTrue(internal)
+        self.assertEqual(list(config["auth"]["tokens"]), [internal])
 
-    def test_malformed_credentials_are_refused(self) -> None:
+    def test_malformed_credentials_leave_no_token_and_do_not_stop_startup(self) -> None:
         for text in ("", "nologin\n", ":nopassword\n", "nopassword:\n"):
             with self.subTest(text=text):
                 self.credentials.write_text(text)
-                with self.assertRaises(ValueError):
-                    server.api_token()
+                self.assertIsNone(server.api_token())
+                config = self.config()
+                internal = server.secure_auth(config)
+                self.assertEqual(list(config["auth"]["tokens"]), [internal])
 
-    def test_secure_auth_installs_only_the_credentials_token(self) -> None:
+    def test_secure_auth_installs_the_credentials_token_and_the_internal_one(self) -> None:
         config = self.config()
         config["auth"]["tokens"] = {"committed-token": ["other"]}
-        server.secure_auth(config)
-        self.assertEqual(list(config["auth"]["tokens"]), [server.api_token()])
+        internal = server.secure_auth(config)
+        self.assertEqual(set(config["auth"]["tokens"]), {internal, server.api_token()})
+        self.assertNotEqual(internal, server.api_token())
+
+    def test_internal_token_is_random_per_start(self) -> None:
+        self.assertNotEqual(server.secure_auth(self.config()), server.secure_auth(self.config()))
 
     def test_token_gate_must_be_on(self) -> None:
         for auth in ({}, {"use_token": False}, {"use_token": "yes"}):
@@ -192,6 +199,28 @@ class RouteFilterTests(ServerFixture):
             self.assertIn(kept, paths)
         self.assertIs(app.state.public_download_resolver, server._resolve_download)
 
+    def test_make_app_starts_without_a_valid_secret_and_arms_the_proxy_middleware(self) -> None:
+        for state in ("present", "absent", "empty", "malformed"):
+            with self.subTest(state=state):
+                if state == "absent":
+                    self.credentials.unlink(missing_ok=True)
+                elif state == "present":
+                    self.credentials.write_text("debug:not-a-real-password\n")
+                else:
+                    self.credentials.write_text("" if state == "empty" else "nopassword\n")
+                fake = FastAPI()
+                with (
+                    patch("mcp_proxy_adapter.api.app.create_app", return_value=fake) as created,
+                    patch("onedrive_api.ui.install_ui"),
+                ):
+                    server.make_app(self.config_path)
+                tokens = created.call_args.kwargs["app_config"]["auth"]["tokens"]
+                armed = fake.user_middleware[0]
+                self.assertIs(armed.cls, server.ProxyTrustMiddleware)
+                options = getattr(armed, "kwargs", None) or armed.options
+                self.assertIn(options["token"], tokens)
+                self.assertEqual(len(tokens), 2 if state == "present" else 1)
+
     def test_make_app_refuses_an_open_token_gate(self) -> None:
         config = self.config()
         config["auth"]["use_token"] = False
@@ -200,14 +229,10 @@ class RouteFilterTests(ServerFixture):
             server.make_app(self.config_path)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class ProxyTrustTests(unittest.TestCase):
-    """A request from the trusted proxy host carries the token; every other peer does not."""
+    """The MCP Proxy peer carries the internal token; every other peer does not, whatever its headers say."""
 
-    def run_request(self, peer, hosts=("127.0.0.1",), token="T0KEN", incoming=()):
+    def run_request(self, peer, hosts=("127.0.0.1",), token="INTERNAL", incoming=()):
         import asyncio
         seen = {}
 
@@ -219,15 +244,24 @@ class ProxyTrustTests(unittest.TestCase):
         asyncio.run(middleware(scope, None, None))
         return seen["headers"]
 
-    def test_proxy_peer_gets_the_token(self) -> None:
-        self.assertEqual(self.run_request("127.0.0.1")[b"x-api-key"], b"T0KEN")
+    def test_proxy_peer_gets_the_internal_token(self) -> None:
+        self.assertEqual(self.run_request("127.0.0.1")[b"x-api-key"], b"INTERNAL")
 
     def test_proxy_peer_cannot_inject_another_token(self) -> None:
         headers = self.run_request("127.0.0.1", incoming=[(b"x-api-key", b"other")])
-        self.assertEqual(headers[b"x-api-key"], b"T0KEN")
+        self.assertEqual(headers[b"x-api-key"], b"INTERNAL")
 
     def test_other_peer_gets_nothing(self) -> None:
         self.assertNotIn(b"x-api-key", self.run_request("10.9.9.9"))
+
+    def test_direct_peer_keeps_its_own_token_header(self) -> None:
+        headers = self.run_request("10.9.9.9", incoming=[(b"x-api-key", b"T")])
+        self.assertEqual(headers[b"x-api-key"], b"T")
+
+    def test_spoofed_proxy_headers_grant_nothing(self) -> None:
+        spoof = [(b"x-forwarded-for", b"127.0.0.1"), (b"forwarded", b"for=127.0.0.1;host=127.0.0.1"),
+                 (b"x-real-ip", b"127.0.0.1"), (b"host", b"127.0.0.1")]
+        self.assertNotIn(b"x-api-key", self.run_request("10.9.9.9", incoming=spoof))
 
     def test_closed_without_hosts_or_token(self) -> None:
         self.assertNotIn(b"x-api-key", self.run_request("127.0.0.1", hosts=()))
@@ -235,3 +269,7 @@ class ProxyTrustTests(unittest.TestCase):
 
     def test_unresolvable_host_trusts_nothing(self) -> None:
         self.assertNotIn(b"x-api-key", self.run_request("127.0.0.1", hosts=("no-such-host.invalid",)))
+
+
+if __name__ == "__main__":
+    unittest.main()

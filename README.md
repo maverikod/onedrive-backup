@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.8 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.9 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,10 +6,10 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.8, Python 3.12,
+- Docker image: vasilyvz/onedrive-backup:0.3.9, Python 3.12,
   mcp-proxy-adapter 8.11.16, HTTPS/mTLS TCP port 8050.
-- Debian host package: dist/onedrive-backup_0.3.8_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.8-py3-none-any.whl.
+- Debian host package: dist/onedrive-backup_0.3.9_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.9-py3-none-any.whl.
 - Verification: python -m pipeline; after image build: python -m pipeline smoke_mtls.
 
 Build all release artifacts on CAS host via ./build.sh. It tests the code,
@@ -78,7 +78,7 @@ On a CAS build host:
 
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.8_all.deb
+    sudo apt install ./onedrive-backup_0.3.9_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
@@ -111,10 +111,14 @@ the configured OneDrive remote is covered (no tenant-wide user discovery).
 
 The API is the set of mcp-proxy-adapter commands over JSON-RPC (`POST /api/jsonrpc`), reachable
 directly over mutual TLS and through MCP Proxy. There is no HTTP fallback and no REST layer: the
-routes `/api/v1/*` are removed. Every JSON-RPC call and every download needs the token header
-`X-API-Key`; the token is base64(login:password) of the one line `login:password` kept in
+routes `/api/v1/*` are removed. Every JSON-RPC call and every download of a direct peer (odbcli, the Python client, the Vue UI, the pipeline)
+needs the token header `X-API-Key`; the token is base64(login:password) of the one line `login:password` kept in
 `/var/lib/onedrive-backup/secrets/api-credentials` (mode 0600, owner onedrive-backup, mounted
-read-only at `/secrets`). Without that file every protected request answers 401. `/health` and
+read-only at `/secrets`). Without a valid file (absent, empty or malformed) the service still starts and every direct request answers 401.
+The MCP Proxy peer is admitted with no token on mutual-TLS transport identity alone (its transport address must be
+one of the `proxy_trust.hosts` names of server.json), on every route it reaches and whether or not that file exists;
+`X-Forwarded-For`, `Forwarded`, `X-Real-IP` and `Host` grant nothing, and with no configured name nobody is
+admitted without a token. `/health` and
 `GET /commands` stay open for MCP Proxy; `/ws` and the upload routes are closed.
 
 To prepare a single-file export call `backup_prepare_download` with snapshot_id and a relative
@@ -132,7 +136,7 @@ maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.8-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.9-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 

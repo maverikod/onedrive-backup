@@ -1,3 +1,14 @@
+## 0.3.9 — B4 MCP Proxy peer admission
+
+- The MCP Proxy peer is admitted on its mTLS transport identity alone, with no token, on every route it reaches, whether
+  or not `/secrets/api-credentials` exists: the server holds a random per-process internal token that only the proxy
+  middleware presents (before, the middleware injected T, which does not exist without the secret).
+- An absent, empty or malformed `/secrets/api-credentials` no longer stops the service: direct peers answer 401 and the
+  proxy peer is served.
+- Fail closed: with no `proxy_trust.hosts` nobody is admitted without a token; `X-Forwarded-For`, `Forwarded`,
+  `X-Real-IP` and `Host` grant nothing; mTLS stays mandatory; direct peers are unchanged.
+- `scripts/smoke-mtls.sh` also starts the service with the secret absent and empty and expects 401.
+
 ## 0.3.8 — B4 server: commands, download link, token gate
 
 - REST `/api/v1/*` is removed; the served routes are the adapter framework routes, `/downloads/{file_id}/{filename}`

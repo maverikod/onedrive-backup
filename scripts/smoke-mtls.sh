@@ -6,7 +6,7 @@ IMAGE="vasilyvz/onedrive-backup:$(tr -d ' \r\n' < "$ROOT/VERSION")"
 ROOT_TMP="$(mktemp -d)"
 NAME="odb-smoke-$$"
 cleanup() {
-  docker rm -f "$NAME" >/dev/null 2>&1 || true
+  docker rm -f "$NAME" "$NAME-absent" "$NAME-empty" >/dev/null 2>&1 || true
   rm -rf "$ROOT_TMP"
 }
 trap cleanup EXIT
@@ -137,4 +137,61 @@ if curl -fsS --cacert "$ROOT_TMP/config/certs/ca.crt" --cert "$ROOT_TMP/untruste
   echo '[FAIL] mTLS accepted an untrusted client certificate' >&2
   exit 1
 fi
-echo '[PASS] mTLS handshake, mandatory trusted client cert, health 200, token gate 401, missing repo 503'
+# Secret absent or empty (AU5): the service still starts, mTLS stays mandatory and a direct peer answers 401, with no
+# token and with the token T that was valid for the first container. The MCP Proxy peer (admitted on its transport
+# identity with no token) is asserted by the pipeline check proxy_trust_independent.
+free_port() {
+  python3 - <<'PY_PORT'
+import socket
+s=socket.socket()
+s.bind(("127.0.0.1",0))
+print(s.getsockname()[1])
+s.close()
+PY_PORT
+}
+for state in absent empty; do
+  secrets_dir="$ROOT_TMP/secrets-$state"
+  mkdir -p "$secrets_dir"
+  chmod 0755 "$secrets_dir"
+  if [[ "$state" == empty ]]; then
+    : > "$secrets_dir/api-credentials"
+    chmod 0644 "$secrets_dir/api-credentials"
+  fi
+  state_port="$(free_port)"
+  docker run -d --name "$NAME-$state" -p "127.0.0.1:$state_port:8050" \
+    --mount "type=bind,source=$ROOT_TMP/config,target=/config,readonly" \
+    --mount "type=bind,source=$ROOT_TMP/data,target=/data" \
+    --mount "type=bind,source=$secrets_dir,target=/secrets,readonly" \
+    "$IMAGE" >/dev/null
+  up=0
+  for n in $(seq 1 35); do
+    if curl -fsS --connect-timeout 1 --max-time 2 \
+        --cacert "$ROOT_TMP/config/certs/ca.crt" \
+        --cert "$ROOT_TMP/client.crt" --key "$ROOT_TMP/client.key" \
+        "https://localhost:$state_port/health" >/dev/null 2>&1; then
+      up=1; break
+    fi
+    sleep 1
+  done
+  if [ "$up" -ne 1 ]; then
+    docker logs "$NAME-$state" --tail 60 >&2 || true
+    echo "[FAIL] the service did not start with the API credentials $state" >&2
+    exit 1
+  fi
+  for key in "" "$API_TOKEN"; do
+    header=()
+    if [[ -n "$key" ]]; then
+      header=(-H "X-API-Key: $key")
+    fi
+    http_code="$(curl -sS -o "$ROOT_TMP/error" -w '%{http_code}' \
+      --cacert "$ROOT_TMP/config/certs/ca.crt" \
+      --cert "$ROOT_TMP/client.crt" --key "$ROOT_TMP/client.key" \
+      -X POST -H 'Content-Type: application/json' "${header[@]}" --data "$RPC" \
+      --max-time 8 "https://localhost:$state_port/api/jsonrpc")"
+    [[ "$http_code" == 401 ]] || {
+      echo "Credentials $state: JSON-RPC answered HTTP $http_code, expected 401"; cat "$ROOT_TMP/error"; exit 1;
+    }
+  done
+  docker rm -f "$NAME-$state" >/dev/null 2>&1 || true
+done
+echo '[PASS] mTLS handshake, mandatory trusted client cert, health 200, token gate 401, missing repo 503, absent and empty secret start and answer 401'
