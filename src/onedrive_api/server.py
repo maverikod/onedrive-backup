@@ -61,7 +61,7 @@ def _register_commands() -> None:
         """Describe registered commands with the canonical metadata."""
 
         category = "documentation"
-        version = "0.3.5"
+        version = "0.3.6"
         author = "OneDrive Backup maintainers"
         email = "maintainers@example.org"
 
@@ -72,7 +72,7 @@ def _register_commands() -> None:
 
     class CatalogCommand(Command):
         category = "backup"
-        version = "0.3.5"
+        version = "0.3.6"
         author = "OneDrive Backup"
         email = "maintainers@example.org"
 
@@ -384,7 +384,7 @@ def make_app(config_path: str | Path):
     app = create_app(
         title="OneDrive Backup API",
         description="Read-only backup browse/export over mTLS",
-        version="0.3.5",
+        version="0.3.6",
         app_config=config,
         config_path=str(config_path),
     )
