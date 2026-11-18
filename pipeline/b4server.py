@@ -77,7 +77,7 @@ def rest_removed() -> None:
 
 
 def ws_closed() -> None:
-    '''F10: /ws stays closed (decision 6, adapter bug c0438b53): plain GET and Upgrade handshake answer 404, never 101.'''
+    '''F10: /ws stays closed (decision 6, adapter bug c0438b53): plain GET answers 404 (401 before the token gate), the Upgrade handshake answers 404 or 403 (the ASGI server refuses it before the app, live-captured), never 101.'''
     report = Report()
     for label, headers in (('GET /ws', {}), ('GET /ws with a WebSocket Upgrade handshake', UPGRADE)):
         for auth in ((False, True) if live.token() else (False,)):
@@ -112,7 +112,6 @@ def _openapi(report: Report):
 def surface_framework_routes() -> None:
     '''F1..F11: framework routes of the adapter plus the returned download routes; /ws, uploads and REST stay closed.'''
     report = Report()
-    token = live.token()
 
     def expect(label, method, path, statuses, body=None, headers=None):
         got = _try(report, label, base.probe, method, path, body, headers)
@@ -147,12 +146,7 @@ def surface_framework_routes() -> None:
             if found:
                 report.product.append('%s: the route schema still holds %s' % (row, found))
     else:
-        report.product.append('F8, F9: route presence cannot be proven without /openapi.json; probing the behaviour instead')
-    for label, method, path in (('F8 HEAD a download link of an unknown export', 'HEAD', '/downloads/%s/x.bin' % ZERO_ID),
-                                ('F9 GET the transfer download of an unknown id', 'GET', '/api/transfer/downloads/unknown')):
-        got = _try(report, label, base.probe, 'HEAD' if method == 'HEAD' else method, path, None, None, True)
-        if got is not None and got[0] == 404 and paths is None and not token:
-            report.info.append('%s: 404 is indistinguishable from a closed route without /openapi.json' % label)
+        report.info.append('F8, F9: route presence is not provable without /openapi.json (F5 is RED); the behaviour of both routes is asserted by download_link and transfer_confinement')
     for label, method, path in (('F10 GET /ws', 'GET', '/ws'), ('F11 GET /api/transfer/uploads', 'GET', '/api/transfer/uploads'),
                                 ('F11 POST /api/transfer/uploads', 'POST', '/api/transfer/uploads')):
         expect(label, method, path, (404,), b'{}' if method == 'POST' else None, JSON_HEADERS if method == 'POST' else None)

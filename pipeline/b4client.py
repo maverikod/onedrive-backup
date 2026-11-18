@@ -235,7 +235,7 @@ def client_fetch_integrity() -> None:
             if need not in params:
                 report.product.append('%s: BackupClient.fetch has no parameter %s (C-K12)' % (base.src_line(PKG + '/api.py', 'def fetch'), need))
         try:
-            bogus = module.BackupClient(**{k: v for k, v in dict(url='https' + chr(58) + chr(47) * 2 + 'unreachable.invalid' + chr(58) + '8050', ca=live._tls_files()[0], cert=live._tls_files()[1], key=live._tls_files()[2], timeout=1).items() if k in inspect.signature(module.BackupClient).parameters})
+            bogus = module.BackupClient(**{k: v for k, v in dict(url=live.base_url(), ca=live._tls_files()[0], cert=live._tls_files()[1], key=live._tls_files()[2], timeout=1).items() if k in inspect.signature(module.BackupClient).parameters})
         except Exception as exc:
             report.product.append('R9 BackupClient cannot be built offline for the pre-network check: %s: %s' % (type(exc).__name__, exc))
             report.finish('client_fetch_integrity')

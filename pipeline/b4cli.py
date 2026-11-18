@@ -111,6 +111,11 @@ def _baseline(report: Report, main, sub: str, label: str, state) -> None:
             json.loads(out)
         except ValueError:
             report.product.append('%s baseline odbcli %s: exit 0 but stdout is not JSON: %r' % (label, sub, out[:80]))
+        else:
+            if sub in ('help', 'health'):
+                missing = [name for name in base.live_commands() if name not in out]
+                if missing:
+                    report.product.append('%s baseline odbcli %s: the JSON output omits the live commands %s' % (label, sub, missing))
     elif state == 'S0' and sub in NEEDS_S1 and '503' in (out + err):
         report.state.append('%s baseline odbcli %s: needs an S1 service but production answers S0 (503)' % (label, sub))
     elif sub in ('status', 'delete', 'download-link') and '404' in (out + err) and code not in (1, 2):
