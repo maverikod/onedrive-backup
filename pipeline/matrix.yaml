@@ -325,7 +325,7 @@
   "PX10": {"baseline": {"outcome": "success", "result": "no certificate, untrusted certificate, trusted certificate against production (extends smoke_mtls; block assumed B4)", "errors": "RED with the exact violation list", "side_effects": "none", "idempotent": true}, "cases": {}}
  },
  "checks": [
-  {"name": "adapter_version_pin", "blocks": ["B1"], "rows": ["VR2"], "status": "pending"},
+  {"name": "adapter_version_pin", "blocks": ["B1"], "rows": ["VR2"], "status": "implemented"},
   {"name": "auth_token", "blocks": ["B4"], "rows": ["AU1", "AU2", "AU3"], "status": "pending"},
   {"name": "cli_delete", "blocks": ["B4"], "rows": ["CL6"], "status": "deprecated", "replaced_by": "odbcli_delete"},
   {"name": "cli_download", "blocks": ["B4"], "rows": ["CL8"], "status": "deprecated", "replaced_by": "odbcli_download"},
@@ -417,7 +417,7 @@
   {"name": "ui_snapshots", "blocks": ["UI-VUE"], "rows": ["U5"], "status": "deprecated", "replaced_by": "vue_command_calls"},
   {"name": "ui_surface", "blocks": ["UI-VUE"], "rows": ["U1"], "status": "deprecated", "replaced_by": "vue_static_serve"},
   {"name": "unit_tests", "blocks": ["B2"], "rows": ["PX4"], "status": "legacy"},
-  {"name": "version_consistency", "blocks": ["B1"], "rows": ["VR1"], "status": "pending"},
+  {"name": "version_consistency", "blocks": ["B1"], "rows": ["VR1"], "status": "implemented"},
   {"name": "vue_auth", "blocks": ["UI-VUE"], "rows": ["V2"], "status": "pending"},
   {"name": "vue_build", "blocks": ["UI-VUE"], "rows": ["V6"], "status": "pending"},
   {"name": "vue_command_calls", "blocks": ["UI-VUE"], "rows": ["V4"], "status": "pending"},
