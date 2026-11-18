@@ -287,7 +287,7 @@ class InfoCommand(Command):
     name = "info"
     descr = "Paginated OneDrive Backup manual; page 1 is the full contents."
     category = "documentation"
-    version = "0.3.5"
+    version = "0.3.6"
     author = "OneDrive Backup maintainers"
     email = "maintainers@example.org"
 
