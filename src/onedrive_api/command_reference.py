@@ -127,7 +127,7 @@ REFERENCE: dict[str, dict[str, Any]] = {
             },
         },
         "best_practices": [
-            "Do not confuse REST health with source readiness.",
+            "Do not confuse /health with source readiness.",
             "Check coverage and errors after each complete scan.",
         ],
     },
@@ -347,10 +347,13 @@ REFERENCE: dict[str, dict[str, Any]] = {
                     "sha256": "SHA-256 of staged plaintext payload.",
                     "created_at": "ISO timestamp of staging.",
                     "expires_at": "ISO timestamp of expiry (normally +24 h).",
+                    "url": "Temporary download link /downloads/<export_id>/<filename>; "
+                    + "GET it with the API token header.",
                 },
                 "example": {
                     "export_id": "b" * 32,
                     "filename": "example.txt",
+                    "url": "/downloads/" + "b" * 32 + "/example.txt",
                     "size_bytes": 0,
                     "sha256": "0" * 64,
                 },
@@ -368,8 +371,8 @@ REFERENCE: dict[str, dict[str, Any]] = {
                     "snapshot_id": "a" * 64,
                     "file_path": "Documents/example.txt",
                 },
-                "explanation": "Use the returned export_id with HTTPS GET "
-                + "or Python client.",
+                "explanation": "Download from the returned url, or call "
+                + "backup_download_begin with the returned export_id.",
             },
             {
                 "description": "Stage an archive",
@@ -411,10 +414,10 @@ REFERENCE: dict[str, dict[str, Any]] = {
     },
     "backup_download_status": {
         "detailed_description": (
-            "Return metadata of a previously staged export. This MCP command "
-            "does not transfer bytes; use HTTPS GET "
-            + "/api/v1/exports/{export_id} "
-            "or the Python client for the payload."
+            "Return metadata of a previously staged export, with its temporary "
+            "download link in the field url. This MCP command does not transfer "
+            "bytes; GET the url, or use backup_download_begin and the adapter "
+            "transfer service for the payload."
         ),
         "parameters": {
             "export_id": "Required opaque 32-character "
@@ -430,9 +433,11 @@ REFERENCE: dict[str, dict[str, Any]] = {
                     "size_bytes": "Expected byte count.",
                     "sha256": "Expected SHA-256 digest.",
                     "expires_at": "Expiry timestamp.",
+                    "url": "Temporary download link /downloads/<export_id>/<filename>.",
                 },
                 "example": {
                     "export_id": "b" * 32,
+                    "url": "/downloads/" + "b" * 32 + "/example.txt",
                     "size_bytes": 0,
                     "sha256": "0" * 64,
                 },
@@ -468,6 +473,65 @@ REFERENCE: dict[str, dict[str, Any]] = {
         "best_practices": [
             "Verify the downloaded byte count and SHA-256.",
             "Do not use the export id as a filesystem path.",
+        ],
+    },
+    "backup_download_begin": {
+        "detailed_description": (
+            "Register an adapter transfer download session for one staged "
+            "export. The session is confined to the exports directory "
+            "(transfer.allowed_directories) and lives 86400 seconds; read the "
+            "bytes with GET /api/transfer/downloads/{transfer_id}/chunks and "
+            "verify the size and the SHA-256 in checksum_value."
+        ),
+        "parameters": {
+            "export_id": "Required opaque 32-character hexadecimal export "
+            + "id returned by backup_prepare_download."
+        },
+        "return_value": {
+            "success": {
+                "description": "A transfer session was registered.",
+                "data": {
+                    "transfer_id": "Transfer session id.",
+                    "filename": "Suggested downloaded filename.",
+                    "size_bytes": "Wire size in bytes.",
+                    "checksum_algorithm": "sha256.",
+                    "checksum_value": "SHA-256 of the staged payload.",
+                    "compression": "identity.",
+                    "expires_at": "Session expiry timestamp.",
+                    "transport": "Chunk method and path template.",
+                },
+                "example": {
+                    "transfer_id": "tr_" + "b" * 32,
+                    "filename": "example.txt",
+                    "checksum_algorithm": "sha256",
+                },
+            },
+            "error": {
+                "description": "Export absent, expired or invalid.",
+                "code": "400 | 404 | 410 | 413 | 503 | VALIDATION_ERROR",
+                "message": "Export or transfer error.",
+            },
+        },
+        "usage_examples": [
+            {
+                "description": "Start a transfer download",
+                "command": {"export_id": "b" * 32},
+                "explanation": "Use an id returned by backup_prepare_download.",
+            },
+        ],
+        "error_cases": {
+            "404": {
+                "description": "No staged export.",
+                "solution": "Prepare a fresh export.",
+            },
+            "410": {
+                "description": "Export expired.",
+                "solution": "Prepare a fresh export.",
+            },
+        },
+        "best_practices": [
+            "Verify the byte count and SHA-256 after the transfer.",
+            "Delete the export with backup_delete_export afterwards.",
         ],
     },
     "backup_delete_export": {
@@ -528,7 +592,7 @@ REFERENCE: dict[str, dict[str, Any]] = {
     "info": {
         "detailed_description": (
             "Paginated reference for installation, security, configuration, "
-            "backup operation, UI/REST interfaces and every live MCP command. "
+            "backup operation, the UI, the download interfaces and every live MCP command. "
             "Page 1 is a complete contents list; following pages are general "
             "chapters, a command chapter, and one page per registered command."
         ),

@@ -61,7 +61,7 @@
     "check_hostname": false
   },
   "auth": {
-    "use_token": false,
+    "use_token": true,
     "use_roles": false,
     "tokens": {},
     "roles": {}
@@ -69,5 +69,24 @@
   "queue_manager": {
     "enabled": false,
     "in_memory": true
+  },
+  "transfer": {
+    "allowed_directories": [
+      "/data/exports"
+    ],
+    "max_file_size_bytes": 10737418240,
+    "session_ttl_seconds": 86400,
+    "ws_push_enabled": false
+  },
+  "security": {
+    "enabled": false,
+    "public_paths": [
+      "/commands"
+    ]
+  },
+  "proxy_trust": {
+    "hosts": [
+      "mcp-proxy"
+    ]
   }
 }

@@ -313,7 +313,7 @@ class Catalog:
             with metadata.open("x", encoding="utf-8") as fp:
                 json.dump(meta, fp)
             metadata.chmod(0o600)
-            return meta
+            return self._with_url(meta)
         except BaseException:
             output.unlink(missing_ok=True)
             self._metadata_path(export_id).unlink(missing_ok=True)
@@ -363,8 +363,13 @@ class Catalog:
         except (ValueError, KeyError, OSError) as exc:
             raise CatalogError("Invalid export metadata", 503) from exc
 
+    @staticmethod
+    def _with_url(meta: dict) -> dict:
+        """Add the temporary download link /downloads/<export_id>/<filename> (never stored)."""
+        return {**meta, "url": "/downloads/%s/%s" % (meta["export_id"], meta["filename"])}
+
     def export_status(self, export_id: str) -> dict:
-        return self.get_export(export_id)[0]
+        return self._with_url(self.get_export(export_id)[0])
 
     def delete_export(self, export_id: str) -> dict:
         _, output = self.get_export(export_id)

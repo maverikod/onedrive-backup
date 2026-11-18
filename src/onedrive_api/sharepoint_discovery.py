@@ -490,13 +490,24 @@ class SharePointInventory:
             raise DiscoveryError("SOURCE_NOT_READY")
         return data
 
+    @staticmethod
+    def check_query(query: Any) -> None:
+        """Refuse a malformed site filter before any readiness decision."""
+        if not isinstance(query, str) or len(query) > 128:
+            raise DiscoveryError("INVALID_QUERY", 400)
+
+    @staticmethod
+    def check_site_id(site_id: Any) -> None:
+        """Refuse a malformed site identifier before any readiness decision."""
+        if not isinstance(site_id, str) or not IDENTIFIER.fullmatch(site_id):
+            raise DiscoveryError("INVALID_SITE_ID", 400)
+
     def sites(
         self, limit: int = 100, offset: int = 0, query: str = ""
     ) -> dict[str, Any]:
         """List verified sites from the last complete scan."""
+        self.check_query(query)
         data = self._ready_inventory()
-        if not isinstance(query, str) or len(query) > 128:
-            raise DiscoveryError("INVALID_QUERY", 400)
         rows = data["sites"]
         if query:
             value = query.casefold()
@@ -511,10 +522,7 @@ class SharePointInventory:
         self, site_id: str, limit: int = 100, offset: int = 0
     ) -> dict[str, Any]:
         """List document libraries for a stable SharePoint site ID."""
-        if not isinstance(site_id, str) or not IDENTIFIER.fullmatch(
-            site_id
-        ):
-            raise DiscoveryError("INVALID_SITE_ID", 400)
+        self.check_site_id(site_id)
         data = self._ready_inventory()
         if site_id not in {
             site["site_id"] for site in data["sites"]

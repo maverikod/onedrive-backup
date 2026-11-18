@@ -79,6 +79,9 @@ case "$action" in
       scaffold=1
       echo "Backup credentials not ready: restricted scaffold"
     fi
+    if ! test -s "$secrets/api-credentials"; then
+      echo "API credentials unset: every protected API request answers 401"
+    fi
     test -s "$config/server.json" || fail "Missing server.json"
     test -s "$config/backup.json" || fail "Missing backup.json"
     docker network inspect "$network" >/dev/null || fail "Missing Docker network $network"

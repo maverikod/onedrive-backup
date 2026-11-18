@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.7 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.8 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,10 +6,10 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.7, Python 3.12,
+- Docker image: vasilyvz/onedrive-backup:0.3.8, Python 3.12,
   mcp-proxy-adapter 8.11.16, HTTPS/mTLS TCP port 8050.
-- Debian host package: dist/onedrive-backup_0.3.7_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.7-py3-none-any.whl.
+- Debian host package: dist/onedrive-backup_0.3.8_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.8-py3-none-any.whl.
 - Verification: python -m pipeline; after image build: python -m pipeline smoke_mtls.
 
 Build all release artifacts on CAS host via ./build.sh. It tests the code,
@@ -78,7 +78,7 @@ On a CAS build host:
 
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.7_all.deb
+    sudo apt install ./onedrive-backup_0.3.8_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
@@ -107,40 +107,32 @@ Never enable the timer before one successful backup and a tested restore.
 Retention defaults: 14 daily, 8 weekly and 12 monthly snapshots. Only
 the configured OneDrive remote is covered (no tenant-wide user discovery).
 
-## HTTP API, read-only restic access
+## API, read-only restic access
 
-All endpoints are protected by mutual TLS. There is no HTTP fallback.
+The API is the set of mcp-proxy-adapter commands over JSON-RPC (`POST /api/jsonrpc`), reachable
+directly over mutual TLS and through MCP Proxy. There is no HTTP fallback and no REST layer: the
+routes `/api/v1/*` are removed. Every JSON-RPC call and every download needs the token header
+`X-API-Key`; the token is base64(login:password) of the one line `login:password` kept in
+`/var/lib/onedrive-backup/secrets/api-credentials` (mode 0600, owner onedrive-backup, mounted
+read-only at `/secrets`). Without that file every protected request answers 401. `/health` and
+`GET /commands` stay open for MCP Proxy; `/ws` and the upload routes are closed.
 
-GET    /api/v1/health
-GET    /api/v1/snapshots?limit=100
-GET    /api/v1/snapshots/{snapshot_id}/files?prefix=...&offset=0&limit=1000
-POST   /api/v1/exports
-GET    /api/v1/exports/{export_id}
-GET    /api/v1/exports/{export_id}/status
-DELETE /api/v1/exports/{export_id}
-
-To prepare a single-file export, POST a JSON object containing snapshot_id
-and a relative file_path such as Documents/file.pdf. Without file_path,
-the server stages a TAR.GZ export of the entire snapshot. The returned
-opaque export_id grants access only to that staged export, never to a
-server-local arbitrary filesystem path. Data is streamed, not returned as
-base64 in JSON. Temporary exports are plaintext, so treat /data/exports
-as sensitive and remove them promptly after download. Default maximum
-export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
-
-JSON-RPC commands provided to MCP Proxy: backup_snapshots,
-backup_list_files, backup_prepare_download, backup_download_status,
-backup_delete_export. The adapter admin and unrestricted file-transfer
-commands are intentionally not exposed by this server.
-
-Without configured restic storage, health returns HTTP 200, while
-backup browsing returns HTTP 503 rather than a fabricated empty result.
+To prepare a single-file export call `backup_prepare_download` with snapshot_id and a relative
+file_path such as Documents/file.pdf. Without file_path the server stages a TAR.GZ export of the
+entire snapshot. The returned opaque export_id grants access only to that staged export, never to
+an arbitrary server-local path, and the field `url` is the temporary download link
+`/downloads/<export_id>/<filename>` (GET with the token header). The same export can be read through
+the adapter transfer service: `backup_download_begin` registers the session and
+`GET /api/transfer/downloads/{transfer_id}/chunks` serves it; the transfer is confined to the
+exports directory (`transfer.allowed_directories`). Temporary exports are plaintext, so treat
+/data/exports as sensitive and remove them with `backup_delete_export` after the download. Default
+maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
 ## Python client
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.7-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.8-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 

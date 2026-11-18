@@ -1,16 +1,19 @@
-"""mTLS-only MCP Proxy Adapter and REST download API."""
+"""mTLS-only MCP Proxy Adapter: JSON-RPC commands, the temporary download link and the adapter transfer."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import json
 import os
+import socket
+import time
 from pathlib import Path
 import ssl
 from typing import Any
 
-from .catalog import Catalog, CatalogError
+from .catalog import EXPORT_RE, Catalog, CatalogError
 from .version import read_version
 
 
@@ -22,6 +25,120 @@ def _catalog() -> Catalog:
             os.environ.get("ONEDRIVE_MAX_EXPORT_BYTES", str(10 * 1024**3))
         ),
     )
+
+
+CREDENTIALS_FILE_ENV = "ONEDRIVE_API_CREDENTIALS_FILE"
+DEFAULT_CREDENTIALS_FILE = "/secrets/api-credentials"
+# Routes of the adapter that stay served: JSON-RPC, health, the command listing, the schema pages, the
+# temporary download link and the adapter transfer download (confined by transfer.allowed_directories).
+# Everything else, /ws and the upload routes included, is removed.
+ALLOWED_ROUTES = frozenset({
+    "/api/jsonrpc",
+    "/api/jsonrpc/batch",
+    "/health",
+    "/commands",
+    "/openapi.json",
+    "/docs",
+    "/redoc",
+    "/downloads/{file_id}/{filename}",
+    "/api/transfer/downloads",
+    "/api/transfer/downloads/{transfer_id}",
+    "/api/transfer/downloads/{transfer_id}/chunks",
+})
+
+
+def api_token() -> str | None:
+    """Return the interim API token T = base64(login:password), or None when none is provisioned.
+
+    The credentials are one line login:password in a private file of the host secrets directory
+    (mode 0600, owner of the service), never in the committed configuration. A malformed file is
+    refused; an absent file leaves the server locked because every request then fails the token gate.
+    """
+    path = Path(os.environ.get(CREDENTIALS_FILE_ENV, DEFAULT_CREDENTIALS_FILE))
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    lines = text.splitlines()
+    login, sep, password = (lines[0] if lines else "").partition(":")
+    if not (sep and login and password):
+        raise ValueError("API credentials file must hold one line login:password")
+    return base64.b64encode((login + ":" + password).encode("utf-8")).decode("ascii")
+
+
+def secure_auth(config: dict) -> None:
+    """Enforce the adapter token gate: use_token must be on and the only token is T of the credentials file."""
+    auth = config.get("auth")
+    if not isinstance(auth, dict) or auth.get("use_token") is not True:
+        raise ValueError("Production server MUST set auth.use_token=true")
+    token = api_token()
+    auth["tokens"] = {token: ["other"]} if token else {}
+
+
+class ProxyTrustMiddleware:
+    """ASGI middleware: a request whose peer is the MCP Proxy host carries the API token.
+
+    MCP Proxy forwards commands without a token. Its callers are authorized by the proxy itself (OAuth
+    and access lists) and the connection is already mutual TLS, so a request from the proxy host is
+    admitted by adding the token header; every other peer must present the token. Without configured
+    hosts or without a provisioned token nothing is added and the gate stays closed.
+    """
+
+    CACHE_SECONDS = 30.0
+
+    def __init__(self, app, hosts: list[str], token: str | None) -> None:
+        self.app = app
+        self.hosts = [item for item in hosts if isinstance(item, str) and item]
+        self.token = token
+        self._addresses: set[str] = set()
+        self._resolved_at = 0.0
+
+    async def _proxy_addresses(self) -> set[str]:
+        """Resolve the trusted host names, cached for a short time; a failed lookup trusts nothing."""
+        now = time.monotonic()
+        if now - self._resolved_at < self.CACHE_SECONDS:
+            return self._addresses
+        found: set[str] = set()
+        loop = asyncio.get_running_loop()
+        for host in self.hosts:
+            try:
+                for info in await loop.getaddrinfo(host, None, type=socket.SOCK_STREAM):
+                    found.add(info[4][0])
+            except OSError:
+                continue
+        self._addresses, self._resolved_at = found, now
+        return found
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http" and self.token and self.hosts:
+            peer = (scope.get("client") or (None,))[0]
+            if peer and peer in await self._proxy_addresses():
+                headers = [(k, v) for k, v in scope["headers"] if k.lower() != b"x-api-key"]
+                headers.append((b"x-api-key", self.token.encode("ascii")))
+                scope = {**scope, "headers": headers}
+        await self.app(scope, receive, send)
+
+
+def validate_transfer(config: dict) -> dict:
+    """Require a transfer section confined to the exports directory; the adapter denies all otherwise."""
+    transfer = config.get("transfer")
+    dirs = transfer.get("allowed_directories") if isinstance(transfer, dict) else None
+    if not (isinstance(dirs, list) and dirs and all(isinstance(item, str) and item.strip() for item in dirs)):
+        raise ValueError("Production server MUST confine transfer.allowed_directories to the exports directory")
+    return transfer
+
+
+def _resolve_download(file_id: str, filename: str):
+    """Resolve one temporary link /downloads/<export_id>/<filename> to its staged export file."""
+    if not EXPORT_RE.fullmatch(file_id):
+        raise ValueError("Unknown download")
+    try:
+        meta, path = _catalog().get_export(file_id)
+    except CatalogError as exc:
+        raise FileNotFoundError(str(exc)) from exc
+    if filename != meta["filename"]:
+        raise FileNotFoundError("Unknown download")
+    return {"name": meta["filename"]}, path
 
 
 def _register_commands() -> None:
@@ -41,12 +158,14 @@ def _register_commands() -> None:
 
     def _sharepoint_sites(**params: Any) -> dict:
         """Read only a complete, non-scaffold site inventory."""
+        SharePointInventory.check_query(params.get("query", ""))
         if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1":
             raise DiscoveryError("SCAFFOLD_ONLY")
         return _sharepoint_store().sites(**params)
 
     def _sharepoint_libraries(**params: Any) -> dict:
         """Read libraries of one verified site, never personal drives."""
+        SharePointInventory.check_site_id(params.get("site_id"))
         if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1":
             raise DiscoveryError("SCAFFOLD_ONLY")
         return _sharepoint_store().libraries(**params)
@@ -221,6 +340,52 @@ def _register_commands() -> None:
             }
             return cls._schema_with_descriptions(schema)
 
+    class BackupDownloadBegin(CatalogCommand):
+        name = "backup_download_begin"
+        descr = "Register the adapter transfer download session of one staged export."
+
+        async def execute(
+            self,
+            export_id: str = "",
+            **kwargs: Any,
+        ) -> CommandResult:
+            from mcp_proxy_adapter.api.transfer_session_service import (
+                TransferPayloadValidationError,
+                build_transfer_chunk_transport,
+                run_create_download_session,
+            )
+            from mcp_proxy_adapter.transfer import TransferError, TransferTooLargeError
+
+            try:
+                meta, source = await asyncio.to_thread(_catalog().get_export, export_id)
+                data = await run_create_download_session({
+                    "source_path": str(source),
+                    "filename": meta["filename"],
+                    "compression": "identity",
+                })
+            except CatalogError as exc:
+                return ErrorResult(message=str(exc), code=exc.status)
+            except TransferPayloadValidationError as exc:
+                return ErrorResult(message="Invalid transfer request: " + ", ".join(exc.missing_fields), code=400)
+            except TransferTooLargeError as exc:
+                return ErrorResult(message=str(exc), code=413)
+            except TransferError as exc:
+                return ErrorResult(message=str(exc), code=503)
+            transport = build_transfer_chunk_transport(
+                direction="download", transfer_id=str(data["transfer_id"])
+            )
+            return CommandResult(success=True, data={**data, "transport": transport})
+
+        @classmethod
+        def get_schema(cls) -> dict:
+            schema = {
+                "type": "object",
+                "properties": {"export_id": {"type": "string"}},
+                "required": ["export_id"],
+                "additionalProperties": False,
+            }
+            return cls._schema_with_descriptions(schema)
+
     class BackupDeleteExport(CatalogCommand):
         name = "backup_delete_export"
         descr = "Delete staged plaintext export after a verified download."
@@ -298,8 +463,9 @@ def _register_commands() -> None:
             return cls._schema_with_descriptions({
                 "type": "object",
                 "properties": {
-                    "site_id": {"type": "string", "minLength": 1,
-                                "maxLength": 300},
+                    # No maxLength: an overlong or malformed site_id is refused by the command with
+                    # the error 400 INVALID_SITE_ID (R5), before the readiness gate.
+                    "site_id": {"type": "string", "minLength": 1},
                     "limit": {"type": "integer", "default": 100,
                               "minimum": 1, "maximum": 1000},
                     "offset": {"type": "integer", "default": 0,
@@ -336,6 +502,7 @@ def _register_commands() -> None:
         BackupListFiles,
         BackupPrepareDownload,
         BackupDownloadStatus,
+        BackupDownloadBegin,
         BackupDeleteExport,
         BackupSitesList,
         BackupLibrariesList,
@@ -375,12 +542,14 @@ def make_app(config_path: str | Path):
             )
         except AuthError as exc:
             raise ValueError("Admin password not set: " + str(exc)) from exc
+    secure_auth(config)
+    transfer = validate_transfer(config)
     os.environ["CONFIG_FILE"] = str(config_path)
     os.environ["MCP_CONFIG_FILE"] = str(config_path)
 
-    from fastapi import HTTPException, Request
-    from fastapi.responses import FileResponse
     from mcp_proxy_adapter.api.app import create_app
+    from mcp_proxy_adapter.api.public_downloads import set_public_download_resolver
+    from mcp_proxy_adapter.config import get_config
 
     app = create_app(
         title="OneDrive Backup API",
@@ -389,159 +558,28 @@ def make_app(config_path: str | Path):
         app_config=config,
         config_path=str(config_path),
     )
+    # The adapter reads the transfer section from its global configuration, which does not load
+    # this server's configuration file on its own: without this call every transfer is denied.
+    get_config().set("transfer", transfer)
     _register_commands()
+    set_public_download_resolver(app, _resolve_download)
 
-    # Framework also registers privileged administration/transfer endpoints.
-    # Never publish local-file transfer, reload, or admin endpoints.
-    # config editors or command loading on the backup server, even over mTLS.
-    # MCP Proxy registration queries GET /commands (get_methods).
-    # Registry was already reduced to help and backup_* in _register_commands.
-    allowed = {
-        "/api/jsonrpc",
-        "/api/jsonrpc/batch",
-        "/health",
-        "/commands",
-        "/openapi.json",
-        "/docs",
-        "/redoc",
-    }
-    routes = app.router.routes
+    # The framework also registers privileged administration, upload and WebSocket endpoints.
+    # Only the routes of ALLOWED_ROUTES stay; every other route answers the framework 404.
+    # MCP Proxy registration queries GET /commands (get_methods); the registry was already
+    # reduced to help, info and backup_* in _register_commands.
     app.router.routes = [
-        route for route in routes if getattr(route, "path", None) in allowed
+        route for route in app.router.routes
+        if getattr(route, "path", None) in ALLOWED_ROUTES
     ]
 
     from .ui import install_ui
-    from .sharepoint_discovery import DiscoveryError, SharePointInventory
 
     install_ui(app, _catalog)
-
-    def fail(exc: CatalogError | DiscoveryError) -> HTTPException:
-        return HTTPException(status_code=exc.status, detail=str(exc))
-
-    @app.get("/api/v1/health")
-    async def backup_health():
-        return {
-            "status": "ok",
-            "protocol": "mtls",
-            "service": "onedrive-backup",
-        }
-
-    def sharepoint_store() -> SharePointInventory:
-        """Resolve the private source inventory on the backup volume."""
-        base = Path(os.environ.get("ONEDRIVE_BACKUP_DATA", "/data"))
-        return SharePointInventory(base / "sharepoint")
-
-    @app.get("/api/v1/discovery/status")
-    async def sharepoint_discovery_status():
-        """Return nonsecret completeness and readiness information."""
-        if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1":
-            return {
-                "ready": False, "complete": False,
-                "state": "SCAFFOLD_ONLY",
-            }
-        try:
-            return await asyncio.to_thread(sharepoint_store().status)
-        except DiscoveryError as exc:
-            raise fail(exc) from exc
-
-    @app.get("/api/v1/sites")
-    async def sharepoint_sites(
-        limit: int = 100, offset: int = 0, query: str = "",
-    ):
-        """Browse completed SharePoint site discovery results."""
-        if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1":
-            raise HTTPException(503, detail="SCAFFOLD_ONLY")
-        try:
-            return await asyncio.to_thread(
-                sharepoint_store().sites, limit, offset, query
-            )
-        except DiscoveryError as exc:
-            raise fail(exc) from exc
-
-    @app.get("/api/v1/sites/{site_id}/libraries")
-    async def sharepoint_libraries(
-        site_id: str, limit: int = 100, offset: int = 0,
-    ):
-        """Browse libraries within one stable site identifier."""
-        if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1":
-            raise HTTPException(503, detail="SCAFFOLD_ONLY")
-        try:
-            return await asyncio.to_thread(
-                sharepoint_store().libraries, site_id, limit, offset
-            )
-        except DiscoveryError as exc:
-            raise fail(exc) from exc
-
-    @app.get("/api/v1/snapshots")
-    async def backup_snapshots(limit: int = 100):
-        try:
-            return await asyncio.to_thread(_catalog().snapshots, limit)
-        except CatalogError as exc:
-            raise fail(exc) from exc
-
-    @app.get("/api/v1/snapshots/{snapshot_id}/files")
-    async def backup_files(
-        snapshot_id: str, prefix: str = "", offset: int = 0, limit: int = 1000
-    ):
-        try:
-            return await asyncio.to_thread(
-                _catalog().files, snapshot_id, prefix, limit, offset
-            )
-        except CatalogError as exc:
-            raise fail(exc) from exc
-
-    @app.post("/api/v1/exports")
-    async def prepare_export(request: Request):
-        try:
-            body = await request.json()
-            if not isinstance(body, dict):
-                raise CatalogError("JSON object expected")
-            if set(body) - {"snapshot_id", "file_path"}:
-                raise CatalogError("Unknown export parameters")
-            snapshot_id = body.get("snapshot_id")
-            if not isinstance(snapshot_id, str):
-                raise CatalogError("snapshot_id must be a string")
-            return await asyncio.to_thread(
-                _catalog().prepare,
-                snapshot_id,
-                body.get("file_path"),
-            )
-        except CatalogError as exc:
-            raise fail(exc) from exc
-        except ValueError as exc:
-            raise HTTPException(400, detail="Invalid JSON") from exc
-
-    @app.get("/api/v1/exports/{export_id}")
-    async def download_export(export_id: str):
-        try:
-            archive = _catalog()
-            get_export = archive.get_export
-            meta, filename = await asyncio.to_thread(get_export, export_id)
-            return FileResponse(
-                filename,
-                media_type="application/octet-stream",
-                filename=meta["filename"],
-                headers={
-                    "X-Content-SHA256": meta["sha256"],
-                    "Cache-Control": "no-store",
-                },
-            )
-        except CatalogError as exc:
-            raise fail(exc) from exc
-
-    @app.get("/api/v1/exports/{export_id}/status")
-    async def export_status(export_id: str):
-        try:
-            return await asyncio.to_thread(_catalog().export_status, export_id)
-        except CatalogError as exc:
-            raise fail(exc) from exc
-
-    @app.delete("/api/v1/exports/{export_id}")
-    async def delete_export(export_id: str):
-        try:
-            return await asyncio.to_thread(_catalog().delete_export, export_id)
-        except CatalogError as exc:
-            raise fail(exc) from exc
+    # Added last, so it runs first: it must put the token on a proxy request before the token gate.
+    trust = config.get("proxy_trust")
+    hosts = trust.get("hosts", []) if isinstance(trust, dict) else []
+    app.add_middleware(ProxyTrustMiddleware, hosts=hosts, token=next(iter(config["auth"]["tokens"]), None))
 
     return app
 

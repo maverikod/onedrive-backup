@@ -1,3 +1,14 @@
+## 0.3.8 — B4 server: commands, download link, token gate
+
+- REST `/api/v1/*` is removed; the served routes are the adapter framework routes, `/downloads/{file_id}/{filename}`
+  and `/api/transfer/downloads*`; `/ws` and the upload routes stay closed.
+- `backup_prepare_download` and `backup_download_status` return `url` (`/downloads/<export_id>/<filename>`);
+  the new command `backup_download_begin` registers an adapter transfer session confined to the exports directory.
+- Interim authentication: the adapter token gate is on (`auth.use_token`); the token is base64(login:password)
+  of the file `/secrets/api-credentials`; `/health` and `GET /commands` stay open.
+- `backup_sites_list` and `backup_libraries_list` refuse a malformed query or site_id before the scaffold gate.
+- The info manual no longer names stale releases.
+
 ## 0.3.7 — B3 product fixes
 
 - The host wrapper passes every argument to docker-run.sh unchanged; no argument still means status.
