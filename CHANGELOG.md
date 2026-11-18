@@ -1,3 +1,15 @@
+## 0.3.6 — Single version source and adapter 8.11.16
+- VERSION is the single source of the release version: the server reads it at runtime through
+  onedrive_api.version (help, info, OpenAPI and command metadata); the Docker image carries it
+  as /opt/onedrive-backup/VERSION; no version literal remains in src/.
+- Image tag, Debian package, wheel names, README, compose and container.env.example, the client
+  __version__ and the client package metadata all name 0.3.6.
+- mcp-proxy-adapter is pinned ==8.11.16 in docker/requirements-server.txt and now also declared
+  by the client package (client/pyproject.toml dependencies).
+- Test fixtures derive the expected version from VERSION.
+- Packaging scripts (postinst, docker-run.sh, install-runtime.sh, defaults) updated for the
+  production-only deployment.
+
 ## 0.3.3 — MCP Proxy method discovery
 - Restore the restricted GET /commands endpoint required for proxy registration.
 - Continue filtering all privileged filesystem, admin, and transfer endpoints.

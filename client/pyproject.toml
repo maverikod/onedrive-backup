@@ -10,7 +10,7 @@ requires-python = ">=3.9"
 readme = "README.md"
 license = "MIT"
 authors = [{name = "OneDrive Backup maintainers"}]
-dependencies = []
+dependencies = ["mcp-proxy-adapter==8.11.16"]
 
 [project.scripts]
 onedrive-backup-client = "onedrive_backup_client.cli:main"

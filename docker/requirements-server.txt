@@ -1,2 +1,2 @@
-mcp-proxy-adapter==8.11.15
+mcp-proxy-adapter==8.11.16
 

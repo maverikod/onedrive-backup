@@ -15,6 +15,7 @@ from mcp_proxy_adapter.commands.command_registry import registry
 from mcp_proxy_adapter.commands.result import CommandResult, ErrorResult
 
 from .command_reference import REFERENCE, command_metadata_for
+from .version import read_version
 
 
 MANUAL_FILE = Path(__file__).with_name("ONEDRIVE_INFO.md")
@@ -287,7 +288,7 @@ class InfoCommand(Command):
     name = "info"
     descr = "Paginated OneDrive Backup manual; page 1 is the full contents."
     category = "documentation"
-    version = "0.3.6"
+    version = read_version()
     author = "OneDrive Backup maintainers"
     email = "maintainers@example.org"
 

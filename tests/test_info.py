@@ -16,6 +16,7 @@ REFERENCE = importlib.import_module("onedrive_api.command_reference").REFERENCE
 
 ROOT = Path(__file__).resolve().parents[1]
 INFO_PATH = ROOT / "src" / "onedrive_api" / "info_command.py"
+RELEASE_VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 
 class ReferenceContractTests(unittest.TestCase):
@@ -80,7 +81,7 @@ class ReferenceContractTests(unittest.TestCase):
                     "name": name,
                     "descr": name + " description",
                     "category": category,
-                    "version": "0.3.4",
+                    "version": RELEASE_VERSION,
                     "author": "OneDrive Backup",
                     "get_schema": classmethod(
                         lambda klass: {
