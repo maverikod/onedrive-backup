@@ -1,3 +1,12 @@
+## 0.3.15 — empty SharePoint libraries no longer abort the backup run (bug 81bb226e)
+
+- `backup_libraries` handles a library whose remote root is empty: one that was never backed up (no mirror) is skipped,
+  with outcome `empty` and no error; one that has a mirror is not synced (mirror and snapshots stay untouched) and an
+  error `SHAREPOINT_LIBRARY_EMPTY` is recorded with outcome `source_emptied`. The run continues with the other
+  libraries. Before, the first empty library raised `SHAREPOINT_LIBRARY_EMPTY` and no later library was backed up.
+- `backup_libraries` returns the run record `{status, libraries: [{site_id, drive_id, outcome, error}]}` and the
+  command line exits 1 when any library recorded an error. `max_delete` and `allow_empty_source=true` behave as before.
+
 ## 0.3.14 — backup_list_files of an unknown snapshot answers an empty list
 
 - `Catalog.files` answers the success result `{snapshot_id, items: [], total: 0, offset, limit}` for a well-formed snapshot

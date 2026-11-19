@@ -138,15 +138,16 @@ def library_rclone(
 
 def check_library_source(
     cfg: dict[str, Any], drive_id: str
-) -> None:
-    """Reject an unexpectedly empty or malformed remote root.
+) -> bool:
+    """Read the remote root and report whether it lists any entry.
 
     Args:
         cfg: Validated local backup configuration.
         drive_id: Stable Graph drive identifier.
 
     Returns:
-        None. Raises BackupError for an unsafe source.
+        True when the root lists at least one entry, False for an empty root.
+        Raises BackupError for a malformed source answer.
     """
     cmd = library_rclone(cfg, drive_id) + [
         "lsjson", "onedrive:", "--max-depth", "1"
@@ -158,15 +159,73 @@ def check_library_source(
         raise BackupError("SHAREPOINT_SOURCE_INVALID_JSON") from exc
     if not isinstance(entries, list):
         raise BackupError("SHAREPOINT_SOURCE_INVALID")
-    if not entries and not cfg["allow_empty_source"]:
-        raise BackupError("SHAREPOINT_LIBRARY_EMPTY")
+    return bool(entries)
+
+
+def library_has_backup(target: Path) -> bool:
+    """Tell whether the library was synced and snapshotted before.
+
+    A mirror is created only by a completed sync that is followed by a
+    snapshot, so a mirror that holds entries marks a library with history.
+
+    Args:
+        target: Mirror directory of the library.
+
+    Returns:
+        True when the mirror directory exists and is not empty.
+    """
+    return target.is_dir() and any(target.iterdir())
+
+
+def sync_library(
+    cfg: dict[str, Any], site_id: str, drive_id: str, target: Path, *,
+    dry_run: bool
+) -> None:
+    """Sync one library into its mirror and snapshot the mirror.
+
+    Args:
+        cfg: Validated local backup configuration.
+        site_id: Stable Graph site ID.
+        drive_id: Stable document library drive ID.
+        target: Mirror directory of the library.
+        dry_run: When true, only plan the sync and change nothing.
+
+    Returns:
+        None. Raises BackupError when rclone or restic fails.
+    """
+    if not dry_run:
+        target.mkdir(mode=0o700, parents=True, exist_ok=True)
+    command = library_rclone(cfg, drive_id) + [
+        "sync", "onedrive:", str(target),
+        "--max-delete", str(cfg["max_delete"]),
+        "--transfers", str(cfg["transfers"]),
+        "--checkers", str(cfg["checkers"]),
+        "--retries", "3", "--low-level-retries", "10",
+        "--create-empty-src-dirs",
+    ]
+    if dry_run:
+        command.append("--dry-run")
+    run_command(command)
+    if not dry_run:
+        run_command(restic_base(cfg) + [
+            "backup", str(target), "--tag", "sharepoint",
+            "--tag", "site-" + stable_key(site_id),
+            "--tag", "drive-" + stable_key(drive_id),
+        ], restic_env(cfg))
 
 
 def backup_libraries(
     cfg: dict[str, Any], report: dict[str, Any], *,
     dry_run: bool
-) -> int:
+) -> dict[str, Any]:
     """Sync and snapshot each library; never prune on partial failures.
+
+    An empty library that was never backed up is skipped (outcome "empty").
+    A library that has a mirror but is now empty is not synced, so the mirror
+    and the snapshots stay intact, and an error is recorded (outcome
+    "source_emptied"). Neither case stops the run. Any other failure still
+    raises BackupError. allow_empty_source=true syncs an empty source as
+    before, under the unchanged max_delete protection.
 
     Args:
         cfg: Validated local backup configuration.
@@ -174,41 +233,44 @@ def backup_libraries(
         dry_run: When true, verify and print planned sync operations only.
 
     Returns:
-        Number of libraries successfully processed.
+        Run record {"status": "ok" | "partial" | "failed", "libraries":
+        [{"site_id", "drive_id", "outcome": "ok" | "empty" |
+        "source_emptied", "error": None | code}]}. The status is "ok" when
+        no library recorded an error, "partial" when an error and a handled
+        library coexist, "failed" when every library recorded an error.
     """
     libraries = inventory_libraries(report)
     assert_repository(cfg)
-    count = 0
-    for library in libraries:
+    results: list[dict[str, Any]] = []
+    for number, library in enumerate(libraries, 1):
         site_id = library["site_id"]
         drive_id = library["drive_id"]
         target = library_mirror(cfg, site_id, drive_id)
         LOG.info("Library %d/%d site_id=%s drive_id=%s",
-                 count + 1, len(libraries), site_id, drive_id)
-        check_library_source(cfg, drive_id)
-        if not dry_run:
-            target.mkdir(mode=0o700, parents=True, exist_ok=True)
-        command = library_rclone(cfg, drive_id) + [
-            "sync", "onedrive:", str(target),
-            "--max-delete", str(cfg["max_delete"]),
-            "--transfers", str(cfg["transfers"]),
-            "--checkers", str(cfg["checkers"]),
-            "--retries", "3", "--low-level-retries", "10",
-            "--create-empty-src-dirs",
-        ]
-        if dry_run:
-            command.append("--dry-run")
-        run_command(command)
-        if not dry_run:
-            run_command(restic_base(cfg) + [
-                "backup", str(target), "--tag", "sharepoint",
-                "--tag", "site-" + stable_key(site_id),
-                "--tag", "drive-" + stable_key(drive_id),
-            ], restic_env(cfg))
-        count += 1
-    LOG.info("SharePoint libraries processed: %d/%d; dry_run=%s",
-             count, len(libraries), dry_run)
-    return count
+                 number, len(libraries), site_id, drive_id)
+        outcome, error = "ok", None
+        if not check_library_source(cfg, drive_id) \
+                and not cfg["allow_empty_source"]:
+            if library_has_backup(target):
+                outcome, error = "source_emptied", "SHAREPOINT_LIBRARY_EMPTY"
+                LOG.error("Library site_id=%s drive_id=%s is empty but has "
+                          "a backup; not synced, mirror and snapshots kept: "
+                          "%s", site_id, drive_id, error)
+            else:
+                outcome = "empty"
+                LOG.info("Library site_id=%s drive_id=%s is empty and was "
+                         "never backed up; skipped", site_id, drive_id)
+        if outcome == "ok":
+            sync_library(cfg, site_id, drive_id, target, dry_run=dry_run)
+        results.append({"site_id": site_id, "drive_id": drive_id,
+                        "outcome": outcome, "error": error})
+    failed = sum(1 for row in results if row["error"])
+    status = "ok" if not failed else (
+        "failed" if failed == len(results) else "partial")
+    LOG.info("SharePoint libraries handled: %d/%d, errors=%d, status=%s; "
+             "dry_run=%s", len(results) - failed, len(results), failed,
+             status, dry_run)
+    return {"status": status, "libraries": results}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -243,7 +305,11 @@ def main(argv: list[str] | None = None) -> int:
         with exclusive_lock(cfg["lock_file"]):
             assert_repository(cfg)
             report = discover(args.config, args.data, dry_run=args.dry_run)
-            backup_libraries(cfg, report, dry_run=args.dry_run)
+            record = backup_libraries(cfg, report, dry_run=args.dry_run)
+            if record["status"] != "ok":
+                LOG.error("SharePoint backup finished with errors: %s",
+                          record["status"])
+                return 1
     except (BackupError, DiscoveryError, OSError) as exc:
         code = exc.code if isinstance(exc, DiscoveryError) else str(exc)
         LOG.error("SharePoint backup refused: %s", code)

@@ -73,14 +73,14 @@ class SharePointBackupTests(unittest.TestCase):
             return '[{"Name":"file.txt","IsDir":false}]'
         return ""
 
-    def invoke(self, *, dry_run: bool = False) -> int:
+    def invoke(self, *, dry_run: bool = False) -> dict:
         """Run with a simulated initialised repository.
 
         Args:
             dry_run: Whether to simulate modifications only.
 
         Returns:
-            Number of verified library operations.
+            Run record of the backup cycle.
         """
         with (
             mock.patch.object(backup, "assert_repository"),
@@ -97,7 +97,10 @@ class SharePointBackupTests(unittest.TestCase):
         Returns:
             None.
         """
-        self.assertEqual(self.invoke(), 3)
+        record = self.invoke()
+        self.assertEqual(record["status"], "ok")
+        self.assertEqual([r["outcome"] for r in record["libraries"]],
+                         ["ok"] * 3)
         first = backup.library_mirror(self.cfg, "host,1,2", "drive-A")
         second = backup.library_mirror(self.cfg, "host,3,4", "drive-A")
         self.assertNotEqual(first, second)
@@ -126,7 +129,7 @@ class SharePointBackupTests(unittest.TestCase):
         Returns:
             None.
         """
-        self.assertEqual(self.invoke(dry_run=True), 3)
+        self.assertEqual(self.invoke(dry_run=True)["status"], "ok")
         self.assertFalse((self.root / "mirror").exists())
         self.assertEqual(len([c for c in self.calls if "sync" in c]), 3)
         self.assertTrue(all("--dry-run" in c
@@ -160,8 +163,8 @@ class SharePointBackupTests(unittest.TestCase):
         with self.assertRaises(backup.BackupError):
             backup.inventory_libraries(self.report)
 
-    def test_empty_library_refuses_sync(self) -> None:
-        """Empty remote never erases an existing local mirror.
+    def test_empty_new_library_is_skipped(self) -> None:
+        """An empty library that was never backed up is skipped, no error.
 
         Returns:
             None.
@@ -171,11 +174,51 @@ class SharePointBackupTests(unittest.TestCase):
             mock.patch.object(backup, "run_command",
                               return_value="[]") as runner,
         ):
-            with self.assertRaises(backup.BackupError):
-                backup.backup_libraries(self.cfg, self.report,
-                                        dry_run=False)
-            self.assertEqual(runner.call_count, 1)
+            record = backup.backup_libraries(self.cfg, self.report,
+                                             dry_run=False)
+        self.assertEqual(runner.call_count, 3)
+        self.assertEqual(record["status"], "ok")
+        self.assertEqual([r["outcome"] for r in record["libraries"]],
+                         ["empty"] * 3)
+        self.assertEqual([r["error"] for r in record["libraries"]],
+                         [None] * 3)
         self.assertFalse((self.root / "mirror").exists())
+
+    def test_emptied_library_is_not_synced_and_run_continues(self) -> None:
+        """A library with a mirror that became empty keeps it and errors.
+
+        Returns:
+            None.
+        """
+        emptied = backup.library_mirror(self.cfg, "host,1,2", "drive-A")
+        emptied.mkdir(parents=True)
+        (emptied / "kept.txt").write_text("data", encoding="utf-8")
+
+        def run(command, env=None, *, capture=False):
+            self.calls.append([str(value) for value in command])
+            if "lsjson" in command:
+                drive = command[command.index("--onedrive-drive-id") + 1]
+                return "[]" if drive == "drive-A" else \
+                    '[{"Name":"file.txt","IsDir":false}]'
+            return ""
+
+        with (
+            mock.patch.object(backup, "assert_repository"),
+            mock.patch.object(backup, "run_command", side_effect=run),
+        ):
+            record = backup.backup_libraries(self.cfg, self.report,
+                                             dry_run=False)
+        outcomes = {(r["site_id"], r["drive_id"]): r["outcome"]
+                    for r in record["libraries"]}
+        self.assertEqual(outcomes[("host,1,2", "drive-A")], "source_emptied")
+        self.assertEqual(outcomes[("host,3,4", "drive-A")], "empty")
+        self.assertEqual(outcomes[("host,1,2", "drive-B")], "ok")
+        self.assertEqual(record["status"], "partial")
+        self.assertEqual((emptied / "kept.txt").read_text(encoding="utf-8"),
+                         "data")
+        synced = [c for c in self.calls if "sync" in c]
+        self.assertEqual(len(synced), 1)
+        self.assertIn("drive-B", synced[0])
 
     def test_failed_library_prevents_later_snapshots(self) -> None:
         """A failed sync stops the job before retention or later libraries.
