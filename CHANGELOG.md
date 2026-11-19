@@ -1,3 +1,13 @@
+## 0.3.16 — container rclone upgraded to the official release 1.76.0 (bug 68fc1822)
+
+- The image no longer installs the Debian `rclone` package (v1.60.1), which has no OneDrive OAuth client credential flow
+  (first released in rclone v1.69.0), so every SharePoint library listing failed with `failed to configure OneDrive:
+  empty token found`. The Dockerfile now installs the official linux/amd64 release pinned by the build arguments
+  `OFFICIAL_RCLONE_VERSION` (1.76.0) and `OFFICIAL_RCLONE_SHA256`, downloaded from https://downloads.rclone.org in a separate build stage
+  and verified against the release's published `SHA256SUMS` and the pinned digest; any mismatch fails the build.
+  The final image carries only the verified `/usr/bin/rclone` binary; user, paths and entrypoint are unchanged.
+- `rclone.conf` (`client_credentials`, no token) is unchanged.
+
 ## 0.3.15 — empty SharePoint libraries no longer abort the backup run (bug 81bb226e)
 
 - `backup_libraries` handles a library whose remote root is empty: one that was never backed up (no mirror) is skipped,
