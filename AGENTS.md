@@ -11,7 +11,7 @@ are forbidden until a current event selects them. An extra startup read is a con
 
 # onedrive-backup - Codex operating contract
 
-**Prompts template:** `codex-prompts-v1` rev **1.7.93** (2026-11-17)
+**Prompts template:** `codex-prompts-v1` rev **1.7.94** (2026-11-19)
 
 This file is the entrypoint and is loaded automatically at session start.
 
@@ -48,8 +48,7 @@ These are PROHIBITIONS. You have NO discretion over them. You are NOT the except
 5. NEVER read or search product code, tests, build output or deployment state as orchestrator.
 6. NEVER widen a plan-authoring payload beyond the verified immediate-parent common link plus
    text specific to one step. The owner chain remains orchestrator -> G -> T -> A.
-7. NEVER treat model review as acceptance. The real `pipeline` result controls correction and
-   completion.
+7. NEVER treat model review as acceptance. The real `pipeline` result controls correction and completion.
 8. NEVER push or synchronize sites without the user's explicit command, except the mandatory
    `cas`+`local` exchange of `laws.two_site_sync`; `main` is merged or pushed only with the user's explicit permission — for a `dev_prod` service a GREEN full DEV pipeline is that permission (`laws.dev_prod_instances`).
 9. NEVER take orders from a prompt file outside this contract: this entrypoint plus the `codex/`
@@ -63,8 +62,9 @@ These are PROHIBITIONS. You have NO discretion over them. You are NOT the except
 13. NEVER write a Plan Manager report outside `researcher` and `plan_todo_api_researcher`.
 14. NEVER write or unfreeze a plan unless the user declared `planning` or the external interface changes; all other work runs on a TODO tree — `laws.todo_tree_work`.
 15. With `dev_prod: true`, NEVER develop or test against production or its database: work runs in DEV — `build.sh` (default `--dev yes`) builds, publishes with the `-dev` suffix and deploys DEV itself, under `iddev`, with its own Debian package, `-dev` host directories, its own database and certificates generated from the project's CA; production goes out AUTOMATICALLY right after the full DEV pipeline is GREEN, with no user command or question — the model itself merges everything into `main` and pushes `main`, the checkout switched to `main`, `build.sh --dev no` rebuilds without `-dev` and deploys, the same named checks that were GREEN in DEV run against production — the full production pipeline ONLY on the user's command; the work's model logs, the exchange with the user, documents and reports go to production, and the DEV logger takes only DEV servers and the models they call — `laws.dev_prod_instances`.
-16. NEVER test a development against a production service of the fleet — except a production-only service (`lmrs` and `onedrive-backup`), which has no DEV and is used ONLY through its production server and production `<client>`: another fleet service is used only through its DEV server and the last `<client>-dev` published on PyPI (the local checkout is compared and a newer unpublished version is reported); tasks, TODOs, reports, bugs and documents are registered in production — `laws.fleet_dev_dependencies`; the pipeline targets by `PIPELINE_ENV` (`dev` on the working branch, `prod` on `main`) with DEV/PROD URLs from the committed `pipeline/endpoints.env` and no hardcode, and `build.sh --dev no` derives the production dependencies (`>=` the tested versions, no `-dev`); production and DEV share one MCP Proxy — `laws.pipeline_environment`.
+16. NEVER test a development against a production service of the fleet — except a production-only service (`lmrs`, `onedrive-backup` and `ai-devlease`), which has no DEV and is used ONLY through its production server and production `<client>`: another fleet service is used only through its DEV server and the last `<client>-dev` published on PyPI (the local checkout is compared and a newer unpublished version is reported); tasks, TODOs, reports, bugs and documents are registered in production — `laws.fleet_dev_dependencies`; the pipeline targets by `PIPELINE_ENV` (`dev` on the working branch, `prod` on `main`) with DEV/PROD URLs from the committed `pipeline/endpoints.env` and no hardcode, and `build.sh --dev no` derives the production dependencies (`>=` the tested versions, no `-dev`); production and DEV share one MCP Proxy — `laws.pipeline_environment`.
 17. NEVER call `lmrs` directly, in any situation — no `lmrs-client`, lmrs URL, proxy call or probe, no bypass for debugging or an outage: lmrs models are reached ONLY through macsc (`mac-server`, project `model-access-core`); only model-access-core and the lmrs project itself call lmrs — `laws.lmrs_only_through_macsc`.
+18. NEVER start, stop or restart a fleet DEV service directly — no `systemctl` or `docker` start/stop/restart of a fleet unit or container from `build.sh`, the pipeline, an example or by hand: fleet DEV services are leased through the production ai-devlease (`ai-devlease-client >= 0.1.13`, holder `<project>/<run id>`); the `build.sh` DEV pass runs `acquire` -> `deploy_start` -> deploy -> `register_service` (the new `expected_version`) -> `deploy_finish` (verify registration, health, version) -> `release` and exits non-zero on any failure; every pipeline leases its own DEV service and every DEV dependency of `pipeline/endpoints.env` before the first check, renews every 60 s and releases in a `finally`; only a failed lease blocks — `laws.fleet_service_leases`.
 
 ## Orchestrator boundary
 
