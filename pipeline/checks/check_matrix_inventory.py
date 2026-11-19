@@ -23,7 +23,7 @@ from pipeline.checks import CheckFailure
 ROOT = Path(__file__).resolve().parents[2]
 SURFACES = ('mcp', 'rest', 'framework', 'client', 'cli', 'odbcli', 'ui', 'vue', 'auth', 'platform',
             'version', 'pipeline')
-BLOCKS = ('B1', 'B2', 'B3', 'B4', 'UI-VUE')
+BLOCKS = ('B1', 'B2', 'B3', 'B4', 'UI-VUE', 'B-SPLIT')
 TAG = re.compile(r'^(CURRENT|(PLANNED|RETIRED)[(](B1|B2|B3|B4|UI-VUE)[)])$')
 STATUSES = ('legacy', 'implemented', 'pending', 'deprecated')
 ROW_KEYS = ('id', 'surface', 'name', 'tag', 'source', 'checks')
