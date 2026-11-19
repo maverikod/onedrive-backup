@@ -1,11 +1,13 @@
-'''scaffold_gate_states: scaffold state S0 or ready state S1 follows host directory, secrets and mount (PL3, R16).
+'''scaffold_gate_states: scaffold state S0 or ready state S1 follows host directory, secrets and mount (PL3, R16; revision 9).
 
-Mode: script fixture plus catalog fixture. Start: with a correct plain host data directory the container
-is started with ONEDRIVE_SCAFFOLD_MODE=0 when the secrets exist and with ONEDRIVE_SCAFFOLD_MODE=1 when
-rclone.conf or restic-password is missing; in both cases the host data directory is the one bound at /data
-(never a scaffold directory). Catalog gate: scaffold, an unmounted /data, a missing repository and an
-open password file each refuse with 503 and a message that names the cause, the four messages differ,
-and a healthy storage answers.
+Mode: script fixture over a COPY of packaging/docker-run.sh (the guard stub passes unless a case says otherwise) plus catalog fixture.
+Start: with a correct plain host data directory on the mounted archive filesystem the container is started with
+ONEDRIVE_SCAFFOLD_MODE=0 when the secrets exist and with ONEDRIVE_SCAFFOLD_MODE=1 when rclone.conf or restic-password is missing;
+in both cases the host data directory is the one bound at /data (never a scaffold directory). R16 (revision 9): the filesystem guard is
+a refusal, never a state: with /srv/archive not mounted or the data directory on the root filesystem start refuses (exit 1, no
+container) with every secret present AND with secrets missing; it never degrades to the scaffold; S0 and S1 are evaluated only after the guard
+passed. Catalog gate: scaffold, an unmounted /data, a missing repository and an open password file each refuse with 503 and a message
+that names the cause, the four messages differ, and a healthy storage answers.
 '''
 
 from __future__ import annotations
@@ -50,9 +52,24 @@ def _start_case(report: Report, label: str, host: fixtures.Host, expected_mode: 
                               % (label, _data_source(runs[0]), host.data))
 
 
+def _guard_refusals(report: Report) -> None:
+    for label, mode, secrets in (('/srv/archive not mounted, all secrets present', 'unmounted', True),
+                                 ('/srv/archive not mounted, secrets missing', 'unmounted', False),
+                                 ('data directory on the root filesystem, all secrets present', 'root', True),
+                                 ('data directory on the root filesystem, secrets missing', 'root', False)):
+        with fixtures.host(secrets=secrets) as host:
+            result = host.run(SCRIPT, 'start', fs=mode)
+            if result.rc == 0 or result.docker('run'):
+                report.product.append('R16 start with %s: exit %d, container started %s (ONEDRIVE_SCAFFOLD_MODE %s); the filesystem guard is a '
+                                      'refusal and never degrades to the scaffold'
+                                      % (label, result.rc, bool(result.docker('run')),
+                                         _run_option(result.docker('run')[0], 'ONEDRIVE_SCAFFOLD_MODE') if result.docker('run') else None))
+
+
 def run() -> None:
     '''Raise CheckFailure when the state of the gate does not follow its inputs.'''
     report = Report()
+    _guard_refusals(report)
     with fixtures.host() as host:
         _start_case(report, 'all inputs present', host, '0')
     for missing in ('restic-password', 'rclone.conf'):

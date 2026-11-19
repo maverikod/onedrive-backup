@@ -1,15 +1,17 @@
 '''deploy_first_run: docker/deploy.sh asks the restic repository password on the first run (row PL8; TODO 8b81de72).
 
-User decision 2026-11-19, cases 1-4. Mode: script fixture over the REAL docker/deploy.sh. The script runs under a
-sandbox of stub commands (dpkg, docker, systemctl, restic, id, chown, chgrp, install) in front of PATH and over
-environment overrides that point it at a temporary secrets directory and a temporary data directory; the real
-host state (/var/lib/onedrive-backup, /srv/backup, /etc) is never read or written, nothing is installed,
+User decision 2026-11-19, cases 1-4. Mode: script fixture over a COPY of the REAL docker/deploy.sh. The copy runs under a
+sandbox of stub commands (dpkg, docker, systemctl, restic, id, chown, chgrp, install, findmnt) in front of PATH and over
+environment overrides that point it at a temporary secrets directory and a temporary data directory; in the copy /srv/archive
+names a temporary archive tree and the stub findmnt reports it mounted with the data directory on it, so the data directory guard
+of decision D9 (revision 9, host_data_fs_guard) passes and the cases reach their password prompt. The real
+host state (/var/lib/onedrive-backup, /srv/archive, /srv/backup, /etc) is never read or written, nothing is installed,
 stopped or started, and the script is refused before it runs when it names a production path without an
-overridable default or calls dpkg, docker, systemctl or restic by an absolute path.
+overridable default or calls dpkg, docker, systemctl, restic or findmnt by an absolute path.
 
 Contract the script must meet (the check is the specification):
   environment: ONEDRIVE_SECRET_DIR (default /var/lib/onedrive-backup/secrets) and ONEDRIVE_DATA_DIR (default
-    /srv/backup/onedrive) are honoured, the restic password file is $ONEDRIVE_SECRET_DIR/restic-password and
+    /srv/archive/onedrive-backup) are honoured, the restic password file is $ONEDRIVE_SECRET_DIR/restic-password and
     the repository is $ONEDRIVE_DATA_DIR/restic-repo; root is tested with id -u; restic is the host command
     restic; ONEDRIVE_DEFAULTS_FILE (default /etc/default/onedrive-backup) is honoured when the script reads it.
   case 1 first run, terminal, no repository and no password file: the password is asked twice without echo, a
@@ -28,16 +30,16 @@ from __future__ import annotations
 
 import re
 
-from pipeline import firstrun, firstrun_stubs
+from pipeline import archivefs, firstrun, firstrun_stubs
 from pipeline.firstrun import Run, Scenario, new_password
 from pipeline.report import Report
 
 MSG_WRONG = 'deploy: the password does not open the existing restic repository; nothing was written'
 MSG_NO_TTY = ('deploy: restic password file is missing and no terminal is available; '
               'run docker/deploy.sh interactively once to set the password')
-PROD_PATH = re.compile('/(var/lib/onedrive-backup|srv/backup|etc/onedrive-backup|etc/default/onedrive-backup)')
+PROD_PATH = re.compile('/(var/lib/onedrive-backup|srv/(backup|archive)|etc/onedrive-backup|etc/default/onedrive-backup)')
 OVERRIDABLE = re.compile('[$][{]ONEDRIVE_[A-Z_]+:-[^}]*[}]')
-ABSOLUTE_TOOL = re.compile('(/usr/local/bin|/usr/sbin|/usr/bin|/sbin|/bin)/(dpkg|docker|systemctl|restic|apt|apt-get)( |$)')
+ABSOLUTE_TOOL = re.compile('(/usr/local/bin|/usr/sbin|/usr/bin|/sbin|/bin)/(dpkg|docker|systemctl|restic|findmnt|apt|apt-get)( |$)')
 
 
 def _guard(report: Report) -> bool:
@@ -46,7 +48,8 @@ def _guard(report: Report) -> bool:
         report.product.append('docker/deploy.sh does not exist')
         return False
     safe = True
-    text = firstrun.SCRIPT.read_text(encoding='utf-8')
+    text = archivefs.rewrite(firstrun.SCRIPT.read_text(encoding='utf-8'),
+                             {archivefs.MOUNT: '/fixture/archive', archivefs.OLD_MOUNT: '/fixture/old-backup'})
     for number, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
         if line.startswith('#'):
@@ -211,6 +214,6 @@ def run() -> None:
         _case2(report)
         _case3(report)
         _case4(report)
-    report.info.append('real host state is outside the pipeline: nothing under /var/lib/onedrive-backup, /srv/backup or /etc was touched; '
+    report.info.append('real host state is outside the pipeline: nothing under /var/lib/onedrive-backup, /srv/archive, /srv/backup or /etc was touched; '
                        'the first-run initialisation of the host itself is done by the user (F5)')
     report.finish('deploy_first_run')

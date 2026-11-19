@@ -1,4 +1,4 @@
-'''Stub commands of the deploy_first_run check: dpkg, docker, systemctl, restic, id, chown, chgrp and install.
+'''Stub commands of the deploy_first_run check: dpkg, docker, systemctl, restic, id, chown, chgrp, install and findmnt.
 
 Every call is appended as one JSON line to the file named by FR_LOG. The restic stub keeps a repository as a
 directory whose config file holds the SHA-256 of the password; it records where the password came from and never
@@ -15,6 +15,8 @@ import json
 import os
 import subprocess
 import sys
+
+from pipeline import archivefs
 
 VERBS = ('init', 'cat', 'snapshots', 'check', 'list', 'stats', 'ls', 'key', 'unlock', 'version')
 
@@ -118,6 +120,11 @@ def main(name: str) -> int:
     args = sys.argv[1:]
     if name == 'restic':
         return _restic(args)
+    if name == 'findmnt':
+        _log({'cmd': 'findmnt', 'args': args})
+        code, text = archivefs.findmnt(args, dict(os.environ))
+        sys.stdout.write(text)
+        return code
     if name == 'id' and args == ['-u']:
         print(0)
         return 0

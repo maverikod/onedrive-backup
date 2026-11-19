@@ -4,7 +4,8 @@ A Scenario is a temporary tree under .test-run of the checkout: a secrets direct
 optional stub restic repository, an optional restic password file, and a bin directory of stub commands that
 stand in front of dpkg, docker, systemctl, restic, id, chown, chgrp and install. The environment overrides
 ONEDRIVE_SECRET_DIR, ONEDRIVE_DATA_DIR and ONEDRIVE_DEFAULTS_FILE point docker/deploy.sh at that tree. The
-script runs either behind a pseudo-terminal that answers every wait for input with the next supplied line (the
+script is a COPY in which /srv/archive names the temporary archive tree (pipeline.archivefs) and the stub findmnt answers as the
+fs mode says, so the data directory guard of decision D9 passes unless a case chooses another mode. The copy runs either behind a pseudo-terminal that answers every wait for input with the next supplied line (the
 terminal echo flag is read at each wait), or with no terminal at all. Real host state is never read or written.
 '''
 
@@ -25,12 +26,12 @@ import termios
 import time
 from pathlib import Path
 
-from pipeline import firstrun_stubs
+from pipeline import archivefs, firstrun_stubs
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / '.test-run'
 SCRIPT = ROOT / 'docker' / 'deploy.sh'
-STUBS = ('dpkg', 'docker', 'systemctl', 'restic', 'id', 'chown', 'chgrp', 'install')
+STUBS = ('dpkg', 'docker', 'systemctl', 'restic', 'id', 'chown', 'chgrp', 'install', 'findmnt')
 IDLE_SECONDS = 1.5
 
 
@@ -58,12 +59,17 @@ class Run:
 class Scenario:
     '''A temporary host: secrets, data, stub commands and the recorded calls.'''
 
-    def __init__(self, *, repo_password: str | None = None, file_password: str | None = None) -> None:
+    def __init__(self, *, repo_password: str | None = None, file_password: str | None = None, fs: str = 'ok') -> None:
         WORK.mkdir(exist_ok=True)
         self.tmp = Path(tempfile.mkdtemp(prefix='fr-', dir=str(WORK)))
         self.bin = self.tmp / 'bin'
         self.secrets = self.tmp / 'secrets'
-        self.data = self.tmp / 'data'
+        self.archive = self.tmp / 'archive'
+        self.data = self.archive / 'onedrive-backup'
+        self.other_mount = self.tmp / 'other-mount'
+        self.fs = fs
+        self.env_set: dict[str, str] = {}
+        self.env_drop: set[str] = set()
         self.log = self.tmp / 'calls.log'
         self.defaults = self.tmp / 'defaults'
         self.bin.mkdir()
@@ -75,8 +81,16 @@ class Scenario:
             stub.chmod(0o755)
         self.secrets.mkdir(mode=0o700)
         self.secrets.chmod(0o700)
+        self.archive.mkdir(mode=0o750)
+        self.other_mount.mkdir(mode=0o750)
         self.data.mkdir(mode=0o750)
         self.data.chmod(0o750)
+        self.script = self.tmp / 'docker' / 'deploy.sh'
+        self.script.parent.mkdir()
+        self.script.write_text(archivefs.rewrite(SCRIPT.read_text(encoding='utf-8') if SCRIPT.is_file() else '',
+                                                 {archivefs.MOUNT: str(self.archive),
+                                                  archivefs.OLD_MOUNT: str(self.tmp / 'old-backup')}), encoding='utf-8')
+        (self.tmp / 'VERSION').write_text('0.0.0' + chr(10), encoding='utf-8')
         self.log.write_text('', encoding='utf-8')
         self.defaults.write_text('ONEDRIVE_SECRET_DIR=%s%sONEDRIVE_DATA_DIR=%s%s' % (self.secrets, chr(10), self.data, chr(10)),
                                  encoding='utf-8')
@@ -98,10 +112,15 @@ class Scenario:
 
     def env(self) -> dict[str, str]:
         '''The environment of a run: stubs first on PATH, every host path redirected into the temporary tree.'''
-        return {'PATH': str(self.bin) + ':/usr/bin:/bin', 'HOME': str(self.tmp), 'LANG': 'C', 'TERM': 'xterm',
-                'FR_LOG': str(self.log), 'FR_PASSWORD_FILE': str(self.password_file),
-                'ONEDRIVE_SECRET_DIR': str(self.secrets), 'ONEDRIVE_DATA_DIR': str(self.data),
-                'ONEDRIVE_DEFAULTS_FILE': str(self.defaults)}
+        env = {'PATH': str(self.bin) + ':/usr/bin:/bin', 'HOME': str(self.tmp), 'LANG': 'C', 'TERM': 'xterm',
+               'FR_LOG': str(self.log), 'FR_PASSWORD_FILE': str(self.password_file),
+               'ONEDRIVE_SECRET_DIR': str(self.secrets), 'ONEDRIVE_DATA_DIR': str(self.data),
+               'ONEDRIVE_DEFAULTS_FILE': str(self.defaults)}
+        env.update(archivefs.fs_env(self.fs, self.archive, self.data, self.other_mount))
+        env.update(self.env_set)
+        for name in self.env_drop:
+            env.pop(name, None)
+        return env
 
     def calls(self, command: str | None = None) -> list[dict]:
         '''Recorded stub calls, optionally only those of one command.'''
@@ -154,13 +173,13 @@ class Scenario:
 
     def tty(self, passwords: list[str], *, limit: float = 40.0) -> Run:
         '''Run docker/deploy.sh behind a pseudo-terminal; every wait for input gets the next password line.'''
-        return _run_tty(self.env(), str(self.tmp), passwords, limit)
+        return _run_tty(self.env(), str(self.tmp), passwords, limit, self.script)
 
     def plain(self, stdin: bytes | None, *, limit: float = 30.0) -> Run:
         '''Run docker/deploy.sh in a new session with no controlling terminal; stdin is a pipe or the null device.'''
         kwargs: dict = {'input': stdin} if stdin is not None else {'stdin': subprocess.DEVNULL}
         try:
-            done = subprocess.run(['/bin/bash', str(SCRIPT)], env=self.env(), cwd=str(self.tmp), capture_output=True,
+            done = subprocess.run(['/bin/bash', str(self.script)], env=self.env(), cwd=str(self.tmp), capture_output=True,
                                   timeout=limit, start_new_session=True, check=False, **kwargs)
         except subprocess.TimeoutExpired:
             return Run(-1, '', '', [], 0, False, True)
@@ -203,12 +222,12 @@ def _drain(fd: int) -> bytes:
     return data
 
 
-def _run_tty(env: dict[str, str], cwd: str, passwords: list[str], limit: float) -> Run:
+def _run_tty(env: dict[str, str], cwd: str, passwords: list[str], limit: float, script: Path = SCRIPT) -> Run:
     pid, fd = pty.fork()
     if pid == 0:
         try:
             os.chdir(cwd)
-            os.execve('/bin/bash', ['bash', str(SCRIPT)], env)
+            os.execve('/bin/bash', ['bash', str(script)], env)
         finally:
             os._exit(127)
     out = b''

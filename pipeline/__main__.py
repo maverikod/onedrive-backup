@@ -55,10 +55,15 @@ def config_contract() -> None:
     assert json.loads((ROOT / "packaging/server.json").read_text()) == main
     assert "    ports:" not in (ROOT / "docker/compose.yml").read_text()
     assert "-p " not in (ROOT / "packaging/docker-run.sh").read_text()
-    assert backup["mirror_dir"] == "/data/mirror"
-    assert backup["repository_dir"] == "/data/restic-repo"
-    assert backup["password_file"].startswith("/secrets/")
-    assert backup["rclone_config"].startswith("/secrets/")
+    # Revision 9 (D10): the service reads a writable copy of rclone.conf under /rclone-state; the original and the restic
+    # password stay under the read-only /secrets; /data is the container mount point (D8 (c)).
+    api = json.loads((ROOT / "packaging/api-backup.json").read_text())
+    for name, cfg in (("config/backup.json", backup), ("packaging/api-backup.json", api)):
+        assert cfg["mirror_dir"] == "/data/mirror", name + ": mirror_dir"
+        assert cfg["repository_dir"] == "/data/restic-repo", name + ": repository_dir"
+        assert cfg["password_file"] == "/secrets/restic-password", name + ": password_file must stay /secrets/restic-password"
+        assert cfg["rclone_config"].startswith("/rclone-state/"), name + ": rclone_config must start with /rclone-state/"
+        assert cfg["required_mountpoint"] == "/data", name + ": required_mountpoint must stay /data inside the container"
 
 
 def unit_tests() -> None:

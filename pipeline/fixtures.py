@@ -1,8 +1,8 @@
 '''Disposable fixtures of the B3 checks.
 
 CatalogFixture runs the real Catalog class of src/onedrive_api over a fake restic binary in a
-temporary data directory. Host runs packaging/docker-run.sh with stub docker, mountpoint, id and
-install commands on PATH, over a temporary configuration, secrets and data tree. run_wrapper runs a
+temporary data directory. Host runs a copy of packaging/docker-run.sh (or another packaging script) with stub docker, mountpoint, findmnt, id,
+install and mv commands on PATH, over a temporary configuration, secrets, rclone state and archive tree. run_wrapper runs a
 copy of packaging/onedrive-backup-docker whose absolute paths are redirected to a recording stub.
 All trees live under .test-run of the checkout and are removed afterwards.
 '''
@@ -17,15 +17,18 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from pipeline import archivefs
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / 'src'
 WORK = ROOT / '.test-run'
 SNAPSHOT_ID = 'a1b2c3d4' * 8
 SECOND_ID = 'b2c3d4e5' * 8
-STUBS = ('docker', 'mountpoint', 'id', 'install')
+STUBS = ('docker', 'mountpoint', 'findmnt', 'id', 'install', 'mv', 'chown', 'chgrp', 'adduser', 'systemctl')
 WRAPPER_DOCKER_RUN = '/usr/lib/onedrive-backup/docker-run.sh'
 WRAPPER_DEFAULTS = '/etc/default/onedrive-backup'
 
@@ -163,14 +166,22 @@ class Result:
 
 
 class Host:
-    '''A temporary host: configuration with certificates, secrets and a data directory.'''
+    '''A temporary host: configuration with certificates, secrets, the rclone state directory and the archive tree.
+
+    The data directory is archive/onedrive-backup, where archive stands for the mounted /srv/archive: run() executes a copy
+    of the script with /srv/archive replaced by it and answers findmnt as the fs mode says (pipeline.archivefs).
+    '''
 
     def __init__(self, *, secrets: bool = True) -> None:
         self.tmp = _work_dir('b3-host-')
         self.bin = self.tmp / 'bin'
         self.config = self.tmp / 'config'
         self.secrets = self.tmp / 'secrets'
-        self.data = self.tmp / 'data'
+        self.archive = self.tmp / 'archive'
+        self.data = self.archive / 'onedrive-backup'
+        self.elsewhere = self.tmp / 'elsewhere'
+        self.other_mount = self.tmp / 'other-mount'
+        self.state = self.tmp / 'rclone-state'
         self.scaffold = self.tmp / 'scaffold'
         self.log = self.tmp / 'calls.log'
         self.bin.mkdir()
@@ -187,23 +198,51 @@ class Host:
         (self.config / 'backup.json').write_text('{}', encoding='utf-8')
         self.secrets.mkdir(mode=0o700)
         self.secrets.chmod(0o700)
+        past = time.time() - 1000
         if secrets:
-            (self.secrets / 'rclone.conf').write_text('fixture', encoding='utf-8')
-            (self.secrets / 'restic-password').write_text('fixture', encoding='utf-8')
+            for name in ('rclone.conf', 'restic-password'):
+                (self.secrets / name).write_text('fixture', encoding='utf-8')
+                os.utime(self.secrets / name, (past, past))
+        self.state.mkdir(mode=0o700)
+        self.state.chmod(0o700)
+        (self.state / 'rclone.conf').write_text('fixture-state-copy', encoding='utf-8')
+        (self.state / 'rclone.conf').chmod(0o600)
+        for folder in (self.archive, self.elsewhere, self.other_mount):
+            folder.mkdir(mode=0o750)
+            folder.chmod(0o750)
         self.data.mkdir(mode=0o750)
         self.data.chmod(0o750)
         self.log.write_text('', encoding='utf-8')
 
-    def run(self, script: Path, *args: str, uid: int | None = None) -> Result:
-        '''Run bash script with args under the stubs; uid is what id -u onedrive-backup answers.'''
-        env = {'PATH': str(self.bin) + ':/usr/bin:/bin', 'HOME': str(self.tmp), 'STUB_LOG': str(self.log),
-               'STUB_UID': str(os.getuid() if uid is None else uid), 'STUB_GID': str(os.getgid()),
-               'ONEDRIVE_IMAGE': 'fixture-image:1', 'ONEDRIVE_CONTAINER': 'odb-fixture',
-               'ONEDRIVE_NETWORK': 'odb-net', 'ONEDRIVE_CONFIG_DIR': str(self.config),
-               'ONEDRIVE_DATA_DIR': str(self.data), 'ONEDRIVE_SECRET_DIR': str(self.secrets),
-               'ONEDRIVE_SCAFFOLD_DATA_DIR': str(self.scaffold)}
+    def copy(self, script: Path) -> Path:
+        '''A copy of script in which /srv/archive and /srv/backup name the fixture tree; the same file when nothing changes.'''
+        text = script.read_text(encoding='utf-8')
+        out = self.tmp / 'scripts' / script.name
+        out.parent.mkdir(exist_ok=True)
+        out.write_text(archivefs.rewrite(text, {archivefs.MOUNT: str(self.archive),
+                                                archivefs.OLD_MOUNT: str(self.tmp / 'old-backup')}), encoding='utf-8')
+        out.chmod(0o755)
+        return out
+
+    def run(self, script: Path, *args: str, uid: int | None = None, data: Path | None = None, fs: str = 'ok',
+            unset: tuple[str, ...] = (), env: dict[str, str] | None = None) -> Result:
+        '''Run a copy of bash script with args under the stubs; uid is what id -u onedrive-backup answers, data replaces
+        the data directory of ONEDRIVE_DATA_DIR, fs is the findmnt mode of pipeline.archivefs, unset names variables to drop.'''
+        target = self.data if data is None else data
+        variables = {'PATH': str(self.bin) + ':/usr/bin:/bin', 'HOME': str(self.tmp), 'STUB_LOG': str(self.log),
+                     'STUB_ROOT': str(self.tmp),
+                     'STUB_UID': str(os.getuid() if uid is None else uid), 'STUB_GID': str(os.getgid()),
+                     'ONEDRIVE_IMAGE': 'fixture-image:1', 'ONEDRIVE_CONTAINER': 'odb-fixture',
+                     'ONEDRIVE_NETWORK': 'odb-net', 'ONEDRIVE_CONFIG_DIR': str(self.config),
+                     'ONEDRIVE_DATA_DIR': str(target), 'ONEDRIVE_SECRET_DIR': str(self.secrets),
+                     'ONEDRIVE_RCLONE_STATE_DIR': str(self.state),
+                     'ONEDRIVE_SCAFFOLD_DATA_DIR': str(self.scaffold)}
+        variables.update(archivefs.fs_env(fs, self.archive, target, self.other_mount))
+        variables.update(env or {})
+        for name in unset:
+            variables.pop(name, None)
         self.log.write_text('', encoding='utf-8')
-        done = subprocess.run(['bash', str(script)] + list(args), env=env, capture_output=True, text=True,
+        done = subprocess.run(['bash', str(self.copy(script))] + list(args), env=variables, capture_output=True, text=True,
                               timeout=60, cwd=str(self.tmp))
         calls = [json.loads(line) for line in self.log.read_text(encoding='utf-8').splitlines() if line]
         return Result(done.returncode, done.stdout, done.stderr, calls)
