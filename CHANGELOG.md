@@ -1,3 +1,13 @@
+## 0.3.17 — mcp-proxy-adapter upgraded 8.11.16 -> 8.11.20
+
+- `mcp-proxy-adapter` is pinned `==8.11.20` in `docker/requirements-server.txt` and in the `onedrive-backup-client` dependency
+  (`client/pyproject.toml`); the image and the client install the same adapter. No configuration, command or result of this
+  service changes. Adapter changes 8.11.16 -> 8.11.20 reviewed: the module splits are internal; `enabled_commands` empty or
+  absent now allows every command (this service sets neither key); the JSON-RPC client retries only a failed connect for
+  up to 15 s by default and raises `ClientRetryExhaustedError`, a `ClientError` that `BackupClient` already maps; the
+  dynamic-token routes `/api/auth/*` and `TokenAuth` exist only when `auth.dynamic.enabled` is true (not set here); the
+  server entrypoint now syncs the loaded config into the global config singleton.
+
 ## 0.3.16 — container rclone upgraded to the official release 1.76.0 (bug 68fc1822)
 
 - The image no longer installs the Debian `rclone` package (v1.60.1), which has no OneDrive OAuth client credential flow

@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.16 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.17 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,10 +6,10 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.16, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
-  mcp-proxy-adapter 8.11.16, HTTPS/mTLS TCP port 8050.
-- Debian host package: dist/onedrive-backup_0.3.16_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.16-py3-none-any.whl.
+- Docker image: vasilyvz/onedrive-backup:0.3.17, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
+  mcp-proxy-adapter 8.11.20, HTTPS/mTLS TCP port 8050.
+- Debian host package: dist/onedrive-backup_0.3.17_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.17-py3-none-any.whl.
 - Verification: python -m pipeline; after image build: python -m pipeline smoke_mtls.
 
 Build all release artifacts on CAS host via ./build.sh. It tests the code,
@@ -85,7 +85,7 @@ changes nothing; `restic` must be installed on the host.
 
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.16_all.deb
+    sudo apt install ./onedrive-backup_0.3.17_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
@@ -143,7 +143,7 @@ maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.16-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.17-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 
