@@ -51,7 +51,7 @@ def discover(
     if not isinstance(secret_path, str):
         raise DiscoveryError("RCLONE_CONFIG_PATH_INVALID")
     conf = Path(secret_path)
-    if not conf.is_absolute() or not conf.is_relative_to("/secrets"):
+    if not conf.is_absolute() or not conf.is_relative_to("/rclone-state"):
         raise DiscoveryError("RCLONE_CONFIG_PATH_UNSAFE")
     credentials = EntraCredentials.from_rclone(conf)
     graph = GraphClient(credentials)

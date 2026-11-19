@@ -8,7 +8,7 @@
 
 Граница резервирования: документы и каталоги библиотек. **Не входят** SharePoint Lists, страницы сайтов, ACL/права, настройки, workflows и исходная история версий SharePoint. Версии restic фиксируют состояния файлов только с момента запуска собственного backup.
 
-В ранних выпусках реализованы Graph discovery и базовый CLI для отдельных зеркал/снимков библиотек. Команды MCP для обнаружения доступны, но реальный Graph и резервирование ещё не приняты: нет проверенного диска `/srv/backup`, restic-password и контрольного восстановления. Systemd timer отключён. Старый каталог выгрузок пока не адаптирован для полноценной навигации сайт → библиотека → снимок.
+В ранних выпусках реализованы Graph discovery и базовый CLI для отдельных зеркал/снимков библиотек. Команды MCP для обнаружения доступны, но реальный Graph и резервирование ещё не приняты: нет проверенного диска `/srv/archive`, restic-password и контрольного восстановления. Systemd timer отключён. Старый каталог выгрузок пока не адаптирован для полноценной навигации сайт → библиотека → снимок.
 
 Сервис поставляется как production-only; HTTP API доступен внутри Docker-сети под обязательным mTLS, без опубликованного порта хоста.
 
@@ -86,7 +86,7 @@ sudo onedrive-backup-docker status
 | `ONEDRIVE_CONTAINER` | Имя контейнера: onedrive-backup |
 | `ONEDRIVE_NETWORK` | Docker network: smart-assistant |
 | `ONEDRIVE_CONFIG_DIR` | /etc/onedrive-backup |
-| `ONEDRIVE_DATA_DIR` | /srv/backup/onedrive |
+| `ONEDRIVE_DATA_DIR` | /srv/archive/onedrive-backup |
 | `ONEDRIVE_SECRET_DIR` | /var/lib/onedrive-backup/secrets |
 | `ONEDRIVE_SCAFFOLD_DATA_DIR` | Данные ограниченного каркаса |
 | `ONEDRIVE_CERT_SOURCE` | Путь к исходному публичному сертификату сервера |
@@ -117,7 +117,7 @@ sudo onedrive-backup-docker status
 
 Имя контейнера `onedrive-backup`, внешний Docker network `smart-assistant`, внутренний HTTPS `8050`. FastAPI слушает `0.0.0.0:8050` только **внутри контейнера**. Публикации порта на хосте нет; это проверяется через `docker inspect ... HostConfig.PortBindings` (пустой объект).
 
-Конфигурация: `/etc/onedrive-backup -> /config:ro`. При штатном режиме: `/srv/backup/onedrive -> /data:rw`. При отсутствии смонтированного диска каркас вместо неё использует отдельную `/var/lib/onedrive-backup/scaffold-data`.
+Конфигурация: `/etc/onedrive-backup -> /config:ro`. При штатном режиме: `/srv/archive/onedrive-backup -> /data:rw`. При отсутствии смонтированного диска каркас вместо неё использует отдельную `/var/lib/onedrive-backup/scaffold-data`.
 
 Внимание: текущий `docker-run.sh` должен быть дополнительно проверен на фактическое монтирование каталога `ONEDRIVE_SECRET_DIR` в `/secrets` до включения реального backup. Наличие `rclone.conf` и пароля restic на хосте само по себе недостаточно, если они не доступны внутри контейнера.
 
@@ -133,7 +133,7 @@ MCP Proxy проверяет `/health` и обращается к `GET /commands
 
 ## Режим ограниченного каркаса
 
-При отсутствии секретов rclone и restic или отдельной файловой системы `/srv/backup` контроллер включает `ONEDRIVE_SCAFFOLD_MODE=1` и отдельный каталог данных, не являющийся репозиторием. Это позволяет проверять HTTPS, регистрацию и справку без Microsoft 365.
+При отсутствии секретов rclone и restic или отдельной файловой системы `/srv/archive` контроллер включает `ONEDRIVE_SCAFFOLD_MODE=1` и отдельный каталог данных, не являющийся репозиторием. Это позволяет проверять HTTPS, регистрацию и справку без Microsoft 365.
 
 Работают `/health`, `GET /commands`, `help` и `info`. Просмотр снимков и подготовка выгрузки возвращают 503; Никаких тестовых снимков и паролей не создаётся.
 
@@ -158,7 +158,7 @@ API — это команды mcp-proxy-adapter поверх JSON-RPC (`POST /ap
 ## Конфигурация backup.json и политики хранения
 
 `/config/backup.json` задаёт:
-- `onedrive_remote="onedrive:"`; `rclone_config="/secrets/rclone.conf"`.
+- `onedrive_remote="onedrive:"`; `rclone_config="/rclone-state/rclone.conf"`.
 - `mirror_dir="/data/mirror"`; `repository_dir="/data/restic-repo"`.
 - `password_file="/secrets/restic-password"`; `lock_file="/secrets/backup.lock"`.
 - `required_mountpoint="/data"` — настоящая файловая система backup-диска.
@@ -169,7 +169,7 @@ API — это команды mcp-proxy-adapter поверх JSON-RPC (`POST /ap
 
 ## Конфигурация backup.json и политики хранения
 
-`/config/backup.json` содержит `onedrive_remote="onedrive:"` (только корень, без папок), `rclone_config="/secrets/rclone.conf"`, `password_file="/secrets/restic-password"`, `mirror_dir="/data/mirror"`, `repository_dir="/data/restic-repo"`, `lock_file="/data/backup.lock"` и `required_mountpoint="/data"`.
+`/config/backup.json` содержит `onedrive_remote="onedrive:"` (только корень, без папок), `rclone_config="/rclone-state/rclone.conf"`, `password_file="/secrets/restic-password"`, `mirror_dir="/data/mirror"`, `repository_dir="/data/restic-repo"`, `lock_file="/data/backup.lock"` и `required_mountpoint="/data"`.
 
 Опции `max_delete=100`, `transfers=4`, `checkers=8` ограничивают синхронизацию. `allow_empty_source=false` не позволяет принять неожиданно пустую библиотеку за удалённые файлы. Библиотеки выбираются по стабильному Graph `drive_id`; пути зеркал строятся из SHA-256 `site_id` и `drive_id`, а не из отображаемых названий.
 
@@ -179,13 +179,13 @@ API — это команды mcp-proxy-adapter поверх JSON-RPC (`POST /ap
 
 Источник работает только с Microsoft Graph app-only (Tenant ID, Client ID, Client Secret **VALUE**), с администраторским согласием на read-only Application permissions, в частности `Sites.Read.All` и документированный доступ к файлам (`Files.Read.All` или совместимый read-only уровень). Права на запись не требуются и не разрешаются.
 
-`/secrets/rclone.conf` имеет режим 0600 и монтируется **только для чтения**. Он должен содержать раздел `[onedrive]` с `type=onedrive`, `client_credentials=true`, `tenant`, `client_id`, `client_secret`. `restic-password` хранится отдельно, вне репозитория и Docker-образа, с правами 0600. Файлы не копируются в Git, пакеты, stdout или TODO.
+`/secrets/rclone.conf` имеет режим 0600 и монтируется **только для чтения**. Сервис работает с записываемой копией `/rclone-state/rclone.conf` (режим 0600, владелец `onedrive-backup`, каталог `/var/lib/onedrive-backup/rclone-state`, `ONEDRIVE_RCLONE_STATE_DIR`): rclone сохраняет в ней обновлённый токен; `docker-run.sh start` создаёт копию из оригинала, если она отсутствует, пуста или старше оригинала. Он должен содержать раздел `[onedrive]` с `type=onedrive`, `client_credentials=true`, `tenant`, `client_id`, `client_secret`. `restic-password` хранится отдельно, вне репозитория и Docker-образа, с правами 0600. Файлы не копируются в Git, пакеты, stdout или TODO.
 
 `GET /sites/getAllSites` и `GET /sites/{siteId}/drives` выполняются до backup, с обработкой полной пагинации. Неполный обход делает readiness отрицательным. Live-проверка прав и unattended rclone ещё не выполнена; сведения о сконфигурированном приложении сами по себе не подтверждают доступ к сайтам.
 
 ## Команды локального резервного копирования
 
-Host runner `onedrive-backup-docker` поддерживает `start`, `stop`, `status`, `ports`, `discover [--dry-run]`, `init`, `backup [--dry-run]`, `check`. Он всегда проверяет `/srv/backup`, наличие секретов и состояние рабочего контейнера; в scaffold запуск backup/init/check запрещён.
+Host runner `onedrive-backup-docker` поддерживает `start`, `stop`, `status`, `ports`, `discover [--dry-run]`, `init`, `backup [--dry-run]`, `check`. Он всегда проверяет `/srv/archive`, наличие секретов и состояние рабочего контейнера; в scaffold запуск backup/init/check запрещён.
 
 `discover` запускает чтение всех сайтов и библиотек, при полном результате атомарно обновляет `/data/sharepoint/inventory.json`; `--dry-run` не изменяет каталог. `backup` заново запускает Graph discovery, затем обходит библиотеки через `rclone` с конкретным `--onedrive-drive-id` и делает отдельные restic snapshots с тегами сайта и библиотеки. `backup --dry-run` проверяет источники и выводит предполагаемые действия без создания зеркал и снимков.
 
@@ -206,7 +206,7 @@ sudo onedrive-backup-docker check
 
 `onedrive-backup-api.service` управляет контейнером с mTLS. `onedrive-backup.service` вызывает host runner `onedrive-backup-docker backup` — один цикл discovery + синхронизация всех найденных библиотек + restic snapshots. `onedrive-backup.timer` содержит базовый календарь 02:30 с разбросом до 15 минут, `Persistent=true`. Функция настройки календаря и отслеживания отдельных jobs через MCP ещё не реализована.
 
-**Таймер оставлен disabled/inactive.** Перед его включением требуется подтверждённый `/srv/backup`, app-only Graph доступ, `rclone.conf`, `restic-password`, инициализированный restic, полный dry-run, успешный первый снимок, `check` и контрольное восстановление с проверкой SHA-256. Глобальная блокировка `/data/backup.lock` исключает параллельные циклы.
+**Таймер оставлен disabled/inactive.** Перед его включением требуется подтверждённый `/srv/archive`, app-only Graph доступ, `rclone.conf`, `restic-password`, инициализированный restic, полный dry-run, успешный первый снимок, `check` и контрольное восстановление с проверкой SHA-256. Глобальная блокировка `/data/backup.lock` исключает параллельные циклы.
 
 Команды проверки: `systemctl status onedrive-backup-api.service`, `systemctl is-enabled onedrive-backup.timer`, `docker inspect onedrive-backup`, `onedrive-backup-docker status`. Состояние API `active` или успешный mTLS handshake сами по себе не подтверждают работающий backup.
 
@@ -231,7 +231,7 @@ odbcli delete EXPORT_ID
 
 ## Восстановление и контрольный прогон
 
-План контроля перед включением автоматических резервных копий: проверьте mountpoint /srv/backup, успешный rclone remote, доступность restic-password, выполните init, dry-run, одну реальную копию, команду check и восстановление отдельного тестового файла или снимка в **другой каталог**.
+План контроля перед включением автоматических резервных копий: проверьте mountpoint /srv/archive, успешный rclone remote, доступность restic-password, выполните init, dry-run, одну реальную копию, команду check и восстановление отдельного тестового файла или снимка в **другой каталог**.
 
 Сравните SHA-256 восстановленного файла с ожидаемым. Проверьте сохранение нескольких версий, возраст снимков и политику хранения. Не восстанавливайте поверх зеркала автоматически. Резервные копии ключей/пароля restic нужно хранить вне основного сервера.
 

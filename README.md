@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.17 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.18 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,10 +6,10 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.17, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
+- Docker image: vasilyvz/onedrive-backup:0.3.18, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
   mcp-proxy-adapter 8.11.20, HTTPS/mTLS TCP port 8050.
-- Debian host package: dist/onedrive-backup_0.3.17_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.17-py3-none-any.whl.
+- Debian host package: dist/onedrive-backup_0.3.18_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.18-py3-none-any.whl.
 - Verification: python -m pipeline; after image build: python -m pipeline smoke_mtls.
 
 Build all release artifacts on CAS host via ./build.sh. It tests the code,
@@ -35,11 +35,18 @@ Host bind mounts:
 | Host | Container | Role |
 | --- | --- | --- |
 | /etc/onedrive-backup | /config:ro | server.json, backup.json, certs |
-| /var/lib/onedrive-backup/secrets | /secrets:rw | rclone.conf, restic-password |
-| /srv/backup/onedrive | /data:rw | mirror, restic-repo, temporary exports |
+| /var/lib/onedrive-backup/secrets | /secrets:ro | rclone.conf (original), restic-password |
+| /var/lib/onedrive-backup/rclone-state | /rclone-state:rw | writable copy of rclone.conf (refreshed OAuth token) |
+| /srv/archive/onedrive-backup | /data:rw | mirror, restic-repo, temporary exports |
 
-The /srv/backup filesystem MUST be mounted before starting the service,
-otherwise it refuses to start. Keep this on real backup storage, not rootfs.
+The /srv/archive filesystem MUST be mounted and the data directory must lie on it. `docker/deploy.sh`, the Debian
+`postinst` and every `docker-run.sh` action (except stop, status and ports) refuse otherwise, naming the resolved path
+and its filesystem; the refusal never degrades into the restricted scaffold. The data directory is created by the
+operator (owner `onedrive-backup`, mode 0750), never by `postinst`.
+
+`docker-run.sh start` seeds `/var/lib/onedrive-backup/rclone-state/rclone.conf` (mode 0600, owner `onedrive-backup`)
+from `/var/lib/onedrive-backup/secrets/rclone.conf` when the copy is absent, empty or older than the original; an
+existing newer copy is kept, so a token refreshed by rclone survives a restart. The original stays read-only.
 
 Root project .env holds Docker Hub (optionally PyPI) publishing credentials.
 It must never be committed or included in images/packages. At deployment
@@ -79,13 +86,13 @@ On a CAS build host:
 The first `docker/deploy.sh` run on a host asks for the restic repository password on the terminal (twice and
 without echo for a new repository, once and checked against the repository when one already exists), writes it to
 `/var/lib/onedrive-backup/secrets/restic-password` (mode 0600) and initialises the repository
-`/srv/backup/onedrive/restic-repo` with it. Keep a copy of that password outside the host: without it the backups
+`/srv/archive/onedrive-backup/restic-repo` with it. Keep a copy of that password outside the host: without it the backups
 cannot be restored. Without a terminal and without the password file the script stops with an exact message and
 changes nothing; `restic` must be installed on the host.
 
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.17_all.deb
+    sudo apt install ./onedrive-backup_0.3.18_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
@@ -143,7 +150,7 @@ maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.17-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.18-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 

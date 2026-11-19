@@ -1,6 +1,6 @@
 services:
   onedrive-backup:
-    image: ${ONEDRIVE_IMAGE:-vasilyvz/onedrive-backup:0.3.17}
+    image: ${ONEDRIVE_IMAGE:-vasilyvz/onedrive-backup:0.3.18}
     container_name: onedrive-backup
     restart: unless-stopped
     user: "1000:1000"
@@ -8,7 +8,8 @@ services:
       - "8050"
     volumes:
       - /etc/onedrive-backup:/config:ro
-      - /srv/backup/onedrive:/data:rw
+      - /srv/archive/onedrive-backup:/data:rw
+      - /var/lib/onedrive-backup/rclone-state:/rclone-state:rw
     networks:
       smart-assistant:
         aliases: [onedrive-backup]

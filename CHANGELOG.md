@@ -1,3 +1,19 @@
+## 0.3.18 — data directory on /srv/archive and a writable rclone state copy (bugs 6508698d, be82d15d)
+
+- The data directory moves to `/srv/archive/onedrive-backup` (built-in default of `docker/deploy.sh`, `docker-run.sh`,
+  `postinst`, `packaging/defaults`, compose and env examples; `packaging/config.json` uses `/srv/archive`). The filesystem
+  guard of `docker-run.sh` (every action except stop, status and ports), `docker/deploy.sh` (before the password prompt
+  and before the package) and `postinst` refuses, with one stderr line naming the resolved path and its filesystem, when
+  `/srv/archive` is not mounted or the directory is not on it. `postinst` no longer creates the data directory.
+- rclone writes its refreshed OAuth token into its configuration file, which lay on the read-only `/secrets` mount
+  (`Failed to save config`). The service now uses a writable copy `/rclone-state/rclone.conf` in the new state directory
+  `/var/lib/onedrive-backup/rclone-state` (`ONEDRIVE_RCLONE_STATE_DIR`, created by `postinst` 0700 `onedrive-backup`,
+  mounted read-write). `docker-run.sh start` seeds the copy from the original when it is absent, empty or older, through
+  a temporary file renamed onto it, and otherwise keeps it. `discover`, `init`, `check` and `backup` refuse with
+  `rclone state copy unavailable` when the copy is missing. `rclone_config` of `config/backup.json` and
+  `packaging/api-backup.json` is `/rclone-state/rclone.conf`; `sharepoint_discover_cli` admits paths under
+  `/rclone-state`. `/secrets` stays read-only (`restic-password`, `api-credentials`, the original `rclone.conf`).
+
 ## 0.3.17 — mcp-proxy-adapter upgraded 8.11.16 -> 8.11.20
 
 - `mcp-proxy-adapter` is pinned `==8.11.20` in `docker/requirements-server.txt` and in the `onedrive-backup-client` dependency

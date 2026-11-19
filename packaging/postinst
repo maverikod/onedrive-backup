@@ -7,6 +7,9 @@ if [ "$1" = configure ]; then
   fi
   install -d -m 0700 -o onedrive-backup -g onedrive-backup \
     /var/lib/onedrive-backup /var/lib/onedrive-backup/secrets
+  # Writable state of the service: rclone keeps its refreshed OAuth token in a copy of rclone.conf here (the original
+  # under secrets stays read-only). docker-run.sh start seeds the copy.
+  install -d -m 0700 -o onedrive-backup -g onedrive-backup /var/lib/onedrive-backup/rclone-state
   # docker/deploy.sh stores the restic password as root; the service user reads it through the read-only mount.
   restic_password=/var/lib/onedrive-backup/secrets/restic-password
   if [ -f "$restic_password" ] && [ ! -L "$restic_password" ]; then
@@ -63,7 +66,7 @@ PY_MIGRATE_CRL
     install -m 0644 -o root -g root "$template" "$default"
   else
     [ ! -L "$default" ] || { echo 'Unsafe /etc/default symlink' >&2; exit 2; }
-    for k in ONEDRIVE_CERT_SOURCE ONEDRIVE_KEY_SOURCE ONEDRIVE_PROXY_CA_SOURCE ONEDRIVE_CLIENT_CA_SOURCE ONEDRIVE_CREDENTIALS_FILE ONEDRIVE_SCAFFOLD_DATA_DIR; do
+    for k in ONEDRIVE_CERT_SOURCE ONEDRIVE_KEY_SOURCE ONEDRIVE_PROXY_CA_SOURCE ONEDRIVE_CLIENT_CA_SOURCE ONEDRIVE_CREDENTIALS_FILE ONEDRIVE_SCAFFOLD_DATA_DIR ONEDRIVE_RCLONE_STATE_DIR; do
       if ! grep -q "^$k=" "$default"; then
         grep "^$k=" "$template" >> "$default"
       fi
@@ -74,18 +77,53 @@ PY_MIGRATE_CRL
     chmod 0644 "$default"
     chown root:root "$default"
   fi
-  # The backup data directory is a plain host directory owned by the service user. Create it
-  # when absent so the fail-closed start does not take the service down; never touch an
-  # existing one.
-  data_dir=/srv/backup/onedrive
+  # The backup data directory is a plain host directory owned by the service user on the mounted /srv/archive
+  # filesystem. postinst never creates, changes or hands over that directory: it refuses (exit 2) when the archive
+  # filesystem is not mounted, when the directory is not on it, or when it does not exist.
+  archive=/srv/archive
+  data_dir=/srv/archive/onedrive-backup
   configured="$(sed -n 's/^ONEDRIVE_DATA_DIR=//p' "$default" | tail -n 1 | tr -d '"')"
   if [ -n "$configured" ]; then data_dir="$configured"; fi
   case "$data_dir" in
     /*) ;;
     *) echo 'onedrive-backup: ONEDRIVE_DATA_DIR must be absolute' >&2; exit 2 ;;
   esac
-  if [ ! -e "$data_dir" ]; then
-    install -d -m 0750 -o onedrive-backup -g onedrive-backup "$data_dir"
+  fs_describe() {
+    probe="$1"
+    while [ ! -e "$probe" ] && [ "$probe" != / ]; do probe="$(dirname "$probe")"; done
+    line="$(findmnt -n -o TARGET,SOURCE -T "$probe" 2>/dev/null | head -n 1 || true)"
+    target="${line%% *}"
+    source="${line#* }"
+    if [ -z "$target" ]; then
+      echo 'an unknown filesystem'
+    elif [ "$target" = / ]; then
+      echo "the root filesystem ($source)"
+    else
+      echo "the filesystem $source mounted at $target"
+    fi
+  }
+  mreal="$(realpath -m "$archive")"
+  real="$(realpath -m "$data_dir")"
+  if ! findmnt -n -M "$archive" >/dev/null 2>&1; then
+    echo "onedrive-backup: $archive is not mounted: the data directory $real is on $(fs_describe "$real"); it must be on the mounted $archive filesystem" >&2
+    exit 2
+  fi
+  if [ -e "$data_dir" ]; then :; else
+    echo "onedrive-backup: Host data directory does not exist: $data_dir; create it on the $archive filesystem (postinst never creates it)" >&2
+    exit 2
+  fi
+  target="$(findmnt -n -o TARGET -T "$data_dir" 2>/dev/null | head -n 1 || true)"
+  on_archive=0
+  case "$target" in
+    "$archive"|"$archive"/*|"$mreal"|"$mreal"/*) on_archive=1 ;;
+  esac
+  case "$real" in
+    "$mreal"|"$mreal"/*) ;;
+    *) on_archive=0 ;;
+  esac
+  if [ "$on_archive" != 1 ]; then
+    echo "onedrive-backup: the data directory $real is not on the $archive filesystem: it is on $(fs_describe "$real")" >&2
+    exit 2
   fi
   if /usr/lib/onedrive-backup/install-runtime.sh; then
     if [ -d /run/systemd/system ]; then

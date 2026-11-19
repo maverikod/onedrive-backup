@@ -4,8 +4,9 @@
 ONEDRIVE_CONTAINER=onedrive-backup
 ONEDRIVE_NETWORK=smart-assistant
 ONEDRIVE_CONFIG_DIR=/etc/onedrive-backup
-ONEDRIVE_DATA_DIR=/srv/backup/onedrive
+ONEDRIVE_DATA_DIR=/srv/archive/onedrive-backup
 ONEDRIVE_SECRET_DIR=/var/lib/onedrive-backup/secrets
+ONEDRIVE_RCLONE_STATE_DIR=/var/lib/onedrive-backup/rclone-state
 ONEDRIVE_SCAFFOLD_DATA_DIR=/var/lib/onedrive-backup/scaffold-data
 ONEDRIVE_CERT_SOURCE=/etc/onedrive-backup/certs/server.crt
 ONEDRIVE_KEY_SOURCE=/etc/onedrive-backup/certs/server.key

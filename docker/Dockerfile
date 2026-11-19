@@ -36,7 +36,7 @@ COPY src/onedrive_backup.py /opt/onedrive-backup/onedrive_backup.py
 COPY src/onedrive_api/ /opt/onedrive-backup/onedrive_api/
 COPY VERSION /opt/onedrive-backup/VERSION
 RUN groupadd -g 1000 onedriveagent && useradd -u 1000 -g onedriveagent -s /usr/sbin/nologin -M onedriveagent \
-    && mkdir -p /config /data /secrets \
+    && mkdir -p /config /data /secrets /rclone-state \
     && chmod 755 /opt/onedrive-backup
 WORKDIR /opt/onedrive-backup
 ENV PYTHONPATH=/opt/onedrive-backup

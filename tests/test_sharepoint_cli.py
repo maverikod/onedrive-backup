@@ -26,7 +26,7 @@ class SharePointCliTests(unittest.TestCase):
         self.data = self.root / "data"
         self.data.mkdir()
         self.conf.write_text(json.dumps({
-            "rclone_config": "/secrets/rclone.conf",
+            "rclone_config": "/rclone-state/rclone.conf",
         }))
 
     def test_scaffold_and_unmounted_volume_are_refused(self) -> None:

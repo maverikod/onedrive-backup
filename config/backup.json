@@ -1,6 +1,6 @@
 {
   "onedrive_remote": "onedrive:",
-  "rclone_config": "/secrets/rclone.conf",
+  "rclone_config": "/rclone-state/rclone.conf",
   "mirror_dir": "/data/mirror",
   "repository_dir": "/data/restic-repo",
   "password_file": "/secrets/restic-password",
