@@ -61,6 +61,7 @@ roles:
     - dev_prod_instances
     - pipeline_environment
     - fleet_dev_dependencies
+    - fleet_service_leases
     - verify_before_delivery
   tester:
     - branch_discipline
@@ -81,6 +82,7 @@ roles:
     - dev_prod_instances
     - pipeline_environment
     - fleet_dev_dependencies
+    - fleet_service_leases
     - verify_before_delivery
   researcher:
     - branch_discipline

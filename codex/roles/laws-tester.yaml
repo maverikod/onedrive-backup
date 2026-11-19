@@ -419,9 +419,10 @@ laws:
     its examples — uses another fleet service, it uses ONLY that service's DEV client and DEV
     server: the DEV installation's settings, the pipeline, the examples and every test point at the
     service's DEV installation (its `-dev` network name, DEV port and DEV registration), never at
-    its production endpoint, and a production endpoint is refused before the first call. A service without a reachable DEV installation makes the affected check RED and is reported as a
+    its production endpoint, and a production endpoint is refused before the first call. A stopped DEV installation is no blocker:
+    the run's ai-devlease lease starts it (`fleet_service_leases`); a DEV service that cannot be leased or reached makes the affected check RED and is reported as a
     blocker with evidence; it never falls back to production. PRODUCTION-ONLY SERVICES are the one
-    exception: a fleet service the registry marks `production_only` — today `lmrs` and `onedrive-backup` — has NO
+    exception: a fleet service the registry marks `production_only` — today `lmrs`, `onedrive-backup` and `ai-devlease` — has NO
     DEV installation and NO `<client>-dev`; it runs and is changed ONLY in production. Every
     project — its DEV installation, pipeline, examples and tests included — uses such a service
     ONLY through its PRODUCTION server and its production client `<client>` (the newest published
@@ -451,6 +452,75 @@ laws:
     (`build.sh --dev no`) is the one exception: it builds with the PRODUCTION `<client>` of every
     fleet dependency at a version not lower than the one tested in DEV and its production checks
     (`dev_prod_instances`) run against the PRODUCTION services. See `ops/delivery.yaml` `fleet_dev_dependencies`.
+  fleet_service_leases: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any `build.sh` DEV pass of a service, any pipeline
+    run, named check or example that uses a fleet DEV service, and any start, stop or restart of a
+    fleet DEV service, in every project]
+    FLEET DEV SERVICES ARE BROUGHT UP, HELD AND REDEPLOYED ONLY THROUGH ai-devlease (user,
+    2026-11-18: "стандарт для build включал подъём и проверку работы сервисов"; 2026-11-19:
+    "Задействовать этот сервер в каждом пайплайне"). ai-devlease is the production-only lease
+    manager of the fleet (MCP Proxy id `ai-devlease`, `https://ai-devlease:8013` on
+    `root@192.168.254.26`): on a lease it starts the systemd unit of a registered DEV service and of every
+    service it depends on, waits until each is READY — registered in the MCP Proxy, `health` by its
+    proxy id OK, version equal to the registered `expected_version` — and stops it after its idle
+    pause once no holder is left. It is used ONLY through its production client
+    `ai-devlease-client >= 0.1.13` — the Python client, or its CLI `python -m ai_devlease_client`
+    for shell steps (exit 0 success, 1 server refusal, 2 usage, configuration or transport error) —
+    and its command `info` is the server's guide. IDENTITY: the HOLDER of every lease is
+    `<project>/<run id>` — the project's registry name and a run id unique to that `build.sh` pass
+    or pipeline run, each part 1..64 characters of `[a-z0-9._-]`; the lease commands (`acquire`,
+    `renew`, `release`, `status`) take the service NAME, the registry and deploy commands
+    (`register_service`, `list_services`, `deploy_start`, `deploy_finish`, `stop_service`) take
+    `service_id` — the `iddev` of the owning project's `projectid`.
+    (1) BUILD.SH: the DEV pass of a service does not end at an installed package — it brings the
+    deployed service up and proves that it works, through ai-devlease, in this order: `acquire`
+    under its holder of its own service and of every DEV dependency its checks need, kept by
+    `renew` while the pass runs -> `deploy_start` of its own `service_id` (a `ttl_seconds` that
+    covers the deploy with margin; `wait_seconds` to wait for foreign leases) -> the deploy (image,
+    Debian package, installation, restart of its OWN unit) -> `register_service` with the current
+    unit, containers, proxy id, dependencies and the NEW `expected_version`, the version this pass
+    built -> `deploy_finish` with verification on (registration, health by proxy id, version) ->
+    `release`. `release` runs in a `finally`, and a failed deploy still closes its announcement
+    with `deploy_finish` `succeeded: false`. FIRST INSTALL: while `list_services` does not know the
+    project's `iddev`, `register_service` IS the first-install step of the service in the fleet —
+    deploy, `register_service`, `acquire` of its own service (which starts and verifies it),
+    `release`; every later pass uses the order above. ANY failed step — a refusal, a
+    `DEPLOY_VERIFY_FAILED`, an unregistered or unhealthy service, a version other than the one just
+    built — makes `build.sh` exit non-zero with the exact command, error code and details.
+    (2) PIPELINE: with `PIPELINE_ENV=dev`, before its FIRST check every pipeline run takes leases
+    under its own holder on the project's own DEV service (a service project) and on every DEV
+    fleet service of `pipeline/endpoints.env`; the lease names come from that committed file
+    (`<NAME>_LEASE_DEV`), never a hardcode. `acquire` itself waits until the whole dependency chain
+    is ready, and the first check starts only after that. During the run the leases are renewed in
+    the background every 60 s (TTL 300 s); at the end they are released in a `finally` — after
+    GREEN, RED, an exception, SIGINT and SIGTERM alike; the leases of a killed run expire by TTL.
+    (3) WHAT BLOCKS: a stopped DEV container is NOT a blocker — the lease starts it. Only a FAILED
+    LEASE blocks: E1 `SERVICE_NOT_IN_CATALOG` (not registered — its owner's `build.sh` registers
+    it), E2 `START_TIMEOUT` and E3 `UNIT_START_FAILED` (the service did not come up) are an exact
+    refusal with the error and its details, the affected checks are RED and the blocker is
+    reported; E4 `EXCLUSIVE_LOCK_ACTIVE` (a foreign redeploy or `deploy_start` is under way) is
+    waited for and retried within the run's timeout, then reported the same way.
+    (4) FORBIDDEN: a direct `systemctl start|stop|restart` of a fleet unit or `docker
+    start|stop|restart` of a fleet container from `build.sh`, the pipeline, an example or a manual
+    step. A stop goes through `stop_service`; the project's OWN deploy restarts only its own unit,
+    inside its `deploy_start`/`deploy_finish` window.
+    (5) PRODUCTION AND EXCEPTIONS: ai-devlease leases DEV installations only. The production pass
+    `build.sh --dev no`, a `PIPELINE_ENV=prod` run and the production installations the work is
+    registered in (`ailogger`, `ai-formforge`, `doc-store-vvz`, `code-analysis-server-vvz`, the one
+    `mcp-proxy`) take no lease; the production pass proves its deployed service directly —
+    registration in the MCP Proxy, `health` by its production proxy id, version equal to the
+    build — and a failure makes it exit non-zero. The production-only services `lmrs`,
+    `onedrive-backup` and `ai-devlease` are not served by ai-devlease and are never leased (lmrs is
+    reached only through macsc, `lmrs_only_through_macsc`); their own `build.sh` proves its
+    production deploy directly the same way, and the ai-devlease pipeline never leases ai-devlease
+    itself. A library deploys nothing, but its examples that call fleet DEV services lease them
+    like a pipeline; a server an example starts for itself is not leased.
+    (6) CHECKED BY THE PIPELINE: a pipeline that takes leases carries the named check
+    `devlease_leases`, which proves this behaviour against the live ai-devlease (`status`): the
+    run's holder holds every required lease before the first check, the expiry moves forward after
+    a renew, and no lease of the holder is left after a run that ended GREEN, one that ended RED
+    and one stopped by SIGTERM. See `ops/delivery.yaml` `fleet_service_leases` and
+    `ops/testing.yaml` `pipeline_cli.leases`.
   verify_before_delivery: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before reporting delivery] Run the affected named check after deployment or over
     the real example. RED returns to diagnosis, proof, correction and deployment. When every

@@ -1,6 +1,6 @@
 # onedrive-backup — AI Logger exchange card for Claude
 # EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
-template_version: v1.7.93
+template_version: v1.7.94
 # Read by EVERY launched agent — every `dispatch_*` event lists it — and by the orchestrator through
 # `agent_dispatch`. It is complete on its own: a role that reads no law excerpt needs nothing else to
 # take its task from the logger and to answer through it. `laws.logger_exchange` points here.
