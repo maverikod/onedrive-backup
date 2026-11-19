@@ -184,12 +184,13 @@ class Catalog:
                             "mtime": node.get("mtime", ""),
                         })
                     rc = proc.wait(timeout=120)
+                    errors.seek(0)
+                    detail = errors.read(300)
                     if rc:
-                        errors.seek(0)
-                        raise CatalogError(
-                            "Restic listing failed: " + errors.read(300).decode("utf-8", "replace"),
-                            503,
-                        )
+                        raise CatalogError("Restic listing failed: " + detail.decode("utf-8", "replace"), 503)
+                    if b"no matching ID found" in detail:
+                        # restic 0.14 ignores an unknown snapshot id: exit 0, empty listing
+                        raise CatalogError("Snapshot not found", 404)
                 except BaseException:
                     if proc.poll() is None:
                         proc.kill()

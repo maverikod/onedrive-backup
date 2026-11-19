@@ -14,6 +14,9 @@ RUN groupadd -g 1000 onedriveagent && useradd -u 1000 -g onedriveagent -s /usr/s
     && chmod 755 /opt/onedrive-backup
 WORKDIR /opt/onedrive-backup
 ENV PYTHONPATH=/opt/onedrive-backup
+# The container runs as the host service uid, which has no passwd entry, so HOME is / and restic would try
+# to create /.cache. Point restic (and rclone through XDG) at a cache directory the service user can create.
+ENV RESTIC_CACHE_DIR=/tmp/restic-cache XDG_CACHE_HOME=/tmp/cache
 USER 1000:1000
 EXPOSE 8050
 ENTRYPOINT ["/usr/bin/tini", "--"]

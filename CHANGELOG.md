@@ -1,3 +1,13 @@
+## 0.3.13 — restic cache directory in the container (bug 60eae9c7)
+
+- The image sets `RESTIC_CACHE_DIR=/tmp/restic-cache` and `XDG_CACHE_HOME=/tmp/cache`. The container runs as the host
+  service uid without a passwd entry (HOME=/), so restic tried to create `/.cache` and printed `unable to open cache:
+  mkdir /.cache: permission denied` on every call; it surfaced in `backup_prepare_download` errors. The cache is created
+  by the service user inside the container; the container stays non-root, no-new-privileges, with read-only config and secrets.
+- `Catalog` answers command error 404 `Snapshot not found` for a snapshot id that restic ignores (restic 0.14 exits 0 with an
+  empty listing and `no matching ID found`); before, `backup_prepare_download` of an unknown snapshot reached `restic restore`
+  and answered 503.
+
 ## 0.3.12 — first-run restic password, server HTML UI and admin password removed
 
 - `docker/deploy.sh` asks the restic repository password on the first run (twice and without echo when the repository
