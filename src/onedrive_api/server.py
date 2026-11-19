@@ -211,22 +211,6 @@ def make_app(config_path: str | Path):
     config_path = Path(config_path).resolve()
     config = json.loads(config_path.read_text(encoding="utf-8"))
     _validate_mtls_config(config)
-    # A safe, restricted scaffold may register before the operator sets a
-    # password or mounts backup storage. All browser actions stay locked.
-    if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") != "1":
-        from .admin_password import AuthError, load_record
-
-        try:
-            load_record(
-                Path(
-                    os.environ.get(
-                        "ONEDRIVE_ADMIN_HASH_FILE",
-                        "/config/admin-password.hash",
-                    )
-                )
-            )
-        except AuthError as exc:
-            raise ValueError("Admin password not set: " + str(exc)) from exc
     proxy_token = secure_auth(config)
     transfer = validate_transfer(config)
     os.environ["CONFIG_FILE"] = str(config_path)
@@ -258,9 +242,6 @@ def make_app(config_path: str | Path):
         if getattr(route, "path", None) in ALLOWED_ROUTES
     ]
 
-    from .ui import install_ui
-
-    install_ui(app, _catalog)
     # Added last, so it runs first: it must put the internal token on a proxy peer request before the token gate.
     trust = config.get("proxy_trust")
     hosts = trust.get("hosts", []) if isinstance(trust, dict) else []

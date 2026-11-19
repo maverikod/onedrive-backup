@@ -35,7 +35,7 @@ FastAPI / MCP Proxy / Web UI
 
 `src/onedrive_api/sharepoint_discovery.py` отвечает за полный обход и безопасную инвентаризацию; `sharepoint_backup.py` выполняет цикл по библиотекам, `sharepoint_discover_cli.py` запускает discovery. `src/onedrive_backup.py` сохраняет общий низкоуровневый механизм restic, preflight и блокировку. При неполном обходе Graph ни один rclone sync не запускается. При ошибке библиотеки задание завершается ошибкой, без `forget/prune`.
 
-Каталог и HTML UI пока содержат прежние однодисковые механизмы. Их расширение до site/library snapshot и Vue 3 — отдельные незавершённые работы.
+Каталог пока содержит прежние однодисковые механизмы. Их расширение до site/library snapshot и Vue 3 — отдельные незавершённые работы.
 
 ## Как вызываются MCP-команды
 
@@ -133,11 +133,11 @@ MCP Proxy проверяет `/health` и обращается к `GET /commands
 
 ## Режим ограниченного каркаса
 
-При отсутствии хеша admin или отдельной файловой системы `/srv/backup` контроллер включает `ONEDRIVE_SCAFFOLD_MODE=1` и отдельный каталог данных, не являющийся репозиторием. Это позволяет проверять HTTPS, регистрацию и справку без Microsoft 365.
+При отсутствии секретов rclone и restic или отдельной файловой системы `/srv/backup` контроллер включает `ONEDRIVE_SCAFFOLD_MODE=1` и отдельный каталог данных, не являющийся репозиторием. Это позволяет проверять HTTPS, регистрацию и справку без Microsoft 365.
 
-Работают `/health`, `GET /commands`, `help` и `info`. Просмотр снимков и подготовка выгрузки возвращают 503; HTML-вход без пароля администратора недоступен. Никаких тестовых снимков и паролей не создаётся.
+Работают `/health`, `GET /commands`, `help` и `info`. Просмотр снимков и подготовка выгрузки возвращают 503; Никаких тестовых снимков и паролей не создаётся.
 
-Чтобы перейти к полной эксплуатации: подключите backup-диск, задайте admin-пароль, настроьте секреты rclone и restic, проверьте конфигурацию, затем перезапустите API-службу и выполните контрольный backup. Не включайте таймер до успешной проверки восстановления.
+Чтобы перейти к полной эксплуатации: подключите backup-диск, настройте секреты rclone и restic (пароль restic задаёт docker/deploy.sh при первом запуске), проверьте конфигурацию, затем перезапустите API-службу и выполните контрольный backup. Не включайте таймер до успешной проверки восстановления.
 
 ## Токен API и загрузка выгрузок
 
@@ -151,7 +151,7 @@ API — это команды mcp-proxy-adapter поверх JSON-RPC (`POST /ap
 - `server`: host=0.0.0.0; port=8050; protocol=mtls; servername/advertised_host=onedrive-backup; cert/key и trust-bundle; log_level.
 - `registration`: enabled=true; protocol=mtls; register_url=https://mcp-proxy:3004/register; unregister_url=/unregister; server_id=onedrive-backup; cert/key как у сервера; ca=proxy-ca.crt; DNS/hostname check=true; heartbeat URL и interval.
 - `client.enabled=false`, `queue_manager.enabled=false`; прямой HTTP-клиент адаптера не создаётся.
-- `auth.use_token=false` и `auth.use_roles=false`: для HTML admin применяется отдельный пароль, машинным клиентам необходим mTLS.
+- `auth.use_token=false` и `auth.use_roles=false`: машинным клиентам необходим mTLS.
 
 Сервер использует только защищённые маршруты приложения и discovery `/commands`. Отсутствие `server.ssl.ca` или ключа должно препятствовать запуску; TLS-проверки нельзя отключать ради регистрации.
 
@@ -210,14 +210,6 @@ sudo onedrive-backup-docker check
 
 Команды проверки: `systemctl status onedrive-backup-api.service`, `systemctl is-enabled onedrive-backup.timer`, `docker inspect onedrive-backup`, `onedrive-backup-docker status`. Состояние API `active` или успешный mTLS handshake сами по себе не подтверждают работающий backup.
 
-## HTML-интерфейс и авторизация admin
-
-Сервер предоставляет `/ui/login` и `/ui/`, просмотр снимков/файлов, подготовку выгрузок, скачивание и выход. HTML работает внутри того же FastAPI; отдельного сервера нет.
-
-Единственный пользователь — `admin`. Пароль задаётся интерактивно через `sudo onedrive-backup-admin-password` и хранится исключительно как PBKDF2-HMAC-SHA256 хеш с 600000 итераций и солью. Файл `/etc/onedrive-backup/admin-password.hash` должен иметь права 0600.
-
-Дополнительная защита: mTLS, cookie Secure/HttpOnly/SameSite=Strict, срок сессии 8 часов, CSRF, ограничение попыток входа, экранирование HTML, защитные HTTP-заголовки и запрет кеширования. Смена пароля инвалидирует старые сессии. В каркасе без хеша вход возвращает HTTP 503; готового пароля нет.
-
 ## Консольный Python-клиент
 
 Wheel `onedrive_backup_client-<VERSION>-py3-none-any.whl` собирается локально. `~/.config/onedrive-backup/client.json` содержит внутренний HTTPS URL, пути к доверенному CA и клиентской паре cert/key, timeout. Клиент должен иметь сетевой доступ к контейнеру (или контролируемому шлюзу) и корректные TLS credentials.
@@ -250,7 +242,7 @@ odbcli delete EXPORT_ID
 - `help` есть, а `info` отсутствует: установлен старый production-образ либо команда не зарегистрирована.
 - MCP Proxy отвечает `returned no commands via get_methods()`: отсутствует endpoint `GET /commands`; проверьте разрешённые маршруты FastAPI.
 - TLS handshake failed: проверьте SAN, EKU, CA trust, права server.key и mTLS client identity. Не используйте `verify=False`.
-- `HTTP 503` на снимках в каркасе: ожидаемая блокировка; необходимы диск, пароль admin и рабочий restic.
+- `HTTP 503` на снимках в каркасе: ожидаемая блокировка; необходимы диск, секреты rclone и рабочий restic.
 - `HTTP 503` при штатном режиме: проверить mountpoint, `/secrets`, пароль restic и целостность репозитория.
 - `HTTP 400`: неправильные аргументы (snapshot_id, prefix, page).
 - `HTTP 404/410`: отсутствует/просрочен export.

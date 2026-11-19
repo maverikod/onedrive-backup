@@ -18,13 +18,11 @@ mkdir -p "$PKG/DEBIAN" "$PKG/usr/bin" "$PKG/usr/lib/onedrive-backup" \
 install -m 0755 "$ROOT/packaging/onedrive-backup-docker" \
   "$PKG/usr/bin/onedrive-backup-docker"
 install -m 0755 "$ROOT/packaging/onedrive-backup" "$PKG/usr/bin/onedrive-backup"
-install -m 0755 "$ROOT/packaging/onedrive-backup-admin-password" "$PKG/usr/bin/onedrive-backup-admin-password"
 install -d -m 0755 "$PKG/usr/lib/onedrive-backup/onedrive_api"
 install -m 0755 "$ROOT/packaging/install-runtime.sh" "$PKG/usr/lib/onedrive-backup/install-runtime.sh"
 install -m 0755 "$ROOT/packaging/docker-run.sh" "$PKG/usr/lib/onedrive-backup/docker-run.sh"
 install -m 0644 "$ROOT/packaging/defaults" "$PKG/usr/share/onedrive-backup/defaults"
 install -m 0644 "$ROOT/src/onedrive_api/__init__.py" "$PKG/usr/lib/onedrive-backup/onedrive_api/__init__.py"
-install -m 0644 "$ROOT/src/onedrive_api/admin_password.py" "$PKG/usr/lib/onedrive-backup/onedrive_api/admin_password.py"
 install -m 0644 "$ROOT/config/server.json" "$PKG/etc/onedrive-backup/server.json"
 install -m 0644 "$ROOT/config/backup.json" "$PKG/etc/onedrive-backup/backup.json"
 install -m 0644 "$ROOT/packaging/onedrive-backup-api.service" \
@@ -58,7 +56,7 @@ Architecture: all
 Section: admin
 Priority: optional
 Maintainer: OneDrive Backup maintainers <maintainers@example.org>
-Depends: docker.io | docker-ce | moby-engine, adduser, util-linux, ca-certificates, python3
+Depends: docker.io | docker-ce | moby-engine, adduser, util-linux, ca-certificates, python3, restic
 Description: OneDrive Business backup API and Docker host controller
  Installs version-pinned Docker service, systemd timer, mTLS configuration,
  encrypted restic backup management, and host bootstrap tools. No credentials

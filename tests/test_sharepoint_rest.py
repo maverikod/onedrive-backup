@@ -188,7 +188,6 @@ class RouteFilterTests(ServerFixture):
             fake.add_api_route(path, lambda: {}, methods=["GET"])
         with (
             patch("mcp_proxy_adapter.api.app.create_app", return_value=fake),
-            patch("onedrive_api.ui.install_ui"),
         ):
             app = server.make_app(self.config_path)
         paths = {getattr(route, "path", None) for route in app.router.routes}
@@ -211,7 +210,6 @@ class RouteFilterTests(ServerFixture):
                 fake = FastAPI()
                 with (
                     patch("mcp_proxy_adapter.api.app.create_app", return_value=fake) as created,
-                    patch("onedrive_api.ui.install_ui"),
                 ):
                     server.make_app(self.config_path)
                 tokens = created.call_args.kwargs["app_config"]["auth"]["tokens"]

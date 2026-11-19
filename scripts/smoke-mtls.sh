@@ -55,18 +55,6 @@ printf 'smoke:%s\n' "$(openssl rand -hex 12)" > "$ROOT_TMP/secrets/api-credentia
 chmod 0755 "$ROOT_TMP/secrets"
 chmod 0644 "$ROOT_TMP/secrets/api-credentials"
 API_TOKEN="$(head -n 1 "$ROOT_TMP/secrets/api-credentials" | tr -d '\n' | base64 -w0)"
-# Password setup is mandatory in the image. A disposable test-only hash is
-# written after the bulk chmod so it keeps strict mode 0600.
-PYTHONPATH="$ROOT/src" python3 - "$ROOT_TMP/config/admin-password.hash" <<'PY_AUTH_HASH'
-import os
-from pathlib import Path
-import sys
-from onedrive_api.admin_password import password_hash
-out = Path(sys.argv[1])
-out.write_text(password_hash("DisposableTestPasswordOnly2026!") + "\n")
-out.chmod(0o600)
-os.chown(out, 1000, 1000)
-PY_AUTH_HASH
 PORT="$(python3 - <<'PY'
 import socket
 s=socket.socket()

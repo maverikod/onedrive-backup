@@ -7,6 +7,12 @@ if [ "$1" = configure ]; then
   fi
   install -d -m 0700 -o onedrive-backup -g onedrive-backup \
     /var/lib/onedrive-backup /var/lib/onedrive-backup/secrets
+  # docker/deploy.sh stores the restic password as root; the service user reads it through the read-only mount.
+  restic_password=/var/lib/onedrive-backup/secrets/restic-password
+  if [ -f "$restic_password" ] && [ ! -L "$restic_password" ]; then
+    chown onedrive-backup:onedrive-backup "$restic_password"
+    chmod 0600 "$restic_password"
+  fi
   install -d -m 0700 -o root -g root /var/lib/onedrive-backup/credentials
   install -d -m 0750 -o root -g onedrive-backup \
     /etc/onedrive-backup /etc/onedrive-backup/certs

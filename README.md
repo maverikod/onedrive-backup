@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.11 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.12 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,10 +6,10 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.11, Python 3.12,
+- Docker image: vasilyvz/onedrive-backup:0.3.12, Python 3.12,
   mcp-proxy-adapter 8.11.16, HTTPS/mTLS TCP port 8050.
-- Debian host package: dist/onedrive-backup_0.3.11_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.11-py3-none-any.whl.
+- Debian host package: dist/onedrive-backup_0.3.12_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.12-py3-none-any.whl.
 - Verification: python -m pipeline; after image build: python -m pipeline smoke_mtls.
 
 Build all release artifacts on CAS host via ./build.sh. It tests the code,
@@ -76,15 +76,22 @@ On a CAS build host:
     ./build.sh
     sudo bash docker/deploy.sh
 
+The first `docker/deploy.sh` run on a host asks for the restic repository password on the terminal (twice and
+without echo for a new repository, once and checked against the repository when one already exists), writes it to
+`/var/lib/onedrive-backup/secrets/restic-password` (mode 0600) and initialises the repository
+`/srv/backup/onedrive/restic-repo` with it. Keep a copy of that password outside the host: without it the backups
+cannot be restored. Without a terminal and without the password file the script stops with an exact message and
+changes nothing; `restic` must be installed on the host.
+
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.11_all.deb
+    sudo apt install ./onedrive-backup_0.3.12_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
     sudo onedrive-backup-docker ports
 
-The API remains disabled until the admin password hash, TLS identities and
+The API remains disabled until the TLS identities and
 mounted backup storage are ready. Microsoft 365 authorization is not required
 to start the API; keep the backup timer disabled until authorization and
 one successful test backup.
@@ -136,7 +143,7 @@ maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.11-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.12-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 
@@ -165,25 +172,7 @@ Before committing an output, it validates downloaded length and SHA-256,
 then atomically moves its temporary file to the requested destination.
 
 
-## Административный веб-интерфейс (0.3.1)
-
-FastAPI на основе MCP Proxy Adapter предоставляет /ui/login и /ui/.
-Доступны авторизация, список снимков, просмотр каталога файлов,
-подготовка выгрузки и скачивание файлов/архивов.
-
-Безопасность: обязательные клиентский mTLS-сертификат и отдельный
-пароль пользователя admin. Готового пароля не существует. На Ubuntu
-после установки .deb выполните sudo onedrive-backup-admin-password.
-Новый пароль вводится без отображения и не включается в историю команд.
-В /etc/onedrive-backup/admin-password.hash хранится только соль и хеш
-PBKDF2-SHA256 (600 000 итераций), права 0600, пользователь onedrive-backup.
-Файл не входит в Git, Debian-пакет и Docker-образ. При смене пароля все
-старые сессии автоматически становятся недействительными.
-
-Cookie: Secure, HttpOnly, SameSite=Strict, время жизни восемь часов;
-есть защита CSRF, ограничение неудачных попыток, экранирование HTML,
-защитные HTTP-заголовки и запрет кеширования.
-Без установленного хеша приложение не запускается.
+## mTLS-сертификаты сервера
 
 Единый сертификат сервера и исходящего подключения к MCP Proxy:
 mtls-certs/for-proxy/issued/onedrive-backup.crt и onedrive-backup.key.
@@ -227,8 +216,8 @@ installs certs in /etc/onedrive-backup/certs, builds trust-bundle.pem,
 pulls the pinned Docker image, and starts the service on the
 internal smart-assistant Docker network, without publishing a host port.
 
-Before a backup disk is mounted or a password has been set, the server
-runs in restricted scaffold mode. Login returns HTTP 503 and backup
+Before a backup disk is mounted or the rclone and restic secrets are set, the server
+runs in restricted scaffold mode. Snapshot and export commands answer 503 and backup
 operations are blocked. The scaffold data directory is separate from
 the backup volume. After setup, restart onedrive-backup-api.service
 to enable normal operation. Microsoft Entra ID credentials come later.

@@ -67,12 +67,8 @@ case "$action" in
     test -d "$secrets" && ! test -L "$secrets" || fail "Missing private secrets directory"
     test "$(stat -c %a "$secrets")" = 700 || fail "Secrets directory must be mode 0700"
     test "$(stat -c %u "$secrets")" = "$(id -u onedrive-backup)" || fail "Secrets directory owner invalid"
-    # With absent credentials, password or disk, start restricted scaffold.
+    # With absent credentials or disk, start restricted scaffold.
     scaffold=0
-    if ! test -s "$config/admin-password.hash"; then
-      scaffold=1
-      echo "Admin password unset: UI authentication will remain locked"
-    fi
     # Fail closed: a missing or unsafe host data directory never degrades into scaffold data.
     check_data_dir
     if ! test -s "$secrets/rclone.conf" || ! test -s "$secrets/restic-password"; then

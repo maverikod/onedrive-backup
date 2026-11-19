@@ -1,3 +1,15 @@
+## 0.3.12 — first-run restic password, server HTML UI and admin password removed
+
+- `docker/deploy.sh` asks the restic repository password on the first run (twice and without echo when the repository
+  is new, once and verified against the repository when it exists), stores it in the restic password file (mode 0600,
+  owner root, handed to the service user by the package `postinst`) and initialises the repository with it; without a
+  terminal and without the password file it stops with an exact message before touching the package or the container.
+  `restic` is now a Debian package dependency; `ONEDRIVE_SECRET_DIR`, `ONEDRIVE_DATA_DIR` and `ONEDRIVE_DEFAULTS_FILE`
+  override the host paths.
+- The server-side HTML interface (`/ui*`, `ui.py`) and the admin password (`admin_password.py`,
+  `onedrive-backup-admin-password`, `admin-password.hash`, `ONEDRIVE_ADMIN_HASH_FILE`) are removed; every former `/ui*`
+  route answers the framework 404. Restricted scaffold mode now depends only on `rclone.conf` and `restic-password`.
+
 ## 0.3.11 — source-size refactoring, no behaviour change
 
 - `server.py`, `command_reference.py` and `sharepoint_discovery.py` are split into cohesive modules of at most 400
