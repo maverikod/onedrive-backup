@@ -11,7 +11,7 @@ from pipeline.checks import CheckFailure
 # cases that need T RED as STATE or ENVIRONMENT, never PRODUCT, never skipped and never a pass.
 TOKEN_CHECKS = ('auth_token', 'cmd_', 'client_cmd_', 'odbcli_', 'download_link', 'transfer_confinement', 'client_download',
                 'client_auth', 'client_call_raw', 'client_fetch_integrity', 'ws_closed', 'surface_framework_routes',
-                'rest_removed', 'vue_')
+                'rest_removed', 'vue_', 'rclone_remote_access')
 # A finding that only reports what the token gate answered to a request that carried no usable token.
 GATE_ANSWER = re.compile(r'(answered|got|code=|HTTP|status) ?401|ClientAuthenticationError|authentication_error')
 
