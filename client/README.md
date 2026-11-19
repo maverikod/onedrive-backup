@@ -9,7 +9,7 @@ and `raw_call`. Trusted CA, server-name verification and the client certificate 
 Authentication: login and password (token base64(login:password)) or a ready token.
 
 ```bash
-python3 -m pip install onedrive_backup_client-0.3.13-py3-none-any.whl
+python3 -m pip install onedrive_backup_client-0.3.14-py3-none-any.whl
 odbcli --config client.json snapshots
 odbcli --config client.json files <snapshot_id>
 odbcli --config client.json download <snapshot_id> --path Documents/file.pdf --output file.pdf

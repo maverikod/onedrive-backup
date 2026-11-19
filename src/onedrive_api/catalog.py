@@ -208,7 +208,15 @@ class Catalog:
             raise CatalogError("offset must be 0..500000")
         if prefix:
             prefix = self._check_path(prefix)
-        nodes = [n for n in self._all_nodes(snapshot_id)
+        snapshot_id = self._check_snapshot(snapshot_id)
+        try:
+            found = self._all_nodes(snapshot_id)
+        except CatalogError as exc:
+            if exc.status != 404:
+                raise
+            # A well-formed snapshot id that no snapshot carries lists no files.
+            found = []
+        nodes = [n for n in found
                  if not prefix or n["path"] == prefix or n["path"].startswith(prefix + "/")]
         return {
             "snapshot_id": snapshot_id, "items": [
@@ -377,4 +385,3 @@ class Catalog:
         output.unlink()
         self._metadata_path(export_id).unlink()
         return {"export_id": export_id, "deleted": True}
-

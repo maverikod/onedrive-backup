@@ -1,3 +1,10 @@
+## 0.3.14 — backup_list_files of an unknown snapshot answers an empty list
+
+- `Catalog.files` answers the success result `{snapshot_id, items: [], total: 0, offset, limit}` for a well-formed snapshot
+  id that no snapshot carries (the id echoed in lowercase); before, the 404 `Snapshot not found` of the unknown id escaped
+  from the listing. `backup_prepare_download` of an unknown snapshot keeps the command error 404 `Snapshot not found`;
+  no other command, parameter or result changes.
+
 ## 0.3.13 — restic cache directory in the container (bug 60eae9c7)
 
 - The image sets `RESTIC_CACHE_DIR=/tmp/restic-cache` and `XDG_CACHE_HOME=/tmp/cache`. The container runs as the host
