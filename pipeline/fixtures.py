@@ -165,7 +165,7 @@ class Result:
 class Host:
     '''A temporary host: configuration with certificates, secrets and a data directory.'''
 
-    def __init__(self, *, secrets: bool = True, admin_hash: bool = True) -> None:
+    def __init__(self, *, secrets: bool = True) -> None:
         self.tmp = _work_dir('b3-host-')
         self.bin = self.tmp / 'bin'
         self.config = self.tmp / 'config'
@@ -185,8 +185,6 @@ class Host:
             (self.config / 'certs' / name).write_text('fixture', encoding='utf-8')
         (self.config / 'server.json').write_text('{}', encoding='utf-8')
         (self.config / 'backup.json').write_text('{}', encoding='utf-8')
-        if admin_hash:
-            (self.config / 'admin-password.hash').write_text('fixture', encoding='utf-8')
         self.secrets.mkdir(mode=0o700)
         self.secrets.chmod(0o700)
         if secrets:

@@ -163,17 +163,23 @@ def client_cmd(command: str, row_id: str, name: str) -> None:
             report.product.append('%s(%s): expected ClientError code -32602 violation=%s, got %s' % (label, sent, want_violation, 'success %r' % (value,) if exc is None else '%s code=%r violation=%r' % (type(exc).__name__, error_code(exc), violation(exc))))
     if callable(method) and state is not None:
         sent = {k: cmdcases.BASE[k] for k, spec in row['params'].items() if spec['required']}
-        value, exc = drive(method, **sent)
-        if exc is None:
+        if state == 'S1' and 'snapshot_id' in sent:
+            sent['snapshot_id'] = base.baseline_snapshot(report, '%s baseline %s' % (row_id, command))
+        value, exc = (None, None) if sent.get('snapshot_id', '') is None else drive(method, **sent)
+        if sent.get('snapshot_id', '') is None:
+            pass
+        elif exc is None:
             if value is None:
                 report.product.append('%s baseline: the method returned None, expected the unpacked result data' % row_id)
+            elif command == 'backup_prepare_download' and isinstance(value, dict):
+                live.request('backup_delete_export', {'export_id': value.get('export_id', base.ZERO_ID)})
         elif 'export_id' in row['params'] and error_code(exc) == 404 and state in ('S0', 'S1'):
             # R4/R6 and the M6 case S0_unknown_export_404: the zero export id is a well-formed unknown id, answered 404 without the scaffold gate
             if state == 'S0':
                 report.state.append('%s baseline success %s(%s): needs a prepared export on an S1 service; S0 answers the matrix case S0_unknown_export_404 (404 %s)' % (row_id, command, sent, str(exc)[:60]))
         elif error_code(exc) == 503 and state == 'S0' and 'export_id' not in row['params']:
             report.state.append('%s baseline %s(%s): needs an S1 service but production answers S0 (503 %s)' % (row_id, command, sent, str(exc)[:80]))
-        elif not (state == 'S1' and error_code(exc) == 404):
+        elif not (state == 'S1' and error_code(exc) == 404 and 'snapshot_id' not in sent):
             report.product.append('%s baseline %s(%s): raised %s code=%r %s' % (row_id, command, sent, type(exc).__name__, error_code(exc), str(exc)[:100]))
     report.finish(name)
 

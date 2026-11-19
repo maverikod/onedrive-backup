@@ -18,7 +18,6 @@ import os
 import secrets
 import shutil
 import subprocess
-import sys
 import tempfile
 import urllib.error
 import urllib.parse
@@ -217,7 +216,6 @@ class Disposable:
         self.work = Path(tempfile.mkdtemp(prefix=self.name + '-'))
         self.token: str | None = None
         self.requests = 0
-        self.hash_problem: str | None = None
 
     def __enter__(self) -> 'Disposable':
         try:
@@ -278,14 +276,6 @@ class Disposable:
             path.chmod(0o755 if path.is_dir() else 0o644)
         (self.work / 'data').chmod(0o777)
 
-    def _admin_hash(self) -> None:
-        out = self.work / 'config' / 'admin-password.hash'
-        code = ('import os, sys; from pathlib import Path; from onedrive_api.admin_password import password_hash; out = Path(sys.argv[1]); '
-                'out.write_text(password_hash(sys.argv[2]) + chr(10)); out.chmod(0o600); os.chown(out, 1000, 1000)')
-        done = subprocess.run([sys.executable, '-c', code, str(out), 'DisposableTestPasswordOnly2026!'], capture_output=True, text=True,
-                              env=dict(os.environ, PYTHONPATH=str(base.ROOT / 'src')))
-        self.hash_problem = None if done.returncode == 0 else done.stderr.strip()[-200:]
-
     def _peer(self, name: str) -> None:
         _sh(['docker', 'run', '-d', '--name', name, '--network', self.net, '--entrypoint', 'sleep',
              '--mount', 'type=bind,source=%s,target=/probe,readonly' % (self.work / 'probe'), image(), '3600'])
@@ -296,7 +286,6 @@ class Disposable:
         self._certs()
         self._config()
         self._modes()
-        self._admin_hash()
         _sh(['docker', 'network', 'create', self.net])
         self._peer(self.proxy)
         self._peer(self.peer)
@@ -439,8 +428,6 @@ def proxy_trust_independent() -> None:
             try:
                 with Disposable(label, secret, listed) as box:
                     plan(report, box)
-                    if box.hash_problem:
-                        report.info.append('instance %s: the disposable admin hash could not be written (%s); the service started without it' % (label, box.hash_problem))
             except ServiceDidNotStart as exc:
                 report.product.append('AU5 instance %s (secret %s, proxy identity %s): %s' % (label, secret, 'configured' if listed else 'not configured', exc))
             except HarnessError as exc:

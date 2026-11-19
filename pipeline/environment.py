@@ -10,14 +10,18 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import subprocess
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 ENDPOINTS_FILE = Path(__file__).resolve().with_name('endpoints.env')
 ENV_VAR = 'PIPELINE_ENV'
 VALUES = ('dev', 'prod')
 PENDING_KEY = 'ENDPOINTS_PENDING'
+BOUND_HOSTS: dict[str, str] = {}
+_GETADDRINFO = socket.getaddrinfo
 LINE = re.compile(r'^([A-Z][A-Z0-9_]*)=(.*)$')
 
 
@@ -27,7 +31,8 @@ class PipelineEnvError(RuntimeError):
 
 def current_branch(root: Path = ROOT) -> str:
     '''Return the current git branch name (HEAD when detached).'''
-    done = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=root,
+    # safe.directory is given on the command line for this one process: the host and global git configuration stay untouched
+    done = subprocess.run(['git', '-c', 'safe.directory=%s' % root, 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=root,
                           capture_output=True, text=True)
     if done.returncode != 0:
         raise PipelineEnvError('cannot read the git branch: ' + done.stderr.strip())
@@ -78,4 +83,48 @@ def endpoint(base: str, env: str | None = None, values: dict[str, str] | None = 
     key = '%s_%s' % (base, (resolve_env() if env is None else env).upper())
     if table.get(key, '') == '':
         raise PipelineEnvError('endpoint %s is missing or empty in endpoints.env' % key)
-    return table[key]
+    value = table[key]
+    bind_host(value)
+    return value
+
+
+def container_address(name: str) -> str | None:
+    '''Return the Docker network address of the running container NAME (docker inspect), or None.'''
+    try:
+        done = subprocess.run(['docker', 'inspect', '--type', 'container', '--format',
+                               '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}', name],
+                              capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = done.stdout.split() if done.returncode == 0 else []
+    return found[0] if found else None
+
+
+def bind_host(url: str) -> None:
+    '''Make the host name of an endpoint URL resolvable inside this process when the host cannot resolve it.
+
+    A service reached by its Docker network name (onedrive-backup) has no DNS or hosts entry on the deployment host.
+    The container address is taken from docker inspect and only socket.getaddrinfo of THIS process learns the name:
+    /etc/hosts, the global git configuration and every other host file stay untouched, the URL and the TLS host
+    name check stay as committed in pipeline/endpoints.env.
+    '''
+    name = urlparse(url).hostname if '://' in url else None
+    if not name or name in BOUND_HOSTS:
+        return
+    try:
+        _GETADDRINFO(name, None)
+        return
+    except socket.gaierror:
+        pass
+    address = container_address(name)
+    if address is None:
+        return
+    BOUND_HOSTS[name] = address
+    if socket.getaddrinfo is _GETADDRINFO:
+        socket.getaddrinfo = _bound_getaddrinfo
+
+
+def _bound_getaddrinfo(host, *args, **kwargs):
+    '''socket.getaddrinfo of this process: a bound name (str or the bytes anyio passes) answers with its container address.'''
+    key = host.decode('ascii', 'ignore') if isinstance(host, bytes) else host
+    return _GETADDRINFO(BOUND_HOSTS.get(key, host), *args, **kwargs)

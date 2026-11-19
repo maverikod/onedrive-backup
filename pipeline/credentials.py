@@ -49,7 +49,7 @@ def parse_env_file(text: str) -> dict[str, str]:
 
 def _git(args: list[str], root: Path) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(['git'] + args, cwd=root, capture_output=True, text=True)
+        return subprocess.run(['git', '-c', 'safe.directory=%s' % root] + args, cwd=root, capture_output=True, text=True)
     except OSError:
         raise CredentialsError('git cannot be run to check that the credentials file is ignored (file problem N4)')
 

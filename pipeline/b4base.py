@@ -23,6 +23,7 @@ import urllib.parse
 from pathlib import Path
 
 from pipeline import credentials, live
+from pipeline.report import Report
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = ROOT / 'client' / 'onedrive_backup_client'
@@ -118,3 +119,17 @@ def command_params(command: str) -> list[str]:
         return sorted(decoded['result']['data']['metadata']['parameters'])
     except (KeyError, TypeError):
         return []
+
+
+def baseline_snapshot(report: Report, label: str) -> str | None:
+    '''Return the id of the newest catalog snapshot for an S1 baseline; None after a STATE finding when the catalog lists none.
+
+    The matrix rows M4 and M5 (and O4 and O5 through params_ref) fix the baseline success for an existing snapshot and fix
+    no answer for a well-formed unknown one (MATRIX GAP), so a repository without a snapshot is a state, never a verdict.
+    '''
+    kind, code, message, data = live.request('backup_snapshots', {})
+    items = data.get('items', []) if kind == 'success' and isinstance(data, dict) else []
+    if items:
+        return str(items[0]['id'])
+    report.state.append('%s: the catalog lists no snapshot (the matrix fixes the baseline success for an existing snapshot only; an unknown snapshot has no declared answer: MATRIX GAP rows M4, M5, O4, O5)' % label)
+    return None

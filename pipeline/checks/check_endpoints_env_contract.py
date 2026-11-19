@@ -55,7 +55,7 @@ def hardcoded_endpoints(path: Path) -> list[tuple[int, str, str]]:
 
 def _endpoint_file_problems(problems: list[str]) -> None:
     name = 'pipeline/endpoints.env'
-    tracked = subprocess.run(['git', 'ls-files', '--error-unmatch', name], cwd=ROOT,
+    tracked = subprocess.run(['git', '-c', 'safe.directory=%s' % ROOT, 'ls-files', '--error-unmatch', name], cwd=ROOT,
                              capture_output=True, text=True)
     if tracked.returncode != 0:
         problems.append('%s is not committed to git (or does not exist)' % name)

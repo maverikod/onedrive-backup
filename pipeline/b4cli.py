@@ -106,16 +106,29 @@ def _help_names(report: Report, main, sub: str, label: str, names: list[str]) ->
             report.product.append('%s odbcli %s --help does not mention the argument %s (forms %s)' % (label, sub, name, forms))
 
 
+def _baseline_args(report: Report, sub: str, label: str, state) -> list[str] | None:
+    '''Files and prepare on an S1 service take the newest catalog snapshot (rows M4, M5, O4, O5); None after a STATE finding when there is none.'''
+    if sub in ('files', 'prepare') and state == 'S1':
+        snapshot = base.baseline_snapshot(report, '%s baseline odbcli %s' % (label, sub))
+        return None if snapshot is None else [snapshot]
+    return BASELINE.get(sub, [])
+
+
 def _baseline(report: Report, main, sub: str, label: str, state) -> None:
-    code, out, err = run_cli(main, global_args() + [sub] + BASELINE.get(sub, []))
+    args = _baseline_args(report, sub, label, state)
+    if args is None:
+        return
+    code, out, err = run_cli(main, global_args() + [sub] + args)
     if state is None:
         report.env.append('%s baseline odbcli %s: not executed, production service unreachable' % (label, sub))
     elif code == 0:
         try:
-            json.loads(out)
+            data = json.loads(out)
         except ValueError:
             report.product.append('%s baseline odbcli %s: exit 0 but stdout is not JSON: %r' % (label, sub, out[:80]))
         else:
+            if sub == 'prepare' and isinstance(data, dict):
+                live.request('backup_delete_export', {'export_id': data.get('export_id', base.ZERO_ID)})
             if sub in ('help', 'health'):
                 missing = [name for name in base.live_commands() if name not in out]
                 if missing:

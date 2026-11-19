@@ -70,7 +70,7 @@ def gap(report: Report, gap_id: str, case: str) -> None:
 
 def tracked_files() -> list[str] | None:
     '''Return the git-tracked files of the checkout, or None when git cannot list them.'''
-    done = subprocess.run(['git', 'ls-files'], cwd=ROOT, capture_output=True, text=True)
+    done = subprocess.run(['git', '-c', 'safe.directory=%s' % ROOT, 'ls-files'], cwd=ROOT, capture_output=True, text=True)
     return done.stdout.splitlines() if done.returncode == 0 else None
 
 

@@ -72,7 +72,7 @@ def unit_tests() -> None:
 
 
 def security() -> None:
-    tracked = subprocess.check_output(["git", "ls-files"], cwd=ROOT,
+    tracked = subprocess.check_output(["git", "-c", "safe.directory=%s" % ROOT, "ls-files"], cwd=ROOT,
                                       text=True).splitlines()
     for path in tracked:
         name = Path(path).name.lower()
