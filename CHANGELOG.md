@@ -1,3 +1,11 @@
+## 0.3.11 — source-size refactoring, no behaviour change
+
+- `server.py`, `command_reference.py` and `sharepoint_discovery.py` are split into cohesive modules of at most 400
+  lines (`commands_base`, `commands_backup`, `commands_sharepoint`, `command_reference_*`, `sharepoint_base`,
+  `sharepoint_graph`, `sharepoint_scan`, `sharepoint_inventory`); the original module paths keep their public names.
+- The three identical `export_id` `get_schema` bodies are one shared implementation; commands, parameters, schemas,
+  results and errors are unchanged.
+
 ## 0.3.10 — B4 client: JsonRpcClient wrapper and odbcli
 
 - The Python client `BackupClient` is a thin wrapper over the mcp-proxy-adapter 8.11.16 `JsonRpcClient`: no own TLS or
