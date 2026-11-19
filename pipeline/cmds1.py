@@ -135,15 +135,8 @@ def _libraries(report: Report, row_id: str, cid: str, desc: str) -> None:
     if cid == 'site_id_valid_1':
         site = _case_value(row_id, cid)
         kind, code, message, data = live.request('backup_libraries_list', {'site_id': site})
-        if kind == 'success':
-            for problem in _page_problems(data, 100, 0):
-                report.product.append('%s: %s' % (desc, problem))
-        elif kind == 'command_error' and code == 404 and 'SITE_NOT_FOUND' in message:
-            report.gap.append('M9 site_id_valid_1 (%d characters) is declared a success, but R5 and the case site_id_invalid_3 answer 404 SITE_NOT_FOUND to every '
-                              'well-formed site id the inventory does not hold, and the inventory holds no site with a %d-character id: the boundary id is accepted by the '
-                              'validation (answer %s) and the declared success is unreachable (MATRIX GAP rows M9 site_id_valid_1, site_id_invalid_3)' % (len(site), len(site), code))
-        else:
-            report.product.append('%s: the boundary site id of %d characters is refused: %s' % (desc, len(site), _cc()._brief(kind, code, message, data)))
+        if not (kind == 'command_error' and code == 404 and 'SITE_NOT_FOUND' in message):
+            report.product.append('%s with the %d-character site id: it passes the validation and the inventory holds no such site, expected command error 404 SITE_NOT_FOUND (revision 7, 10.14 (2) and 10.14.1), got %s' % (desc, len(site), _cc()._brief(kind, code, message, data)))
         return
     site = b4base.baseline_site(report, desc)
     if site is None:

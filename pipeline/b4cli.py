@@ -147,6 +147,21 @@ def _unknown_snapshot(report: Report, main, sub: str, label: str, state) -> None
         report.info.append('%s snapshot_id_unknown conformant: odbcli %s of the unknown snapshot %s' % (label, sub, snapshot_id))
 
 
+def _site_cases(report: Report, main, label: str, state) -> None:
+    '''Cases site_id_valid_1, site_id_invalid_1, site_id_invalid_2 and site_id_invalid_3 of row O9 (inherited from M9, revision 7, 10.14.1): odbcli libraries
+    SITE_ID exits 1 with empty stdout and the status code and the message name of the case on stderr (the 300-character id is 404 SITE_NOT_FOUND).'''
+    for cid, value, code, name, needs_s1 in base.site_cases(state):
+        if needs_s1 and state != 'S1':
+            report.state.append('%s %s odbcli libraries (%d characters) needs an S1 service but production answers %s' % (label, cid, len(value), state))
+            continue
+        got, out, err = run_cli(main, global_args() + ['libraries', value])
+        if got != 1 or out.strip() or str(code) not in err or name not in err:
+            report.product.append('%s %s odbcli libraries (%d characters): exit %r stdout %r stderr %r, expected exit 1, empty stdout and %d %s on stderr (revision 7)' % (
+                label, cid, len(value), got, out.strip()[:40], err.strip()[:100], code, name))
+        else:
+            report.info.append('%s %s conformant: exit 1 and %d %s on stderr' % (label, cid, code, name))
+
+
 def _baseline(report: Report, main, sub: str, label: str, state) -> None:
     args = _baseline_args(report, sub, label, state)
     if args is None:
@@ -193,6 +208,8 @@ def odbcli_command(row_id: str, sub: str, params: list[str], required: list[str]
             _baseline(report, main, sub, label, state)
         if sub in ('files', 'prepare'):
             _unknown_snapshot(report, main, sub, label, state)
+        if sub == 'libraries' and state is not None:
+            _site_cases(report, main, label, state)
     report.finish(name)
 
 

@@ -193,3 +193,16 @@ def unknown_site_id() -> str:
     kind, code, message, data = live.request('backup_sites_list', {'limit': 1000})
     known = {str(item.get('site_id')) for item in (data.get('items', []) if kind == 'success' and isinstance(data, dict) else []) if isinstance(item, dict)}
     return next((site for site in UNKNOWN_SITE_CANDIDATES if site not in known), 'unknown-site-' + '0' * 8)
+
+
+
+def site_cases(state) -> list[tuple[str, str, int, str, bool]]:
+    """The M9 site_id cases that the client row C-K9 and the odbcli row O9 inherit through params_ref (revision 7, 10.14 (2) and 10.14.1).
+
+    Each item is (case id, value, status code, message name, needs S1): the 300-character id passes the validation and no such site exists, so
+    404 SITE_NOT_FOUND; the 301-character id and an id with a space are 400 INVALID_SITE_ID before the readiness gate; a well-formed site the
+    inventory does not hold is 404 SITE_NOT_FOUND.
+    """
+    unknown = unknown_site_id() if state == 'S1' else UNKNOWN_SITE_CANDIDATES[0]
+    return [('site_id_valid_1', 'q' * 300, 404, 'SITE_NOT_FOUND', True), ('site_id_invalid_1', 'q' * 301, 400, 'INVALID_SITE_ID', False),
+            ('site_id_invalid_2', 'a b', 400, 'INVALID_SITE_ID', False), ('site_id_invalid_3', unknown, 404, 'SITE_NOT_FOUND', True)]

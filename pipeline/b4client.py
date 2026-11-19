@@ -185,6 +185,8 @@ def client_cmd(command: str, row_id: str, name: str) -> None:
             report.product.append('%s baseline %s(%s): raised %s code=%r %s' % (row_id, command, sent, type(exc).__name__, error_code(exc), str(exc)[:100]))
         if callable(method) and row_id in ('M4', 'M5'):
             _unknown_snapshot(report, method, command, row_id, state)
+        if callable(method) and row_id == 'M9':
+            _site_cases(report, method, state)
     report.finish(name)
 
 
@@ -207,6 +209,21 @@ def _unknown_snapshot(report: Report, method, command: str, row_id: str, state) 
         report.product.append('%s snapshot_id_unknown %s(%s): %s (revision 6)' % (row_id, command, snapshot_id, problem))
     if not problems:
         report.info.append('%s snapshot_id_unknown conformant: %s of the unknown snapshot %s' % (row_id, command, snapshot_id))
+
+
+def _site_cases(report: Report, method, state) -> None:
+    '''Cases site_id_valid_1, site_id_invalid_1, site_id_invalid_2 and site_id_invalid_3 of row C-K9 (inherited from M9, revision 7, 10.14.1): each raises
+    ClientError with the status code and the message name of the case (the 300-character id is 404 SITE_NOT_FOUND).'''
+    for cid, value, code, name, needs_s1 in base.site_cases(state):
+        if needs_s1 and state != 'S1':
+            report.state.append('C-K9 %s backup_libraries_list(%d characters) needs an S1 service but production answers %s' % (cid, len(value), state))
+            continue
+        got, exc = drive(method, site_id=value)
+        if exc is None or error_code(exc) != code or name not in '%s %s' % (exc, getattr(exc, 'data', '')):
+            report.product.append('C-K9 %s backup_libraries_list(%d characters): expected ClientError code %d %s, got %s (revision 7)' % (
+                cid, len(value), code, name, 'the result %r' % (got,) if exc is None else '%s code=%r %s' % (type(exc).__name__, error_code(exc), str(exc)[:80])))
+        else:
+            report.info.append('C-K9 %s conformant: ClientError %d %s' % (cid, code, name))
 
 
 def client_auth() -> None:
