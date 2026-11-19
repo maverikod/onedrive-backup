@@ -7,8 +7,8 @@ mount, restic password, login and password, finished inventory; RED with that re
 ENVIRONMENT (the production service cannot be reached). Cases that cannot be constructed through the live
 API (an export that is 24 hours old, a snapshot over the export limit) run on the real Catalog class over a
 fake restic. A case of state S0 cannot run on a service that is already S1; it is reported as INFO and is
-covered by the fixture checks prepare_order and scaffold_gate_states. The S1 executors are written against
-the contract and run for the first time when an S1 service exists.
+covered by the fixture checks prepare_order and scaffold_gate_states. The S1 executors of rows M3..M7 are here, those of
+M8..M11 and of the case snapshot_id_unknown are in pipeline.cmds1.
 '''
 
 from __future__ import annotations
@@ -157,6 +157,10 @@ def _prepare_small(report: Report, desc: str):
 
 def _s1(report: Report, row_id: str, cid: str, desc: str) -> None:
     '''Execute one S1 case against a provisioned service.'''
+    if cid == 'snapshot_id_unknown' or row_id in ('M8', 'M9', 'M10', 'M11'):
+        from pipeline import cmds1
+        cmds1.execute(report, row_id, cid, desc)
+        return
     if row_id == 'M3':
         limit = {'limit_valid_1': 1, 'limit_valid_2': 1000}.get(cid)
         kind, code, message, data = live.request('backup_snapshots', {} if limit is None else {'limit': limit})

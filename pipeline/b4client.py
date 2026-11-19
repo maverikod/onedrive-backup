@@ -163,10 +163,12 @@ def client_cmd(command: str, row_id: str, name: str) -> None:
             report.product.append('%s(%s): expected ClientError code -32602 violation=%s, got %s' % (label, sent, want_violation, 'success %r' % (value,) if exc is None else '%s code=%r violation=%r' % (type(exc).__name__, error_code(exc), violation(exc))))
     if callable(method) and state is not None:
         sent = {k: cmdcases.BASE[k] for k, spec in row['params'].items() if spec['required']}
-        if state == 'S1' and 'snapshot_id' in sent:
-            sent['snapshot_id'] = base.baseline_snapshot(report, '%s baseline %s' % (row_id, command))
-        value, exc = (None, None) if sent.get('snapshot_id', '') is None else drive(method, **sent)
-        if sent.get('snapshot_id', '') is None:
+        for key, finder in (('snapshot_id', base.baseline_snapshot), ('site_id', base.baseline_site)):
+            if state == 'S1' and key in sent:
+                sent[key] = finder(report, '%s baseline %s' % (row_id, command))
+        skipped = any(item is None for item in sent.values())
+        value, exc = (None, None) if skipped else drive(method, **sent)
+        if skipped:
             pass
         elif exc is None:
             if value is None:
@@ -179,9 +181,32 @@ def client_cmd(command: str, row_id: str, name: str) -> None:
                 report.state.append('%s baseline success %s(%s): needs a prepared export on an S1 service; S0 answers the matrix case S0_unknown_export_404 (404 %s)' % (row_id, command, sent, str(exc)[:60]))
         elif error_code(exc) == 503 and state == 'S0' and 'export_id' not in row['params']:
             report.state.append('%s baseline %s(%s): needs an S1 service but production answers S0 (503 %s)' % (row_id, command, sent, str(exc)[:80]))
-        elif not (state == 'S1' and error_code(exc) == 404 and 'snapshot_id' not in sent):
+        else:
             report.product.append('%s baseline %s(%s): raised %s code=%r %s' % (row_id, command, sent, type(exc).__name__, error_code(exc), str(exc)[:100]))
+        if callable(method) and row_id in ('M4', 'M5'):
+            _unknown_snapshot(report, method, command, row_id, state)
     report.finish(name)
+
+
+def _unknown_snapshot(report: Report, method, command: str, row_id: str, state) -> None:
+    '''Case snapshot_id_unknown of rows C-K4 and C-K5 (revision 6, section 10.13): files of a well-formed unknown snapshot returns the M4 object
+    {snapshot_id, items: [], total: 0, offset: 0, limit: 1000}; prepare raises ClientError 404 Snapshot not found. It needs no snapshot, only state S1.'''
+    if state != 'S1':
+        report.state.append('%s snapshot_id_unknown %s needs an S1 service but production answers %s' % (row_id, command, state))
+        return
+    snapshot_id = base.unknown_snapshot_id()
+    value, exc = drive(method, snapshot_id=snapshot_id)
+    if command == 'backup_list_files':
+        problems = base.unknown_files_problems(value, snapshot_id) if exc is None else ['raised %s code=%r %s, expected the result object' % (type(exc).__name__, error_code(exc), str(exc)[:100])]
+    else:
+        if exc is None and isinstance(value, dict):
+            live.request('backup_delete_export', {'export_id': value.get('export_id', base.ZERO_ID)})
+        wanted = exc is not None and error_code(exc) == 404 and 'snapshot not found' in str(exc).lower()
+        problems = [] if wanted else ['returned %r, expected ClientError code 404 Snapshot not found' % (value,) if exc is None else 'raised %s code=%r %s, expected ClientError code 404 Snapshot not found' % (type(exc).__name__, error_code(exc), str(exc)[:100])]
+    for problem in problems:
+        report.product.append('%s snapshot_id_unknown %s(%s): %s (revision 6)' % (row_id, command, snapshot_id, problem))
+    if not problems:
+        report.info.append('%s snapshot_id_unknown conformant: %s of the unknown snapshot %s' % (row_id, command, snapshot_id))
 
 
 def client_auth() -> None:

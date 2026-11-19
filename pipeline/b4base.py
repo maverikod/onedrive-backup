@@ -121,15 +121,75 @@ def command_params(command: str) -> list[str]:
         return []
 
 
+UNKNOWN_SNAPSHOT_CANDIDATES = ('abcdef12', 'fedcba98', '0badc0de', '1badb002')
+UNKNOWN_SITE_CANDIDATES = ('site-1', 'site-2', 'site-3')
+UNKNOWN_FILES_KEYS = ('snapshot_id', 'items', 'total', 'offset', 'limit')
+
+
 def baseline_snapshot(report: Report, label: str) -> str | None:
     '''Return the id of the newest catalog snapshot for an S1 baseline; None after a STATE finding when the catalog lists none.
 
-    The matrix rows M4 and M5 (and O4 and O5 through params_ref) fix the baseline success for an existing snapshot and fix
-    no answer for a well-formed unknown one (MATRIX GAP), so a repository without a snapshot is a state, never a verdict.
+    The matrix rows M4 and M5 (and O4 and O5 through params_ref) fix the baseline success for an EXISTING snapshot; the answer for a
+    well-formed snapshot that does not exist is the separate case snapshot_id_unknown (revision 6, section 10.13), so a repository
+    without a snapshot is a state for the baseline, never a verdict.
     '''
     kind, code, message, data = live.request('backup_snapshots', {})
     items = data.get('items', []) if kind == 'success' and isinstance(data, dict) else []
     if items:
         return str(items[0]['id'])
-    report.state.append('%s: the catalog lists no snapshot (the matrix fixes the baseline success for an existing snapshot only; an unknown snapshot has no declared answer: MATRIX GAP rows M4, M5, O4, O5)' % label)
+    report.state.append('%s: the catalog lists no snapshot (the baseline success of rows M4, M5, O4, O5 needs an existing snapshot; '
+                        'the unknown-snapshot answer is the case snapshot_id_unknown, revision 6)' % label)
     return None
+
+
+def unknown_snapshot_id() -> str:
+    '''Return a well-formed snapshot id that no snapshot of the live catalog carries or abbreviates (case snapshot_id_unknown of rows M4, M5, O4, O5, C-K4, C-K5).'''
+    kind, code, message, data = live.request('backup_snapshots', {'limit': 1000})
+    items = data.get('items', []) if kind == 'success' and isinstance(data, dict) else []
+    known = [str(item.get(key, '')).lower() for item in items if isinstance(item, dict) for key in ('id', 'short_id')]
+    for candidate in UNKNOWN_SNAPSHOT_CANDIDATES:
+        if not any(name and (name.startswith(candidate) or candidate.startswith(name)) for name in known):
+            return candidate
+    return 'f' * 64
+
+
+def unknown_files_problems(data: object, snapshot_id: str) -> list[str]:
+    '''Judge the M4 result of a well-formed unknown snapshot (revision 6, 10.13): {snapshot_id, items: [], total: 0, offset: 0, limit: 1000}.'''
+    if not isinstance(data, dict) or sorted(data) != sorted(UNKNOWN_FILES_KEYS):
+        return ['expected exactly the fields %s, got %s' % (list(UNKNOWN_FILES_KEYS), sorted(data) if isinstance(data, dict) else repr(data)[:80])]
+    problems = []
+    if data['snapshot_id'] != snapshot_id.lower():
+        problems.append('snapshot_id %r differs from the request %r' % (data['snapshot_id'], snapshot_id.lower()))
+    if data['items'] != []:
+        problems.append('items %r is not the empty list' % (data['items'],))
+    for key, wanted in (('total', 0), ('offset', 0), ('limit', 1000)):
+        if type(data[key]) is not int or data[key] != wanted:
+            problems.append('%s %r is not the integer %d' % (key, data[key], wanted))
+    return problems
+
+
+def baseline_site(report: Report, label: str) -> str | None:
+    '''Return the id of an inventory site for an S1 baseline of backup_libraries_list (the first site that holds libraries, else the first site).
+
+    The matrix row M9 fixes the baseline success for a site of the inventory; a well-formed site the inventory does not hold is the case
+    site_id_invalid_3 and answers 404 SITE_NOT_FOUND, so an unknown site id is never a baseline input. None after a STATE finding when
+    the inventory lists no site.
+    '''
+    kind, code, message, data = live.request('backup_sites_list', {'limit': 1000})
+    sites = [str(item['site_id']) for item in (data.get('items', []) if kind == 'success' and isinstance(data, dict) else [])
+             if isinstance(item, dict) and item.get('site_id')]
+    for site in sites:
+        k2, c2, m2, d2 = live.request('backup_libraries_list', {'site_id': site, 'limit': 1})
+        if k2 == 'success' and isinstance(d2, dict) and d2.get('total'):
+            return site
+    if sites:
+        return sites[0]
+    report.state.append('%s: the discovery inventory lists no site (the baseline of row M9 needs a site of the inventory)' % label)
+    return None
+
+
+def unknown_site_id() -> str:
+    '''Return a well-formed site id the live inventory does not hold (matrix case site_id_invalid_3, expect C404S).'''
+    kind, code, message, data = live.request('backup_sites_list', {'limit': 1000})
+    known = {str(item.get('site_id')) for item in (data.get('items', []) if kind == 'success' and isinstance(data, dict) else []) if isinstance(item, dict)}
+    return next((site for site in UNKNOWN_SITE_CANDIDATES if site not in known), 'unknown-site-' + '0' * 8)

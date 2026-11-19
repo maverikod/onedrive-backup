@@ -107,11 +107,44 @@ def _help_names(report: Report, main, sub: str, label: str, names: list[str]) ->
 
 
 def _baseline_args(report: Report, sub: str, label: str, state) -> list[str] | None:
-    '''Files and prepare on an S1 service take the newest catalog snapshot (rows M4, M5, O4, O5); None after a STATE finding when there is none.'''
+    '''Files and prepare on an S1 service take the newest catalog snapshot (rows M4, M5, O4, O5) and libraries a site of the inventory (row M9;
+    the id site-1 is the unknown site of the case site_id_invalid_3, 404 SITE_NOT_FOUND); None after a STATE finding when there is none.'''
     if sub in ('files', 'prepare') and state == 'S1':
         snapshot = base.baseline_snapshot(report, '%s baseline odbcli %s' % (label, sub))
         return None if snapshot is None else [snapshot]
+    if sub == 'libraries' and state == 'S1':
+        site = base.baseline_site(report, '%s baseline odbcli %s' % (label, sub))
+        return None if site is None else [site]
     return BASELINE.get(sub, [])
+
+
+def _unknown_snapshot(report: Report, main, sub: str, label: str, state) -> None:
+    '''Case snapshot_id_unknown of rows O4 and O5 (revision 6, section 10.13): files of a well-formed unknown snapshot exit 0 with the JSON of M4
+    ({snapshot_id, items: [], total: 0, offset: 0, limit: 1000}); prepare exits 1 with the 404 on stderr. It needs no snapshot, only state S1.'''
+    if state is None:
+        return
+    if state != 'S1':
+        report.state.append('%s snapshot_id_unknown odbcli %s needs an S1 service but production answers %s' % (label, sub, state))
+        return
+    snapshot_id = base.unknown_snapshot_id()
+    code, out, err = run_cli(main, global_args() + [sub, snapshot_id])
+    if sub == 'prepare':
+        if code == 0:
+            try:
+                live.request('backup_delete_export', {'export_id': json.loads(out).get('export_id', base.ZERO_ID)})
+            except (ValueError, AttributeError):
+                pass
+        problems = [] if code == 1 and '404' in err else ['exit %r stderr %r, expected exit 1 and a stderr naming 404' % (code, err.strip()[:100])]
+    else:
+        try:
+            data = json.loads(out)
+        except ValueError:
+            data = None
+        problems = base.unknown_files_problems(data, snapshot_id) if code == 0 else ['exit %r %s, expected exit 0 and the JSON of M4' % (code, (out + err).strip()[:100])]
+    for problem in problems:
+        report.product.append('%s snapshot_id_unknown odbcli %s %s: %s (revision 6)' % (label, sub, snapshot_id, problem))
+    if not problems:
+        report.info.append('%s snapshot_id_unknown conformant: odbcli %s of the unknown snapshot %s' % (label, sub, snapshot_id))
 
 
 def _baseline(report: Report, main, sub: str, label: str, state) -> None:
@@ -158,6 +191,8 @@ def odbcli_command(row_id: str, sub: str, params: list[str], required: list[str]
             state = None
         if sub in BASELINE:
             _baseline(report, main, sub, label, state)
+        if sub in ('files', 'prepare'):
+            _unknown_snapshot(report, main, sub, label, state)
     report.finish(name)
 
 
