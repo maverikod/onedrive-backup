@@ -11,7 +11,6 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
-import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -301,9 +300,9 @@ class Catalog:
         export_id = uuid4().hex
         archive = selected is None
         output = self._output_path(export_id, archive=archive)
-        filename = "onedrive-" + snapshot_id[:12] + ".tar.gz" if archive else Path(selected["path"]).name
+        filename = "onedrive-" + snapshot_id[:12] + ".tar.gz" if selected is None else Path(selected["path"]).name
         try:
-            if archive:
+            if selected is None:
                 self._archive_snapshot(snapshot_id, output)
             else:
                 self._dump_file(snapshot_id, selected["restic_path"], output)
