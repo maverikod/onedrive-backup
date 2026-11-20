@@ -122,8 +122,7 @@ def _unaffected(report: Report) -> None:
 
 def _deploy(report: Report) -> None:
     for label, mode in REFUSALS:
-        scenarios = (('both password file and repository present', {'repo_password': 'p-fixture', 'file_password': 'p-fixture'}, False),
-                     ('first run on a terminal', {}, True))
+        scenarios: tuple[tuple[str, dict[str, str], bool], ...] = (('both password file and repository present', {'repo_password': 'p-fixture', 'file_password': 'p-fixture'}, False), ('first run on a terminal', {}, True))
         for case, kwargs, terminal in scenarios:
             with firstrun.Scenario(fs=mode, **kwargs) as scenario:
                 before = (scenario.secrets_digest(), scenario.repo_digest(), firstrun.tree_digest(scenario.data))
@@ -158,8 +157,7 @@ def _postinst(report: Report) -> None:
             name = 'G8 postinst, %s' % label
             if result.rc != 2:
                 report.product.append('%s: exit %d, expected 2' % (name, result.rc))
-            if firstrun.tree_digest(host.data) != before or any(str(host.data) in ' '.join(call) for call in result.calls
-                                                                 if call[0] in ('install', 'chown', 'chgrp')):
+            if firstrun.tree_digest(host.data) != before or any(str(host.data) in ' '.join(call) for call in result.calls if call[0] in ('install', 'chown', 'chgrp')):
                 report.product.append('%s: the data directory %s was created, changed or handed to another owner' % (name, host.data))
             report.product.extend(archivefs.message_problems(name, result.err, result.out, host.data.resolve(), POSTINST_PREFIX,
                                                              archivefs.fs_words(mode, host.archive, host.other_mount),
