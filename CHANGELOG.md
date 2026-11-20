@@ -1,3 +1,7 @@
+## Unreleased
+
+- Project check configuration for the CAS/editor write gate: `setup.cfg` carries `[flake8]` (`max-line-length` 127, the measured longest line of `src/`, `client/` and `tests/`; `E501` ignored only for `pipeline/`, whose evidence strings reach 308 columns) and `[mypy]` (no ignore list). The gate runs flake8 and mypy with `config_source` auto, so they read this file; the docstring check is a built-in, non-blocking server tool with no project configuration. `validate_transfer` in `src/onedrive_api/server.py` is restructured so mypy sees a `dict` (same behaviour, same error message). No product behaviour changes (task 70, TODO 32fe6b13).
+
 ## 0.3.20 — Vue SPA served by the service, backup timer kept over an upgrade (matrix revision 8, group B)
 
 - The user's web UI is a Vue 3 + Vite + TypeScript single page application under `frontend/` (`package.json`, lockfile,
