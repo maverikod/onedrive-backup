@@ -61,7 +61,7 @@ def http_request(method: str, path: str, body: bytes | None = None, headers: dic
     parts = urllib.parse.urlsplit(live.base_url())
     conn = http.client.HTTPSConnection(parts.hostname, parts.port or 443, context=context or live._context(), timeout=30)
     try:
-        conn.request(method, path, body=body, headers=headers or {})
+        conn.request(method, urllib.parse.quote(path, safe='/%?=&'), body=body, headers=headers or {})
         reply = conn.getresponse()
         return reply.status, {k.lower(): v for k, v in reply.getheaders()}, reply.read()
     except (OSError, ssl.SSLError, http.client.HTTPException) as exc:

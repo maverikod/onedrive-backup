@@ -69,7 +69,7 @@ class Instance:
         w = self.work
         ca_key = w / 'ca' / 'ca.key'
         rsa = 'rsa:' + '2048'
-        self._openssl('req', '-x509', '-newkey', rsa, '-sha256', '-days', '2', '-nodes', '-subj', '/CN=odbsh-root', '-keyout', str(ca_key), '-out', str(self.ca))
+        self._openssl('req', '-x509', '-newkey', rsa, '-sha256', '-days', '2', '-nodes', '-subj', '/CN=odbsh-root', '-addext', 'keyUsage=critical,keyCertSign,cRLSign', '-keyout', str(ca_key), '-out', str(self.ca))
         key, crt, csr, ext = w / 'config' / 'certs' / 'server.key', w / 'config' / 'certs' / 'server.crt', w / 'server.csr', w / 'server.ext'
         ext.write_text('subjectAltName=DNS:localhost,DNS:onedrive-backup\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n')
         self._openssl('req', '-newkey', rsa, '-sha256', '-nodes', '-subj', '/CN=localhost', '-keyout', str(key), '-out', str(csr))
@@ -87,7 +87,7 @@ class Instance:
         if self.key is None:
             cfg['auth'] = {'use_token': False, 'use_roles': False, 'tokens': {}, 'roles': {}}
         else:
-            cfg['auth'] = {'use_token': True, 'use_roles': False, 'tokens': {self.key: ['admin']}, 'roles': {}}
+            cfg['auth'] = {'use_token': True, 'use_roles': False, 'tokens': {self.key: ['other']}, 'roles': {}}
             cfg['security'] = {'enabled': False, 'public_paths': ['/commands'], 'tokens': {'api': '${%s}' % KEY_ENV}}
         (self.work / 'config' / 'server.json').write_text(json.dumps(cfg), encoding='utf-8')
         shutil.copy(base.ROOT / 'config' / 'backup.json', self.work / 'config' / 'backup.json')

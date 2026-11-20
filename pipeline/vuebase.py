@@ -8,9 +8,10 @@ temporary uuid4 link /downloads/<export_id>/<filename>. The server HTML routes U
 
 Findings are kept apart as in the B4 checks: PRODUCT (the SPA or the service breaks the contract, or the SPA is absent),
 STATE (the case needs provisioned state) and ENVIRONMENT (the pipeline cannot reach or use what it needs).
-A fourth kind, GAP, marks an assertion that needs the headless browser driver (Playwright for Python, Node and Chromium on the host,
-decision G7) which is not installed in the pipeline environment: it is never invented and never skipped, it names the decision it
-waits for and keeps the check RED until that driver exists.
+A fourth kind, GAP, marks an assertion that section 10.15 does not define (for example the route or the test id of a control): it is
+never invented and never skipped, it names what is undefined and keeps the check RED. The headless driver of decision G7 (Playwright for
+Python, pinned in pipeline/requirements.txt, Chromium and Node 22 on the verification host) runs everything 10.15 does define
+(pipeline.vuebrowser, pipeline.vuebuild); a missing driver is an ENVIRONMENT finding.
 '''
 
 from __future__ import annotations
@@ -49,13 +50,11 @@ REMOVED_UI = {
     'U10': ('POST', '/ui/exports/%s/delete' % ZERO),
 }
 
-# Assertions that need the headless browser driver (decision G7, approved in revision 5 and kept by revision 8).
+# Assertions that section 10.15 (G7 as kept by revision 8, 10.15.6) does not define well enough to drive: they stay GAP lines and keep their check RED.
 GAPS = {
-    'G5': 'SPA command manifest: frontend/ and /command-manifest.json equal the live help list (R23); the manifest is read from the deployed SPA once it exists',
-    'G6': 'SPA build: two builds of the same source give the same artifacts (R24), run by vue_build with Node 22 where Node exists; the pipeline venv has none',
-    'G7': 'headless runner: Playwright for Python in the pipeline venv, Node and Chromium on the host (PX12 vue_environment); the rendered pages, the key field after a mocked 401, the download click and the action capture need it',
-    'G9': 'page equals command result (V4, A1-A10): the rendered page text equals the result of the same command through the Python client; needs the headless driver',
-    'G10': 'vue_polling (V7, R25): polling interval and the 401 stop; needs the headless driver and the SPA',
+    'G7d': 'download click: 10.15 defines the plain link (data-testid download-link, href /downloads/<export_id>/<filename>) but neither the control that starts an export nor the route of the export card that shows it, so the click and the file comparison in the browser cannot be reached; the link itself is asserted by the Vitest group download and by the HTTP case',
+    'G9n': 'pages A2 (files), A3 (export), A4 (export card), A5 (delete) and A7 (libraries): reaching them needs an action or a choice whose controls and routes 10.15 does not name; the parameters they send are asserted by the Vitest group commands',
+    'G10x': 'polling after a logout and the export-card poll (S1): 10.15 defines no logout control while the service is open and no export-card route',
 }
 
 
@@ -107,7 +106,7 @@ def lan_request(root: str, method: str, path: str, headers: dict | None = None, 
             conn = http.client.HTTPSConnection(parts.hostname, parts.port or 443, context=context, timeout=30)
         else:
             conn = http.client.HTTPConnection(parts.hostname, parts.port or 80, timeout=30)
-        conn.request(method, parts.path.rstrip('/') + path, body=body, headers=headers or {})
+        conn.request(method, urllib.parse.quote(parts.path.rstrip('/') + path, safe='/%?=&'), body=body, headers=headers or {})
         reply = conn.getresponse()
         return reply.status, {k.lower(): v for k, v in reply.getheaders()}, reply.read()
     except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
@@ -144,7 +143,10 @@ def lan_rpc(report: Report, label: str, root: str, command: str, params: dict | 
 
 
 def removed_ui(report: Report, rows: tuple[str, ...]) -> None:
-    '''Rows U<n> (revision 8, G4 and 10.15.9.3): the removed server HTML route answers 404 from the mount: never 200, never the index page or the legacy HTML, no redirect, no Set-Cookie.'''
+    '''Rows U<n> (revision 8, G4, 10.15.9.3 and the reconciliation identity.reconciliations.removed_routes_mount_statuses): the removed server HTML route is not served by the mount.
+
+    A GET answers 404 from the mount. A non-GET method (POST, PUT, DELETE) on the mount answers 404 or 405 (Starlette StaticFiles
+    answers 405 to a method it does not serve). Never 2xx, never 3xx, never 401, never the index page or the legacy HTML, no Set-Cookie.'''
     for row in rows:
         method, path = REMOVED_UI[row]
         label = '%s %s %s' % (row, method, path)
@@ -153,11 +155,12 @@ def removed_ui(report: Report, rows: tuple[str, ...]) -> None:
             continue
         status, headers, body = got
         text = body.decode('utf-8', 'replace').lower()
-        if status != 404:
-            report.product.append('%s: answered %d %s, expected 404 from the SPA mount (the server HTML route is removed with ui.py by the Vue SPA, never 200, never a redirect); still registered at %s'
-                                  % (label, status, base.brief(body), base.src_line('src/onedrive_api/ui.py', path.rstrip('/') or path)))
+        admitted = (404,) if method == 'GET' else (404, 405)
+        if status not in admitted:
+            report.product.append('%s: answered %d %s, expected %s from the SPA mount (the server HTML route is removed with ui.py by the Vue SPA, never 2xx, 3xx or 401)'
+                                  % (label, status, base.brief(body), ' or '.join(str(item) for item in admitted)))
         if '<script' in text or 'id="app"' in text or any(marker in text for marker in LEGACY_MARKERS):
-            report.product.append('%s: the body is the SPA index page or the legacy server HTML, expected the plain 404 of the mount' % label)
+            report.product.append('%s: the body is the SPA index page or the legacy server HTML, expected the plain answer of the mount' % label)
         if 'set-cookie' in headers or 'location' in headers:
             report.product.append('%s: the answer carries %s, expected no cookie and no redirect' % (label, 'Set-Cookie' if 'set-cookie' in headers else 'Location'))
 

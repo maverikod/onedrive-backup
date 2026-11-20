@@ -54,6 +54,7 @@ class Postinst:
         self.other_mount = self.tmp / 'other-mount'
         self.old = self.tmp / 'old-backup'
         self.log = self.tmp / 'calls.log'
+        self.extra_env: dict[str, str] = {}
         self.mapping = {'/var/lib/onedrive-backup': str(self.varlib), '/etc/onedrive-backup': str(self.etc),
                         '/etc/default/onedrive-backup': str(self.default), '/usr/share/onedrive-backup': str(self.share),
                         '/usr/lib/onedrive-backup': str(self.lib), '/run/systemd/system': str(self.tmp / 'no-systemd'),
@@ -93,13 +94,14 @@ class Postinst:
                                 encoding='utf-8')
         self.default.chmod(0o644)
 
-    def run(self, fs: str = 'ok') -> Run:
-        '''Run the copy as postinst configure under the stubs; fs is the findmnt mode of pipeline.archivefs.'''
+    def run(self, fs: str = 'ok', script: Path | None = None, args: tuple[str, ...] = ('configure',)) -> Run:
+        '''Run the copy as postinst configure (or another script copy with args) under the stubs; fs is the findmnt mode of pipeline.archivefs.'''
         env = {'PATH': str(self.bin) + ':/usr/bin:/bin', 'HOME': str(self.tmp), 'STUB_LOG': str(self.log),
                'STUB_ROOT': str(self.tmp), 'STUB_UID': str(os.getuid()), 'STUB_GID': str(os.getgid())}
         env.update(archivefs.fs_env(fs, self.archive, self.data, self.other_mount))
+        env.update(self.extra_env)
         self.log.write_text('', encoding='utf-8')
-        done = subprocess.run(['sh', str(self.script), 'configure'], env=env, capture_output=True, text=True,
+        done = subprocess.run(['sh', str(script or self.script)] + list(args), env=env, capture_output=True, text=True,
                               timeout=60, cwd=str(self.tmp))
         calls = [json.loads(line) for line in self.log.read_text(encoding='utf-8').splitlines() if line]
         return Run(done.returncode, done.stdout, done.stderr, calls)

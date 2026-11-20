@@ -1,0 +1,4 @@
+# Python packages of the pipeline environment (pipeline/.venv of the checkout, run on root@192.168.254.26 as root).
+# The headless driver of decision G7 (revision 8, 10.15.6): Playwright for Python, pinned; its Chromium is installed once on the host with
+#   .venv/bin/python -m playwright install --with-deps chromium
+playwright==1.65.2

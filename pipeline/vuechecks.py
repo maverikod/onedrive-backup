@@ -2,7 +2,7 @@
 
 Each function is the body of one pipeline/checks/check_<name>.py. The matrix (rows V1..V6, sections 7.4, 8.3 UI-VUE, 10.11/10.12 as replaced by 10.15.6
 and 10.15.9) states what the SPA does; what needs the headless browser driver is listed in vuebase.GAPS and reported as GAP lines, never invented.
-Today the SPA does not exist, so every check is RED [PRODUCT] for the absent SPA (and for the server HTML routes that the SPA replaces).
+While the SPA does not exist every check is RED [PRODUCT] for the absent SPA; the browser cases then name that they were not executed.
 '''
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import re
 
-from pipeline import b4base as base, b4server, cmdcases, live
+from pipeline import b4base as base, b4server, cmdcases, live, vuebrowser, vuebuild
 from pipeline.report import Report
 from pipeline.vuebase import (ROOT, REFERENCE, SCRIPT_TAG, LEGACY_MARKERS, ASSET_LIMIT, CSP_EXPECTED, CSP_FORBIDDEN, SPA_FILES, deployed, gap, lan_rpc, lan_try,
                               removed_ui, scan_secrets, spa_files, tracked_files)
@@ -109,6 +109,37 @@ def _index_cases(report: Report, root: str, got: tuple[int, dict, bytes]) -> Non
     _assets(report, root)
 
 
+def index_served(report: Report, label: str, root: str) -> bool:
+    '''True when the SPA index page is served at the LAN URL; otherwise a PRODUCT finding (the SPA is absent, V1) and False.'''
+    index = lan_try(report, label + ' GET /', root, 'GET', '/')
+    if index is None:
+        return False
+    if index[0] != 200 or not SCRIPT_TAG.search(index[2].decode('utf-8', 'replace')):
+        report.product.append('%s: the SPA index page is not served at the LAN URL (GET / answered %d, V1): the page cases are not executed' % (label, index[0]))
+        return False
+    return True
+
+
+def with_driver(report: Report, label: str, root: str, *cases) -> None:
+    '''Run the headless browser cases (case(report, driver)) against the deployed SPA.
+
+    No SPA index at the LAN URL is a PRODUCT finding (the cases are not executed, V1); a missing Playwright or Chromium is an ENVIRONMENT finding.'''
+    if not index_served(report, label, root):
+        return
+    why = vuebrowser.problem()
+    if why:
+        report.env.append('%s: %s' % (label, why))
+        return
+    try:
+        with vuebrowser.Driver(root) as drv:
+            for case in cases:
+                case(report, drv)
+    except live.LiveUnreachable as exc:
+        report.env.append('%s: not executed, %s' % (label, exc))
+    except Exception as exc:
+        report.env.append('%s: the headless run failed: %s: %s' % (label, type(exc).__name__, str(exc)[:300]))
+
+
 def vue_static_serve() -> None:
     '''V1 (+U1): the SPA is mounted by the service over HTTPS on the LAN URL, no client certificate, CSP by meta tag; the server HTML /ui is gone.'''
     report = Report()
@@ -142,7 +173,7 @@ def vue_auth() -> None:
     if root is not None:
         _open(report, root, 'V2 no credential', None)
         _open(report, root, 'V2 an X-API-Key value of any kind', 'any-value-at-all')
-    gap(report, 'G7', 'V2 no login form while open; after a mocked 401 a key field only; the key kept in page memory only (no cookie, no web storage, no URL); the Vitest group auth')
+        with_driver(report, 'V2 browser', root, lambda rep, drv: vuebrowser.open_cases(rep, drv), vuebrowser.key_after_401)
     report.finish('vue_auth')
 
 
@@ -160,7 +191,9 @@ def vue_command_contract() -> None:
             report.product.append('V3 live help lists %s, expected exactly the 11 commands %s (missing %s, unexpected %s)'
                                   % (len(names), sorted(base.COMMANDS), sorted(set(base.COMMANDS) - set(names)), sorted(set(names) - set(base.COMMANDS))))
         report.info.append('V3 reference side: %d live commands, parameters %s' % (len(names), {name: base.command_params(name) for name in names}))
-    gap(report, 'G5', 'V3 the command and parameter set declared by the SPA equals the live help list (extra or missing command is RED)')
+    root = deployed(report, 'V3 SPA endpoint')
+    if root is not None:
+        vuebuild.manifest_cases(report, root)
     report.finish('vue_command_contract')
 
 
@@ -189,9 +222,9 @@ def vue_command_calls() -> None:
     root = deployed(report, 'V4 SPA endpoint')
     if root is not None:
         spa_files(report, 'V4 SPA sources')
-    gap(report, 'G7', 'V4 every action of the table performed in a headless browser and the commands it sends captured')
-    gap(report, 'G9', 'V4 the page text equals the result of the same command through the Python client')
-    gap(report, 'G10', 'vue_polling')
+        with_driver(report, 'V4 browser', root, vuebrowser.table_cases, vuebrowser.page_equals_result, vuebrowser.polling)
+    gap(report, 'G9n', 'V4 pages A2-A5 and A7')
+    gap(report, 'G10x', 'V7 polling')
     report.finish('vue_command_calls')
 
 
@@ -226,6 +259,7 @@ def vue_download() -> None:
     removed_ui(report, ('U9',))
     root = deployed(report, 'V5 SPA endpoint')
     if root is not None:
+        index_served(report, 'V5 download page', root)
         unknown = '/downloads/%s/x.bin' % base.ZERO_ID
         got = lan_try(report, 'V5 GET an unknown link', root, 'GET', unknown)
         if got is not None and got[0] != 404:
@@ -235,7 +269,7 @@ def vue_download() -> None:
             _s1_download(report, root)
         elif state is not None:
             report.state.append('V5 prepare, link and download of a staged export need an S1 service (host directory, container mount, restic password, finished inventory) but production answers %s' % state)
-    gap(report, 'G7', 'V5 the page of an export shows the plain link (data-testid download-link, href /downloads/<export_id>/<filename>) and the click downloads the file equal to size_bytes and sha256 in a headless browser; the fetch-and-blob mode after a 401')
+    gap(report, 'G7d', 'V5 the click on the plain link of an export in the browser')
     report.finish('vue_download')
 
 
@@ -278,5 +312,5 @@ def vue_build() -> None:
                 declared = None
             if declared != base.version():
                 report.product.append('V6 %s: version %r, expected the VERSION file content %r' % (item, declared, base.version()))
-    gap(report, 'G6', 'V6 two builds of the same source give the same artifacts, the built artifacts hold no secret, and the built SPA reports VERSION')
+    vuebuild.build_cases(report)
     report.finish('vue_build')
