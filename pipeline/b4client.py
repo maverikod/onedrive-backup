@@ -53,7 +53,7 @@ def thin_wrapper(report: Report) -> None:
                 uses_unified = True
             for name in names:
                 if any(name == own or name.startswith(own + '.') for own in OWN_TRANSPORT):
-                    report.product.append('%s/%s:%d imports %s: the client owns its own transport, it must be a thin wrapper over mcp_proxy_adapter JsonRpcClient (decision 1)' % (PKG, path.name, node.lineno, name))
+                    report.product.append('%s/%s:%d imports %s: the client owns its own transport, it must be a thin wrapper over mcp_proxy_adapter JsonRpcClient (decision 1)' % (PKG, path.name, getattr(node, 'lineno', 0), name))
     if not uses_client:
         report.product.append('%s: no import of JsonRpcClient from mcp_proxy_adapter.client.jsonrpc_client (decision 1); BackupClient is declared at %s' % (PKG, base.src_line(PKG + '/api.py', 'class BackupClient')))
     if not uses_unified:
@@ -321,15 +321,66 @@ def client_fetch_integrity() -> None:
         with tempfile.TemporaryDirectory() as work:
             target = Path(work) / 'existing.bin'
             target.write_bytes(b'keep')
-            value, exc = drive(bogus.fetch, '0' * 32, str(target))
-            if exc is None or not isinstance(exc, getattr(module, 'ClientError', Exception)) or target.read_bytes() != b'keep':
-                report.product.append('R9 fetch onto an existing output without overwrite: expected ClientError before any network call and the file untouched, got %s' % (exc or value))
+            value, failure = drive(bogus.fetch, '0' * 32, str(target))
+            if failure is None or not isinstance(failure, getattr(module, 'ClientError', Exception)) or target.read_bytes() != b'keep':
+                report.product.append('R9 fetch onto an existing output without overwrite: expected ClientError before any network call and the file untouched, got %s' % (failure or value))
         state = _state(report)
         if state == 'S1':
-            report.state.append('C-K12 tampered size and SHA256 are RED on the client side: the S1 integrity case has no executor until an S1 service exists')
+            _fetch_integrity_s1(report, module)
         elif state is not None:
             report.state.append('C-K12 verification of size and SHA256 before os.replace needs a staged export (S1) but production answers %s' % state)
     report.finish('client_fetch_integrity')
+
+
+def _tampered_commit(original, mutate):
+    '''Wrap the staticmethod BackupClient._commit so that the export metadata it verifies against is altered by mutate(meta).'''
+    def commit(work, destination, meta, overwrite):
+        original(work, destination, mutate(meta), overwrite)
+    return staticmethod(commit)
+
+
+def _fetch_integrity_s1(report: Report, module) -> None:
+    '''C-K12 S1: a genuine fetch of a real snapshot file passes size and SHA256; a tampered size and a tampered SHA256 are refused and leave no output.'''
+    client = make_client(module, report)
+    made = cmdcases._prepare_small(report, 'C-K12 S1 export of the smallest file of the newest snapshot')
+    if client is None or not made:
+        return
+    snapshot_id, path, meta = made
+    export_id = meta['export_id']
+    report.info.append('C-K12 S1 backup_prepare_download(%s, %s) result: %s' % (snapshot_id, path, meta))
+    original = module.BackupClient._commit
+    refusal = getattr(module, 'ClientError', Exception)
+    flipped = ('0' if meta['sha256'][0] != '0' else '1') + meta['sha256'][1:]
+    cases = (('size', lambda m: dict(m, size_bytes=int(m['size_bytes']) + 1)), ('sha256', lambda m: dict(m, sha256=flipped)))
+    try:
+        with tempfile.TemporaryDirectory() as work:
+            out = Path(work) / 'genuine.bin'
+            value, failure = drive(client.fetch, export_id, str(out))
+            data = out.read_bytes() if out.exists() else b''
+            left = sorted(item.name for item in Path(work).iterdir())
+            if failure is not None or hashlib.sha256(data).hexdigest() != meta['sha256'] or len(data) != meta['size_bytes'] or left != ['genuine.bin']:
+                report.product.append('C-K12 genuine fetch(%s): %s, size %d sha %s, expected size %s sha %s, files %s' % (export_id, failure or 'ok', len(data), hashlib.sha256(data).hexdigest()[:12], meta['size_bytes'], meta['sha256'][:12], left))
+            else:
+                report.info.append('C-K12 S1 genuine fetch of %s: size %d and SHA256 %s verified' % (path, len(data), meta['sha256'][:12]))
+        for what, mutate in cases:
+            with tempfile.TemporaryDirectory() as work:
+                out = Path(work) / ('tampered-%s.bin' % what)
+                setattr(module.BackupClient, '_commit', _tampered_commit(original, mutate))
+                try:
+                    value, failure = drive(client.fetch, export_id, str(out))
+                finally:
+                    setattr(module.BackupClient, '_commit', staticmethod(original))
+                left = sorted(item.name for item in Path(work).iterdir())
+                if not isinstance(failure, refusal) or 'integrity' not in str(failure).lower() or left:
+                    report.product.append('C-K12 tampered %s: expected ClientError (integrity mismatch) and no output or temporary file, got %s, files left %s' % (what, failure or value, left))
+                else:
+                    report.info.append('C-K12 S1 tampered %s refused: %s, no file left' % (what, failure))
+    finally:
+        setattr(module.BackupClient, '_commit', staticmethod(original))
+        kind, code, message, reply = live.request('backup_delete_export', {'export_id': export_id})
+        report.info.append('C-K12 S1 backup_delete_export(%s): %s %s' % (export_id, kind, reply))
+        if kind != 'success':
+            report.product.append('C-K12 S1 the export %s could not be deleted: %s %s %s' % (export_id, kind, code, message))
 
 
 def _s1_or_state(report: Report, what: str) -> bool:
@@ -353,8 +404,8 @@ def client_download() -> None:
                 report.product.append('%s: BackupClient.download has no parameter %s (C-K13)' % (base.src_line(PKG + '/api.py', 'def download'), need))
         try:
             names = base.live_commands()
-        except live.LiveUnreachable as exc:
-            report.env.append('help: not executed, production service unreachable: %s' % exc)
+        except live.LiveUnreachable as unreachable:
+            report.env.append('help: not executed, production service unreachable: %s' % unreachable)
             names = None
         if names is not None and 'backup_download_begin' not in names:
             report.product.append('C-K13 the download goes prepare -> backup_download_begin -> JsonRpcClient.download_file, but help lists no backup_download_begin: %s' % names)
