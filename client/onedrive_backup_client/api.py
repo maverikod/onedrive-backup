@@ -37,7 +37,8 @@ def _unpack(result: Any) -> Any:
     if not isinstance(result, dict):
         raise ClientError('Malformed command result: ' + type(result).__name__)
     if result.get('success') is False:
-        error = result.get('error') if isinstance(result.get('error'), dict) else {}
+        raw_error = result.get('error')
+        error = raw_error if isinstance(raw_error, dict) else {}
         raise ClientError(str(error.get('message', 'command failed')), code=error.get('code'), data=error.get('data'))
     return result.get('data', result)
 
@@ -81,7 +82,8 @@ class BackupClient:
             raise ClientError('cert and key are all-or-none: give both for mTLS or neither for HTTPS')
         self.url = url.rstrip('/')
         self.ca = str(ca) if ca else None
-        self.cert, self.key = (str(cert), str(key)) if cert and key else (None, None)
+        self.cert: Optional[str] = str(cert) if cert and key else None
+        self.key: Optional[str] = str(key) if cert and key else None
         self.timeout = timeout
         self._host, self._port = parts.hostname, parts.port or 443
         self._token: Optional[str] = password or None
