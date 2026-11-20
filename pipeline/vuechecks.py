@@ -14,9 +14,9 @@ from pathlib import Path
 
 import re
 
-from pipeline import b4base as base, b4server, cmdcases, live, vuebrowser, vuebuild
+from pipeline import b4base as base, b4server, cmdcases, live, vuebrowser, vuebuild, vueroutes
 from pipeline.report import Report
-from pipeline.vuebase import (ROOT, REFERENCE, SCRIPT_TAG, LEGACY_MARKERS, ASSET_LIMIT, CSP_EXPECTED, CSP_FORBIDDEN, SPA_FILES, deployed, gap, lan_rpc, lan_try,
+from pipeline.vuebase import (ROOT, REFERENCE, SCRIPT_TAG, LEGACY_MARKERS, ASSET_LIMIT, CSP_EXPECTED, CSP_FORBIDDEN, SPA_FILES, deployed, lan_rpc, lan_try,
                               removed_ui, scan_secrets, spa_files, tracked_files)
 
 # Action table of section 7.4: one SPA action -> the adapter command and the parameters it must send (names; fixed values where stated).
@@ -43,17 +43,22 @@ def _same_origin(ref: str, host: str) -> str | None:
     return path if path.startswith('/') else '/' + path
 
 
-META_CSP = re.compile(r'<meta[^>]+http-equiv\s*=\s*["\']content-security-policy["\'][^>]*content\s*=\s*["\']([^"\']*)["\']', re.I)
+META_CSP = re.compile(r'<meta[^>]+http-equiv\s*=\s*["\']content-security-policy["\'][^>]*content\s*=\s*(?:"([^"]*)"|\'([^\']*)\')', re.I)
+APP_MOUNT = re.compile(r'<div[^>]+id\s*=\s*["\']app["\']', re.I)
 
 
 def _csp(report: Report, text: str) -> None:
-    '''V1 (PP4): the CSP is carried by a meta tag of index.html and its directive set EQUALS the approved one, with no unsafe or wildcard source.'''
+    '''V1 (PP4, 10.18.6): the mount element has the id app; the CSP is a meta tag of index.html and its directive set EQUALS the approved one, with no unsafe or wildcard source.
+
+    The content attribute is captured quote-matched: a CSP value holds single quotes (the keywords 'none' and 'self'), so a pattern that stops at the first quote of either kind can never match a valid policy.'''
+    if not APP_MOUNT.search(text):
+        report.product.append('V1 GET /: index.html has no mount element with id app (<div id="app">, 10.18.6)')
     found = META_CSP.search(text)
     if not found:
         report.product.append('V1 GET /: index.html carries no <meta http-equiv="Content-Security-Policy"> tag (the CSP is a meta tag, nginx headers cannot exist)')
         return
     directives = {}
-    for part in found.group(1).split(';'):
+    for part in (found.group(1) if found.group(1) is not None else found.group(2)).split(';'):
         words = part.split()
         if words:
             directives[words[0]] = ' '.join(words[1:])
@@ -166,14 +171,14 @@ def _open(report: Report, root: str, label: str, token: str | None) -> None:
 
 
 def vue_auth() -> None:
-    '''V2 (+U2, U3, U4): no login form while the service is open; a key field only after a 401 (browser cases need the headless driver); the server login routes are gone.'''
+    '''V2 (+U2, U3, U4): no login form while the service is open; a key field only after a 401, with the ids of 10.18.6 and both submissions; logout always present; the server login routes are gone.'''
     report = Report()
     removed_ui(report, ('U2', 'U3', 'U4'))
     root = deployed(report, 'V2 SPA endpoint')
     if root is not None:
         _open(report, root, 'V2 no credential', None)
         _open(report, root, 'V2 an X-API-Key value of any kind', 'any-value-at-all')
-        with_driver(report, 'V2 browser', root, lambda rep, drv: vuebrowser.open_cases(rep, drv), vuebrowser.key_after_401)
+        with_driver(report, 'V2 browser', root, lambda rep, drv: vuebrowser.open_cases(rep, drv), vuebrowser.key_after_401, vueroutes.auth_ids)
     report.finish('vue_auth')
 
 
@@ -215,16 +220,14 @@ def _actions_cases(report: Report) -> None:
 
 
 def vue_command_calls() -> None:
-    '''V4 (+U5..U8, U10): each SPA action calls the expected command with the expected parameters and the page equals the command result.'''
+    '''V4 + V8 (+U5..U8, U10): each SPA action calls the expected command with the expected parameters, the page equals the command result, and every route, nav id and test id of 10.18 exists.'''
     report = Report()
     removed_ui(report, ('U5', 'U6', 'U7', 'U8', 'U10'))
     _actions_cases(report)
     root = deployed(report, 'V4 SPA endpoint')
     if root is not None:
         spa_files(report, 'V4 SPA sources')
-        with_driver(report, 'V4 browser', root, vuebrowser.table_cases, vuebrowser.page_equals_result, vuebrowser.polling)
-    gap(report, 'G9n', 'V4 pages A2-A5 and A7')
-    gap(report, 'G10x', 'V7 polling')
+        with_driver(report, 'V4 browser', root, vuebrowser.table_cases, vuebrowser.page_equals_result, vueroutes.nav_cases, vueroutes.route_cases)
     report.finish('vue_command_calls')
 
 
@@ -254,7 +257,7 @@ def _s1_download(report: Report, root: str) -> None:
 
 
 def vue_download() -> None:
-    '''V5 (+U9): the download link of an export downloads the file and its sha256 equals the metadata; the server HTML download route is gone.'''
+    '''V5 (+U9): the download link of an export downloads the file and its sha256 equals the metadata; in S1 the browser starts an export, shows its card, downloads it by the plain link and deletes it (10.18.4); the server HTML download route is gone.'''
     report = Report()
     removed_ui(report, ('U9',))
     root = deployed(report, 'V5 SPA endpoint')
@@ -267,10 +270,19 @@ def vue_download() -> None:
         state = b4server._try(report, 'service state', live.service_state)
         if state == 'S1':
             _s1_download(report, root)
+            with_driver(report, 'V5 browser', root, lambda rep, drv: vueroutes.export_cases(rep, drv, root))
         elif state is not None:
             report.state.append('V5 prepare, link and download of a staged export need an S1 service (host directory, container mount, restic password, finished inventory) but production answers %s' % state)
-    gap(report, 'G7d', 'V5 the click on the plain link of an export in the browser')
     report.finish('vue_download')
+
+
+def vue_polling() -> None:
+    '''V7 (R25, R28, 10.18.5): the discovery page polls every 30 s and stops on a 401; logout sends nothing of any method afterwards; the card of a final export never polls.'''
+    report = Report()
+    root = deployed(report, 'V7 SPA endpoint')
+    if root is not None:
+        with_driver(report, 'V7 browser', root, vuebrowser.polling, vueroutes.logout_cases, vueroutes.export_poll_case)
+    report.finish('vue_polling')
 
 
 def _service_build(report: Report) -> None:

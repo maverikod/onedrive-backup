@@ -1,4 +1,4 @@
-'''Shared helpers of the UI-VUE named checks (rows V1..V6 of the matrix, blocks UI-VUE and TRANSPORT-REV8).
+'''Shared helpers of the UI-VUE named checks (rows V1..V8 of the matrix, blocks UI-VUE, TRANSPORT-REV8 and UI-ROUTES).
 
 The human client is a Vue 3 single page application MOUNTED AS STATIC FILES BY THE SERVICE ITSELF (revision 8, 10.15.6) on the same
 origin as /api/jsonrpc and /downloads, over server-auth HTTPS at the LAN URL of pipeline/endpoints.env; there is no nginx, no second
@@ -8,10 +8,9 @@ temporary uuid4 link /downloads/<export_id>/<filename>. The server HTML routes U
 
 Findings are kept apart as in the B4 checks: PRODUCT (the SPA or the service breaks the contract, or the SPA is absent),
 STATE (the case needs provisioned state) and ENVIRONMENT (the pipeline cannot reach or use what it needs).
-A fourth kind, GAP, marks an assertion that section 10.15 does not define (for example the route or the test id of a control): it is
-never invented and never skipped, it names what is undefined and keeps the check RED. The headless driver of decision G7 (Playwright for
-Python, pinned in pipeline/requirements.txt, Chromium and Node 22 on the verification host) runs everything 10.15 does define
-(pipeline.vuebrowser, pipeline.vuebuild); a missing driver is an ENVIRONMENT finding.
+Section 10.18 (approved 2026-11-20) names the routes, the nav ids, the test ids and the export, logout and poll controls; the headless driver of
+decision G7 (Playwright for Python, pinned in pipeline/requirements.txt, Chromium and Node 22 on the verification host) asserts them
+(pipeline.vuebrowser, pipeline.vueroutes, pipeline.vuebuild); a missing driver is an ENVIRONMENT finding.
 '''
 
 from __future__ import annotations
@@ -50,21 +49,9 @@ REMOVED_UI = {
     'U10': ('POST', '/ui/exports/%s/delete' % ZERO),
 }
 
-# Assertions that section 10.15 (G7 as kept by revision 8, 10.15.6) does not define well enough to drive: they stay GAP lines and keep their check RED.
-GAPS = {
-    'G7d': 'download click: 10.15 defines the plain link (data-testid download-link, href /downloads/<export_id>/<filename>) but neither the control that starts an export nor the route of the export card that shows it, so the click and the file comparison in the browser cannot be reached; the link itself is asserted by the Vitest group download and by the HTTP case',
-    'G9n': 'pages A2 (files), A3 (export), A4 (export card), A5 (delete) and A7 (libraries): reaching them needs an action or a choice whose controls and routes 10.15 does not name; the parameters they send are asserted by the Vitest group commands',
-    'G10x': 'polling after a logout and the export-card poll (S1): 10.15 defines no logout control while the service is open and no export-card route',
-}
-
 
 class LanError(RuntimeError):
     '''The SPA endpoint of the LAN does not answer the way the service mount must.'''
-
-
-def gap(report: Report, gap_id: str, case: str) -> None:
-    '''Record a pending assertion blocked by a matrix gap; the check stays RED.'''
-    report.gap.append('%s: not asserted, blocked by MATRIX GAP %s: %s' % (case, gap_id, GAPS[gap_id]))
 
 
 def tracked_files() -> list[str] | None:

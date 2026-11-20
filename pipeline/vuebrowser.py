@@ -3,9 +3,8 @@
 Chromium runs headless with HTTPS errors NOT ignored: the certificate of the LAN URL is first verified in Python against the project
 CA (pipeline.live) and its public key is the only one the browser is told to accept (--ignore-certificate-errors-spki-list), so the
 page is loaded over a verified server-auth TLS connection. Tracing, video and screenshots are off and nothing is written to disk.
-Every scenario drives the pages the SPA itself links (hash routing: a[href^="#"] of the index page; 10.15 names no route), records the
-JSON-RPC calls the page sends and asserts them against the action table of section 10.11.10 (G9). What the matrix does not define
-(the controls that start an export, a delete, a download) is not driven; vuebase.GAPS names it.
+Every scenario here follows the hash links the SPA itself shows, records the JSON-RPC calls the page sends and asserts them against the action
+table of section 10.11.10 (G9). The routes, nav ids, test ids and the export, logout and card-poll controls of section 10.18 are driven by pipeline.vueroutes.
 '''
 
 from __future__ import annotations
@@ -37,7 +36,9 @@ ACTIONS = {
     'info': ((), ('page',), {}),
 }
 POLL_COMMANDS = ('backup_discovery_status', 'backup_download_status')
-VOLATILE = ('now', 'server_time', 'uptime_seconds')
+# 10.18.7 (4), probe of 2026-11-20 on the deployed 0.3.20: help, help cmdname, info, backup_snapshots, backup_list_files, backup_sites_list,
+# backup_libraries_list and backup_discovery_status, called twice 2 s apart on the quiescent service, differ in NO field, so no field is volatile.
+VOLATILE: tuple[str, ...] = ()
 PAGE_LIMIT = 12
 SETTLE_MS = 600
 
