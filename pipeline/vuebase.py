@@ -87,7 +87,7 @@ def lan_request(root: str, method: str, path: str, headers: dict | None = None, 
     if parts.scheme not in ('http', 'https') or not parts.hostname:
         raise LanError('the endpoint value is not an http(s) URL')
     context = live._context(client_cert=False) if parts.scheme == 'https' else None
-    conn = None
+    conn: http.client.HTTPConnection | None = None
     try:
         if context is not None:
             conn = http.client.HTTPSConnection(parts.hostname, parts.port or 443, context=context, timeout=30)
