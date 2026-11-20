@@ -32,10 +32,13 @@ def _catalog() -> Catalog:
 
 def validate_transfer(config: dict) -> dict:
     """Require a transfer section confined to the exports directory; the adapter denies all otherwise."""
+    message = "Production server MUST confine transfer.allowed_directories to the exports directory"
     transfer = config.get("transfer")
-    dirs = transfer.get("allowed_directories") if isinstance(transfer, dict) else None
+    if not isinstance(transfer, dict):
+        raise ValueError(message)
+    dirs = transfer.get("allowed_directories")
     if not (isinstance(dirs, list) and dirs and all(isinstance(item, str) and item.strip() for item in dirs)):
-        raise ValueError("Production server MUST confine transfer.allowed_directories to the exports directory")
+        raise ValueError(message)
     return transfer
 
 
