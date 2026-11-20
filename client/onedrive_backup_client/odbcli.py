@@ -93,7 +93,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def _config(parser: argparse.ArgumentParser, path: Optional[str]) -> dict:
     given = path is not None
-    target = Path(path).expanduser() if given else DEFAULT_CONFIG
+    target = Path(path).expanduser() if path is not None else DEFAULT_CONFIG
     if not target.is_file():
         if given:
             parser.error('config file not found: ' + str(target))
@@ -109,7 +109,7 @@ def _config(parser: argparse.ArgumentParser, path: Optional[str]) -> dict:
 
 def _client(parser: argparse.ArgumentParser, args: argparse.Namespace) -> BackupClient:
     config = _config(parser, args.config)
-    values = {}
+    values: dict = {}
     for name in SETTINGS:
         values[name] = getattr(args, name) or os.environ.get('ODBCLI_' + name.upper()) or config.get(name)
     values['password'] = values['password'] or os.environ.get('ONEDRIVE_BACKUP_PASSWORD')
