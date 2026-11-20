@@ -167,7 +167,7 @@ def _registry_problems(data: dict, problems: list[str]) -> dict[str, dict]:
                 else:
                     problems.append('check %s: the pending stub PASSED; a stub must always fail' % name)
     for name, entry in names.items():
-        if entry.get('status') == 'deprecated' and names.get(entry.get('replaced_by'), {}).get('status') in (None, 'deprecated'):
+        if entry.get('status') == 'deprecated' and names.get(str(entry.get('replaced_by')), {}).get('status') in (None, 'deprecated'):
             problems.append('check %s: replaced_by %s is not a live registered check' % (name, entry.get('replaced_by')))
     for name in checks.discover():
         if name not in names:
