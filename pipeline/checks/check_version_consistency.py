@@ -28,8 +28,11 @@ ARTIFACTS = (
     ('wheel name', re.compile(r'onedrive_backup_client-([0-9]+[.][0-9]+[.][0-9]+)')),
 )
 ARTIFACT_FILES = ('README.md', 'client/README.md', 'docker/compose.yml', 'docker/container.env.example',
-                  'build.sh', 'scripts/build-deb.sh', 'scripts/smoke-mtls.sh', 'docker/deploy.sh',
+                  'build.sh', 'scripts/build-deb.sh', 'docker/deploy.sh',
                   'docker/Dockerfile', 'docker/dockerhub_repo.sh')
+# Revision 8 (PX6): the smoke script is scripts/smoke-https.sh and smoke-mtls.sh is retired; whichever of the two exists is inspected (the
+# absence of smoke-https.sh is the RED of the named check smoke_https, not of this version check).
+ARTIFACT_FILES += tuple(item for item in ('scripts/smoke-https.sh', 'scripts/smoke-mtls.sh') if (ROOT / item).is_file())
 MUST_CARRY_IMAGE_TAG = ('docker/compose.yml', 'docker/container.env.example')
 READS_VERSION_FILE = ('build.sh', 'scripts/build-deb.sh', 'docker/deploy.sh')
 TAGS_WITH_VARIABLE = (('build.sh', r'onedrive-backup:\$VERSION'), ('scripts/build-deb.sh', r'onedrive-backup:\$VERSION'),

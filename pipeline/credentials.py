@@ -1,18 +1,17 @@
-'''Run credentials of the pipeline: matrix row PX11, relation R17 (revision 4, section 10.3).
+'''Run credentials of the pipeline: matrix row PX11, relation R17 (revision 8, section 10.15.9.2).
 
-The live checks that send the interim token T = base64(login ':' password) (decision D3) need exactly two inputs, the login
-and the password. A ready-made token variable is NOT an input. They are read from ONE source:
+The service is open for now (adapter auth.use_token false), so the password is OPTIONAL: when ONEDRIVE_BACKUP_PASSWORD is set it
+is sent as the header X-API-Key exactly as it is (no login, no base64, nothing derived); when it is absent no header is sent and
+that is GREEN against the open service, never [ENVIRONMENT]. The login variable is removed: it is no input. The value comes from
+ONE source:
   1. the git-ignored env file named by ONEDRIVE_BACKUP_CREDENTIALS_FILE, loaded BY PATH (mode 0600, not tracked by git,
      git-ignored); or, when that variable is not set,
-  2. the variables ONEDRIVE_BACKUP_LOGIN and ONEDRIVE_BACKUP_PASSWORD already present in the environment of the run (a run
-     that sourced the env file itself with set -a).
-T is derived in memory only. No value is ever printed or put into an exception text: a problem names the variable or the
-file problem, never a value (R17).
+  2. the variable ONEDRIVE_BACKUP_PASSWORD already present in the environment of the run.
+No value is ever printed or put into an exception text: a problem names the variable or the file problem, never a value (R17).
 '''
 
 from __future__ import annotations
 
-import base64
 import os
 import stat
 import subprocess
@@ -20,7 +19,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FILE_VAR = 'ONEDRIVE_BACKUP_CREDENTIALS_FILE'
-LOGIN_VAR = 'ONEDRIVE_BACKUP_LOGIN'
 PASSWORD_VAR = 'ONEDRIVE_BACKUP_PASSWORD'
 
 
@@ -75,8 +73,8 @@ def check_file(path: Path, root: Path = ROOT) -> None:
         raise CredentialsError('the credentials file named by %s is inside the repository but not git-ignored (file problem N4)' % FILE_VAR)
 
 
-def load(environ: dict | None = None, root: Path = ROOT) -> tuple[str, str]:
-    '''Return (login, password) of the run or raise CredentialsError (R17: all-or-none login and password).'''
+def load(environ: dict | None = None, root: Path = ROOT) -> str | None:
+    '''Return the optional run password, or None when none is configured; raise CredentialsError for a file problem (N1, N2, N4).'''
     env = os.environ if environ is None else environ
     given = env.get(FILE_VAR)
     if given:
@@ -87,25 +85,12 @@ def load(environ: dict | None = None, root: Path = ROOT) -> tuple[str, str]:
         except (OSError, UnicodeDecodeError):
             raise CredentialsError('the credentials file named by %s cannot be read (file problem N1)' % FILE_VAR)
     else:
-        values = {LOGIN_VAR: env.get(LOGIN_VAR, ''), PASSWORD_VAR: env.get(PASSWORD_VAR, '')}
-    login, password = values.get(LOGIN_VAR, ''), values.get(PASSWORD_VAR, '')
-    if not login and not password:
-        raise CredentialsError('%s and %s are both missing: export them, or name the git-ignored 0600 env file in %s'
-                               % (LOGIN_VAR, PASSWORD_VAR, FILE_VAR))
-    if not login or not password:
-        raise CredentialsError('only one of %s and %s is set; both are required (all-or-none, N3)' % (LOGIN_VAR, PASSWORD_VAR))
-    if ':' in login:
-        raise CredentialsError('%s must not contain a colon' % LOGIN_VAR)
-    return login, password
-
-
-def derive(login: str, password: str) -> str:
-    '''Return T = base64(login ':' password).'''
-    return base64.b64encode((login + ':' + password).encode('utf-8')).decode('ascii')
+        values = {PASSWORD_VAR: env.get(PASSWORD_VAR, '')}
+    return values.get(PASSWORD_VAR, '') or None
 
 
 def problem(environ: dict | None = None, root: Path = ROOT) -> str | None:
-    '''Return the problem text of the run credentials (no value in it) or None when they are usable.'''
+    '''Return the problem text of the run credentials (no value in it) or None; an absent password is no problem.'''
     try:
         load(environ, root)
     except CredentialsError as exc:
@@ -114,17 +99,14 @@ def problem(environ: dict | None = None, root: Path = ROOT) -> str | None:
 
 
 def token(environ: dict | None = None, root: Path = ROOT) -> str | None:
-    '''Return the token T of the run credentials, or None when they are missing or unusable.'''
+    '''Return the value of the X-API-Key header, the password as it is, or None when none is configured or the file is unusable.'''
     try:
-        return derive(*load(environ, root))
+        return load(environ, root)
     except CredentialsError:
         return None
 
 
 def secret_values(environ: dict | None = None, root: Path = ROOT) -> list[str]:
-    '''Return every secret form (login, password, T, login:password) for the output scans; empty when unusable.'''
-    try:
-        login, password = load(environ, root)
-    except CredentialsError:
-        return []
-    return [login, password, derive(login, password), login + ':' + password]
+    '''Return every secret form (the password) for the output scans; empty when none is configured.'''
+    value = token(environ, root)
+    return [value] if value else []

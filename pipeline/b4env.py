@@ -1,9 +1,10 @@
-'''B4 named check run_credentials_env: the environment contract of every live pipeline run (row PX11, relation R17).
+'''B4 named check run_credentials_env: the environment contract of every live pipeline run (row PX11, relation R17, revision 8).
 
-The run credentials are ONEDRIVE_BACKUP_LOGIN and ONEDRIVE_BACKUP_PASSWORD, both required, loaded BY PATH from a git-ignored
-env file of mode 0600 (variable ONEDRIVE_BACKUP_CREDENTIALS_FILE) or taken from the environment of the run; the token T is
-derived in memory only (pipeline.credentials). The cases P1 and N1..N4 run on synthetic files of this check and need no real
-secret; N5 and the real P1 need the real run credentials and are RED [ENVIRONMENT] when the run holds none.
+The only run credential is the OPTIONAL password ONEDRIVE_BACKUP_PASSWORD, loaded BY PATH from a git-ignored env file of mode 0600
+(variable ONEDRIVE_BACKUP_CREDENTIALS_FILE) or taken from the environment of the run, and sent as X-API-Key exactly as it is; an
+absent password is GREEN (no header, the service is open), never [ENVIRONMENT]. The login variable is removed. The cases P0, P1 and
+N1, N2, N4 run on synthetic files of this check and need no real secret; N5 needs the real password and is skipped as a case
+(not as a check) when the run holds none.
 '''
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from pipeline.report import Report
 
 ROOT = credentials.ROOT
 RETIRED_VARIABLE = ''.join(('ONEDRIVE_BACKUP_', 'TOK', 'EN'))
+LOGIN_VARIABLE = ''.join(('ONEDRIVE_BACKUP_', 'LOGIN'))
 
 
 def _load(env: dict) -> tuple[str, object]:
@@ -45,47 +47,51 @@ def _expect_error(report: Report, case: str, got: tuple[str, object], code: str,
 
 
 def _synthetic_cases(report: Report, work: Path) -> None:
-    login, password = 'pipeline-synthetic', secrets.token_hex(12)
-    both = 'ONEDRIVE_BACKUP_LOGIN=%s\nONEDRIVE_BACKUP_PASSWORD=%s\n' % (login, password)
-    values = (login, password)
+    password = secrets.token_hex(12)
+    body = 'ONEDRIVE_BACKUP_PASSWORD=%s\n' % password
+    values = (password,)
     var = credentials.FILE_VAR
     captured = io.StringIO()
     with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
-        got = _load({var: str(_write(work / 'good.env', both, 0o600))})
+        got = _load({var: str(_write(work / 'good.env', body, 0o600))})
         token = credentials.token({var: str(work / 'good.env')})
-    if got != ('ok', (login, password)) or token != credentials.derive(login, password):
-        report.product.append('P1 a 0600 git-ignored file with both variables: expected the pair and T = base64(login:password), got %s' % got[0])
+    if got != ('ok', password) or token != password:
+        report.product.append('P1 a 0600 git-ignored file with the password: expected the password as it is (the X-API-Key value, nothing derived), got %s' % got[0])
     if captured.getvalue():
         report.product.append('P1 loading the credentials printed to stdout or stderr')
+    if _load({}) != ('ok', None) or credentials.problem({}) is not None or credentials.token({}) is not None:
+        report.product.append('P0 no password at all: expected no value and no problem (the service is open, GREEN, never [ENVIRONMENT])')
+    if _load({credentials.PASSWORD_VAR: password}) != ('ok', password):
+        report.product.append('P1 the password in the environment of the run was not accepted')
+    if credentials.token({LOGIN_VARIABLE: 'someone'}) is not None or hasattr(credentials, 'derive'):
+        report.product.append('the login variable or a derived base64 token is still part of the run credentials (removed in revision 8)')
     _expect_error(report, 'N1 file path absent', _load({var: str(work / 'absent.env')}), 'N1', values)
-    _expect_error(report, 'N2 file mode 0644', _load({var: str(_write(work / 'wide.env', both, 0o644))}), 'N2', values)
-    _expect_error(report, 'N3 only the login', _load({var: str(_write(work / 'login.env', 'ONEDRIVE_BACKUP_LOGIN=%s\n' % login, 0o600))}), 'N3', values)
-    _expect_error(report, 'N3 only the password', _load({var: str(_write(work / 'pass.env', 'ONEDRIVE_BACKUP_PASSWORD=%s\n' % password, 0o600))}), 'N3', values)
+    _expect_error(report, 'N2 file mode 0644', _load({var: str(_write(work / 'wide.env', body, 0o644))}), 'N2', values)
     inside = ROOT / 'pipeline' / ('.credenv-%s.tmp' % secrets.token_hex(4))
     try:
-        _write(inside, both, 0o600)
+        _write(inside, body, 0o600)
         _expect_error(report, 'N4 file inside the repository and not git-ignored', _load({var: str(inside)}), 'N4', values)
     finally:
         inside.unlink(missing_ok=True)
-    if _load({credentials.LOGIN_VAR: login, credentials.PASSWORD_VAR: password}) != ('ok', (login, password)):
-        report.product.append('P1 both variables in the environment of the run were not accepted')
-    _expect_error(report, 'N3 only the login in the environment', _load({credentials.LOGIN_VAR: login}), 'N3', values)
     if credentials.token({RETIRED_VARIABLE: 'ready-made'}) is not None:
-        report.product.append('a ready-made token variable is still an input of the run credentials (U1(c): login and password only)')
+        report.product.append('a ready-made token variable is still an input of the run credentials')
 
 
 def _static_cases(report: Report) -> None:
-    hits = [str(path.relative_to(ROOT)) for path in sorted((ROOT / 'pipeline').rglob('*'))
-            if path.is_file() and path.suffix in ('.py', '.yaml', '.env') and RETIRED_VARIABLE in path.read_text(encoding='utf-8', errors='replace')]
-    if hits:
-        report.product.append('the retired token variable is still named in %s (U1(c): it is no input of the matrix)' % hits)
+    for name in (RETIRED_VARIABLE, LOGIN_VARIABLE):
+        hits = [str(path.relative_to(ROOT)) for path in sorted((ROOT / 'pipeline').rglob('*'))
+                if path.is_file() and path.suffix in ('.py', '.env') and name in path.read_text(encoding='utf-8', errors='replace')]
+        if hits:
+            report.product.append('the retired variable %s is still named in %s (it is no input of the matrix)' % (name, hits))
 
 
 def _real_cases(report: Report) -> None:
     problem = credentials.problem()
     if problem:
-        report.env.append('P1 the real run credentials: ' + problem)
-        report.env.append('N5 the output scan of an auth_token run needs the real run credentials')
+        report.env.append('P1 the real run credentials file: ' + problem)
+        return
+    if not credentials.token():
+        report.info.append('N5 no run password is configured: the output scan has no value to look for (GREEN, the service is open)')
         return
     captured, failure = io.StringIO(), ''
     with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
@@ -95,11 +101,11 @@ def _real_cases(report: Report) -> None:
             failure = str(exc)
     text = captured.getvalue() + failure
     if any(item and item in text for item in credentials.secret_values()):
-        report.product.append('N5 the captured stdout and stderr of an auth_token run contain the password, the token T or the login-password pair')
+        report.product.append('N5 the captured stdout and stderr of an auth_token run contain the password')
 
 
 def run_credentials_env() -> None:
-    '''PX11 cases P1 and N1..N5 of the run-credentials environment; a missing real environment is RED [ENVIRONMENT], never PRODUCT.'''
+    '''PX11 cases P0, P1, N1, N2, N4 and N5 of the run-credentials environment; a missing real environment is RED [ENVIRONMENT], never PRODUCT.'''
     report = Report()
     cache = ROOT / '.test-run'
     cache.mkdir(exist_ok=True)

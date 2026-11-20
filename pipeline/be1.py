@@ -9,10 +9,12 @@ temporary directory of the checkout (.test-run); the fakes refuse a command that
 path outside that directory, so nothing of the host (/srv/backup, /srv/archive, /var/lib/onedrive-backup), the network or
 the real SharePoint is reached and no real backup runs.
 
-What is normative (user decision, 10.14): the per-library outcome values ok / empty / source_emptied and their side effects.
-What is a planner proposal (10.14.1 (1)): the form of the run record {status, libraries: [{site_id, drive_id, outcome, error}]},
-the run status values and the exit semantics. The proposals are reported as INFO and never block; the outcome and the recorded
-error of each library must be observable, in the record returned by backup_libraries.
+What is normative (user decision 10.14 and, since revision 8, D3 of 10.15.9.4 APPROVED): the per-library outcome values ok / empty /
+source_emptied and their side effects, the run record {status, libraries: [{site_id, drive_id, outcome, error}]}, the run status ok |
+partial | failed (ok when every library is ok or empty, an all-empty run included; partial when at least one library is source_emptied or
+errored and at least one other completed; failed when none completed and at least one errored) and the exit codes ok 0, partial 1,
+failed 1 (refusals 2 unchanged). The outcome and the recorded error of each library are observable in the record returned by
+backup_libraries.
 '''
 
 from __future__ import annotations
@@ -177,20 +179,20 @@ def _logged(box: Sandbox, drive: str, records: list) -> bool:
     return any(drive in item.getMessage() or box.sb.stable_key(drive) in item.getMessage() for item in records)
 
 
-def _run_record(report: Report, label: str, value, error, expected: dict[str, str]) -> dict | None:
-    '''Report the observability of the per-library outcomes (normative values, proposal form) and the run status (proposal).'''
+def _run_record(report: Report, label: str, value, error, expected: dict[str, str], status: str | None = None) -> dict | None:
+    '''Report the observability of the per-library outcomes and the run status (all normative since revision 8, D3).'''
     found = outcomes(value) if error is None else None
     if found is None:
         if error is None:
             report.product.append('%s: backup_libraries returned %r, which carries no per-library outcome; the outcomes %s must be observable in the run record '
-                                  '{status, libraries: [{site_id, drive_id, outcome, error}]} (form: planner proposal 10.14.1 (1) (d); values: normative)' % (label, value, expected))
+                                  '{status, libraries: [{site_id, drive_id, outcome, error}]} (approved form, D3)' % (label, value, expected))
         return None
     for drive, wanted in expected.items():
         got = found.get(drive, (None, None))[0]
         if got != wanted:
             report.product.append('%s: the outcome of %s is %r, expected %r' % (label, drive, got, wanted))
-    if isinstance(value, dict):
-        report.info.append('PROPOSAL (10.14.1 (1) (e), not asserted): %s run status %r' % (label, value.get('status')))
+    if status is not None and (not isinstance(value, dict) or value.get('status') != status):
+        report.product.append('%s: the run status is %r, expected %r (ok | partial | failed, D3)' % (label, value.get('status') if isinstance(value, dict) else value, status))
     return found
 
 
@@ -251,7 +253,7 @@ def empty_new_library_skipped(report: Report) -> None:
         _untouched(report, label, box, NEW_EMPTY, before)
         if any(item.levelno >= logging.ERROR for item in bad):
             report.product.append('%s: an error was logged for an empty library that was never backed up (it is skipped, not an error): %s' % (label, bad[0].getMessage()[:120]))
-        found = _run_record(report, label, value, error, {NEW_EMPTY: 'empty'})
+        found = _run_record(report, label, value, error, {NEW_EMPTY: 'empty'}, 'ok')
         if found and found[NEW_EMPTY][1]:
             report.product.append('%s: an error %r is recorded for the skipped empty library' % (label, found[NEW_EMPTY][1]))
     finally:
@@ -268,7 +270,7 @@ def emptied_library_not_synced_error(report: Report) -> None:
         before = _before(box, EMPTIED)
         value, error, bad = box.run([EMPTIED])
         _untouched(report, label, box, EMPTIED, before)
-        found = _run_record(report, label, value, error, {EMPTIED: 'source_emptied'})
+        found = _run_record(report, label, value, error, {EMPTIED: 'source_emptied'}, 'failed')
         recorded = bool(found and found[EMPTIED][1]) or _logged(box, EMPTIED, bad)
         if not recorded:
             report.product.append('%s: no error is recorded for %s (neither in the run record nor as a warning or error log naming the library); raised %s' % (label, EMPTIED, '%s: %s' % (type(error).__name__, error) if error else 'nothing'))
@@ -289,11 +291,37 @@ def mixed_run_continues(report: Report) -> None:
         _untouched(report, label, box, NEW_EMPTY, before[NEW_EMPTY])
         _untouched(report, label, box, EMPTIED, before[EMPTIED])
         _synced(report, label, box, FULL)
-        found = _run_record(report, label, value, error, {NEW_EMPTY: 'empty', EMPTIED: 'source_emptied', FULL: 'ok'})
+        found = _run_record(report, label, value, error, {NEW_EMPTY: 'empty', EMPTIED: 'source_emptied', FULL: 'ok'}, 'partial')
         if not ((found and found[EMPTIED][1]) or _logged(box, EMPTIED, bad)):
             report.product.append('%s: no error is recorded for %s' % (label, EMPTIED))
         if found and (found[NEW_EMPTY][1] or found[FULL][1]):
             report.product.append('%s: an error is recorded for the empty or the ok library: %r' % (label, {k: v[1] for k, v in found.items() if k != EMPTIED and v[1]}))
+    finally:
+        box.close()
+
+
+def exit_codes(report: Report) -> None:
+    '''D3: the process exit code of one backup cycle is 0 for ok and 1 for partial and for failed (the status values come from the real cases above).'''
+    box = Sandbox()
+    try:
+        for status, wanted in (('ok', 0), ('partial', 1), ('failed', 1)):
+            record = {'status': status, 'libraries': []}
+            data = box.tmp / 'data'
+            patches = (mock.patch.object(box.sb, 'configure_logging', lambda *a, **k: None), mock.patch.object(box.sb.Path, 'is_mount', lambda self: True),
+                       mock.patch.object(box.sb, 'load_config', lambda path: dict(box.cfg, required_mountpoint=data.resolve())),
+                       mock.patch.object(box.sb, 'preflight', lambda cfg: None), mock.patch.object(box.sb, 'assert_repository', lambda cfg: None),
+                       mock.patch.object(box.sb, 'discover', lambda *a, **k: {}), mock.patch.object(box.sb, 'backup_libraries', lambda *a, **k: record))
+            for item in patches:
+                item.start()
+            try:
+                code = box.sb.main(['--config', str(box.tmp / 'backup.json'), '--data', str(data)])
+            except BaseException as exc:
+                code = 'raised %s: %s' % (type(exc).__name__, exc)
+            finally:
+                for item in patches:
+                    item.stop()
+            if code != wanted:
+                report.product.append('BE1 exit code of a run with status %s: %r, expected %d (ok 0, partial 1, failed 1)' % (status, code, wanted))
     finally:
         box.close()
 
@@ -304,5 +332,6 @@ def run_all(report: Report) -> None:
     empty_new_library_skipped(report)
     emptied_library_not_synced_error(report)
     mixed_run_continues(report)
+    exit_codes(report)
     report.info.append('isolation: temporary directory under .test-run only; stub rclone and restic in this process, subprocess refused, host paths '
-                       'and network never reached; the PROPOSAL items (run status, exit 0/1/1, record form) are reported, not asserted')
+                       'and network never reached; run status, record form and exit 0/1/1 are asserted (D3, approved)')

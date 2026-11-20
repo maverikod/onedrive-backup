@@ -11,7 +11,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECKS = ("python_syntax", "shell_syntax", "config_contract", "unit_tests", "security")
-EXTRA = ("smoke_mtls",)
+EXTRA = ()
 
 
 def run(*args: str, env: dict | None = None) -> None:
@@ -24,12 +24,15 @@ def python_syntax() -> None:
 
 
 def shell_syntax() -> None:
-    scripts = (
-        "build.sh", "scripts/build-deb.sh", "scripts/smoke-mtls.sh",
+    scripts = [
+        "build.sh", "scripts/build-deb.sh",
         "docker/deploy.sh", "packaging/onedrive-backup-docker",
         "packaging/onedrive-backup", "packaging/postinst",
         "packaging/prerm", "packaging/postrm", "packaging/install-runtime.sh",
-    )
+    ]
+    # Revision 8 (PX6): the smoke script is scripts/smoke-https.sh; the former scripts/smoke-mtls.sh is parsed only while it still
+    # exists. The absence of smoke-https.sh is the RED of the named check smoke_https, not of this syntax check.
+    scripts += [item for item in ("scripts/smoke-https.sh", "scripts/smoke-mtls.sh") if (ROOT / item).exists()]
     run("bash", "-n", *scripts)
 
 
@@ -37,24 +40,33 @@ def config_contract() -> None:
     from pipeline.environment import endpoint
     main = json.loads((ROOT / "config/server.json").read_text())
     backup = json.loads((ROOT / "config/backup.json").read_text())
-    assert main["server"]["protocol"] == "mtls", "mTLS server required"
+    # Revision 8 (10.15.3): this is the ONLY place that names the expected protocol; the later mtls switch edits this one value.
+    assert main["server"]["protocol"] == "https", "server-auth HTTPS required: server.protocol https (revision 8)"
     assert main["server"]["port"] == 8050
     assert main["registration"]["server_id"] == "onedrive-backup"
     assert main["registration"]["enabled"] is True
     assert main["registration"]["protocol"] == "mtls"
     assert main["registration"]["register_url"] == endpoint("MCP_PROXY_REGISTER_URL")
     assert main["registration"]["heartbeat"]["url"] == endpoint("MCP_PROXY_HEARTBEAT_URL")
-    for field in ("cert", "key", "ca"):
+    for field in ("cert", "key"):
         assert main["server"]["ssl"][field].startswith("/config/certs/")
+    if "ca" in main["server"]["ssl"]:
+        assert main["server"]["ssl"]["ca"].startswith("/config/certs/")
     for field in ("cert", "key"):
         assert main["registration"]["ssl"][field] == main["server"]["ssl"][field]
     assert main["registration"]["ssl"]["ca"] == "/config/certs/proxy-ca.crt"
-    # Revocation checks are owned by MCP Proxy, not the internal FastAPI server.
+    # Revocation checks are owned by MCP Proxy, not the internal server.
     assert main["server"]["ssl"]["crl"] is None
     assert main["registration"]["ssl"]["crl"] is None
+    # Revision 8 (AU5 (2)): the service is open and the adapter alone decides the transport; no project overlay is configured.
+    assert "proxy_trust" not in main, "proxy_trust is removed (no ProxyTrustMiddleware, revision 8)"
+    assert main["auth"]["use_token"] is False, "auth.use_token must be false (the service is open for now, revision 8)"
+    assert not main["auth"].get("tokens"), "no auth.tokens while the service is open"
+    assert not main.get("security", {}).get("tokens"), "no security.tokens while the service is open"
     assert json.loads((ROOT / "packaging/server.json").read_text()) == main
-    assert "    ports:" not in (ROOT / "docker/compose.yml").read_text()
-    assert "-p " not in (ROOT / "packaging/docker-run.sh").read_text()
+    # Revision 8 (PP3): the service port is published on the LAN, host 8443 -> container 8050, for docker-run.sh and compose.
+    assert "8443:8050" in (ROOT / "packaging/docker-run.sh").read_text(), "docker-run.sh must publish 8443:8050"
+    assert "8443:8050" in (ROOT / "docker/compose.yml").read_text(), "docker/compose.yml must publish 8443:8050"
     # Revision 9 (D10): the service reads a writable copy of rclone.conf under /rclone-state; the original and the restic
     # password stay under the read-only /secrets; /data is the container mount point (D8 (c)).
     api = json.loads((ROOT / "packaging/api-backup.json").read_text())
@@ -92,10 +104,6 @@ def security() -> None:
     assert ".env" in ignore
     assert "*.key" in ignore
     assert (ROOT / "packaging/onedrive-backup-api.service").exists()
-
-
-def smoke_mtls() -> None:
-    run("bash", "scripts/smoke-mtls.sh")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,4 +1,4 @@
-'''proxy_peer_auth: the MCP Proxy peer is admitted on mTLS alone, no token (AU4)
+'''proxy_peer_auth: the MCP Proxy calls the open service with no credential (AU4, revision 8)
 
 Mode: live against the production service or its disposable instances (block B4, revision 4 of the matrix TODO); the logic is in pipeline.b4proxy.
 Findings are kept apart as PRODUCT, STATE and ENVIRONMENT; a case that needs S1 or credentials is RED with that reason.

@@ -1,4 +1,4 @@
-'''odbcli_auth: OS2 odbcli login, password and token handling
+'''odbcli_auth: OS2 odbcli optional password, cert and key all-or-none, login and token removed
 
 Mode: live against the production service (block B4, decisions 1..7 of the matrix TODO); the logic is in pipeline.b4cli.
 Findings are kept apart as PRODUCT, STATE and ENVIRONMENT; a case that needs S1 or credentials is RED with that reason.

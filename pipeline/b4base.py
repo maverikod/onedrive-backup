@@ -1,17 +1,16 @@
 '''Shared helpers of the B4 named checks (client parity, download, authentication, route surface).
 
-User decisions of 2026-11-18 that these checks encode: (1) the server API is the set of mcp-proxy-adapter
-commands over JSON-RPC and the Python client is a thin wrapper over the adapter JsonRpcClient; (2) odbcli is a
-console command built on that client; (3) download by a temporary uuid4 link and by the client through the
-adapter transfer service, size and SHA256 verified; (4) REST /api/v1/* removed; (5) interim authentication
-is login and password from the server configuration, carried as the token T = base64(login:password) in
-the X-API-Key header (the dynamic adapter token is not in scope); (6) /ws stays closed; (7) the live version
-equals VERSION.
+User decisions of 2026-11-18 and 2026-11-19 (revision 8) that these checks encode: (1) the server API is the set of
+mcp-proxy-adapter commands over JSON-RPC and the Python client is a thin wrapper over the adapter JsonRpcClient; (2) odbcli is a
+console command built on that client; (3) download by a temporary uuid4 link and by the client through the adapter transfer service,
+size and SHA256 verified; (4) REST /api/v1/* removed; (5) revision 8: the service is open for now (auth off), the later password mode
+is the adapter static key sent as X-API-Key, switched on by configuration only; (6) the adapter-native routes are served, the
+project filter is removed; (7) the live version equals VERSION.
 
-The pipeline run holds the credentials only as ONEDRIVE_BACKUP_LOGIN and ONEDRIVE_BACKUP_PASSWORD, read through
-pipeline.credentials (a git-ignored 0600 env file named by ONEDRIVE_BACKUP_CREDENTIALS_FILE, or the same two variables in the
-environment of the run). Nothing of it is committed. A case that needs them and does not find them is RED as STATE or
-ENVIRONMENT (R17), never PRODUCT and never skipped.
+The pipeline run holds at most ONE credential, the optional ONEDRIVE_BACKUP_PASSWORD, read through pipeline.credentials (a
+git-ignored 0600 env file named by ONEDRIVE_BACKUP_CREDENTIALS_FILE, or the variable in the environment of the run). Nothing of it
+is committed. An absent password is GREEN against the open service; an unusable credentials file is RED as STATE or ENVIRONMENT
+(R17), never PRODUCT and never skipped.
 '''
 
 from __future__ import annotations
@@ -72,7 +71,7 @@ def http_request(method: str, path: str, body: bytes | None = None, headers: dic
 
 
 def auth_headers() -> dict:
-    '''Return the token header of the run credentials, or an empty mapping.'''
+    '''Return the X-API-Key header of the optional run password, or an empty mapping.'''
     token = live.token()
     return {TOKEN_HEADER: token} if token else {}
 

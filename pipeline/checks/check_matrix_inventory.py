@@ -23,8 +23,8 @@ from pipeline.checks import CheckFailure
 ROOT = Path(__file__).resolve().parents[2]
 SURFACES = ('mcp', 'rest', 'framework', 'client', 'cli', 'odbcli', 'ui', 'vue', 'auth', 'platform',
             'version', 'pipeline')
-BLOCKS = ('B1', 'B2', 'B3', 'B4', 'UI-VUE', 'B-SPLIT', 'FIRST-RUN', 'BACKUP-EMPTY', 'RCLONE-ACCESS', 'DATA-ARCHIVE-REV9')
-TAG = re.compile(r'^(CURRENT|(PLANNED|RETIRED)[(](B1|B2|B3|B4|UI-VUE|FIRST-RUN|BACKUP-EMPTY|RCLONE-ACCESS|DATA-ARCHIVE-REV9)[)])$')
+BLOCKS = ('B1', 'B2', 'B3', 'B4', 'UI-VUE', 'B-SPLIT', 'FIRST-RUN', 'BACKUP-EMPTY', 'RCLONE-ACCESS', 'DATA-ARCHIVE-REV9', 'TRANSPORT-REV8')
+TAG = re.compile(r'^(CURRENT|(PLANNED|RETIRED)[(](B1|B2|B3|B4|UI-VUE|FIRST-RUN|BACKUP-EMPTY|RCLONE-ACCESS|DATA-ARCHIVE-REV9|TRANSPORT-REV8)[)])$')
 STATUSES = ('legacy', 'implemented', 'pending', 'deprecated')
 ROW_KEYS = ('id', 'surface', 'name', 'tag', 'source', 'checks')
 PARAM_KEYS = ('types', 'required', 'default', 'constraints', 'valid', 'invalid')

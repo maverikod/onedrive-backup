@@ -1,4 +1,4 @@
-'''auth_token: AU1..AU3 interim token authentication on /api/jsonrpc
+'''auth_token: AU1, AU2 anonymous callers execute and a credential header of any value is not interpreted (auth is off, revision 8); AU3 is retired
 
 Mode: live against the production service (block B4, decisions 1..7 of the matrix TODO); the logic is in pipeline.b4server.
 Findings are kept apart as PRODUCT, STATE and ENVIRONMENT; a case that needs S1 or credentials is RED with that reason.

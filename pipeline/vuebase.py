@@ -1,14 +1,16 @@
-'''Shared helpers of the UI-VUE named checks (rows V1..V6 of the matrix, block UI-VUE).
+'''Shared helpers of the UI-VUE named checks (rows V1..V6 of the matrix, blocks UI-VUE and TRANSPORT-REV8).
 
-The human client is a Vue 3 single page application served by nginx on the LAN (decision D5). Every action of it is an
-adapter command over JSON-RPC POST /api/jsonrpc with the token T = base64(login:password) in X-API-Key (decisions D3, D7),
-the same API the model, the Python client and odbcli use; /ws stays closed; a file is downloaded by the temporary uuid4
-link /downloads/<export_id>/<filename>. The server HTML routes U1..U10 are removed with ui.py by the SPA (approval 5).
+The human client is a Vue 3 single page application MOUNTED AS STATIC FILES BY THE SERVICE ITSELF (revision 8, 10.15.6) on the same
+origin as /api/jsonrpc and /downloads, over server-auth HTTPS at the LAN URL of pipeline/endpoints.env; there is no nginx, no second
+image and no browser client certificate. The service is open for now, so every action is an adapter command over JSON-RPC POST
+/api/jsonrpc without a credential (an optional key goes in X-API-Key only after a 401); /ws is native; a file is downloaded by the
+temporary uuid4 link /downloads/<export_id>/<filename>. The server HTML routes U1..U10 are removed with ui.py by the SPA (approval 5).
 
 Findings are kept apart as in the B4 checks: PRODUCT (the SPA or the service breaks the contract, or the SPA is absent),
-STATE (the case needs provisioned state or credentials) and ENVIRONMENT (the pipeline cannot reach or use what it needs).
-A fourth kind, GAP, marks an assertion the approved matrix does not fix: it is never invented and never skipped, it names the
-decision it waits for and keeps the check RED until the matrix fixes it.
+STATE (the case needs provisioned state) and ENVIRONMENT (the pipeline cannot reach or use what it needs).
+A fourth kind, GAP, marks an assertion that needs the headless browser driver (Playwright for Python, Node and Chromium on the host,
+decision G7) which is not installed in the pipeline environment: it is never invented and never skipped, it names the decision it
+waits for and keeps the check RED until that driver exists.
 '''
 
 from __future__ import annotations
@@ -28,6 +30,10 @@ from pipeline.report import Report
 ROOT = base.ROOT
 LAN_BASE = 'ONEDRIVE_BACKUP_LAN_URL'
 LEGACY_MARKERS = ('csrf', '/ui/login')
+SPA_FILES = {'/assets/app.js': ('javascript',), '/assets/app.css': ('css',), '/command-manifest.json': ('json',)}
+CSP_EXPECTED = {'default-src': "'none'", 'script-src': "'self'", 'style-src': "'self'", 'img-src': "'self' data:", 'font-src': "'self'",
+                'connect-src': "'self'", 'base-uri': "'none'", 'form-action': "'none'"}
+CSP_FORBIDDEN = ("'unsafe-inline'", "'unsafe-eval'", '*', 'http:', 'https:')
 REFERENCE = re.compile(r"(?:src|href)\s*=\s*[\"']([^\"']+)[\"']", re.I)
 SCRIPT_TAG = re.compile(r'<script[^>]*\ssrc\s*=', re.I)
 KEY_MARKERS = ('BEGIN PRIVATE KEY', 'BEGIN RSA PRIVATE KEY', 'BEGIN EC PRIVATE KEY', 'BEGIN OPENSSL PRIVATE KEY')
@@ -43,24 +49,18 @@ REMOVED_UI = {
     'U10': ('POST', '/ui/exports/%s/delete' % ZERO),
 }
 
-# MATRIX GAPS: what the approved matrix (sections 1-10, revision 4b) does not fix. Each is listed in the answer of the unit.
+# Assertions that need the headless browser driver (decision G7, approved in revision 5 and kept by revision 8).
 GAPS = {
-    'G1': 'SPA address: ONEDRIVE_BACKUP_LAN_URL_DEV/_PROD are empty and declared pending in pipeline/endpoints.env; no nginx host, port or scheme is fixed (sections 8.1 D5, 8.2 Q1/OQ-3/OQ-6, 10)',
-    'G2': 'LAN transport: which certificate nginx presents, which CA the pipeline trusts, and whether the LAN endpoint demands a browser client certificate (7.4 text for V1 says served only after mTLS, D5 says mTLS for the browser later, OQ-6)',
-    'G3': 'headers: the exact Content-Security-Policy and no-store values nginx must send (V1 names only CSP and no-store; 7.4 only says the former default-src none must be widened for the SPA scripts)',
-    'G4': 'routes: SPA deep-link behaviour (history or hash router, fallback to index.html) and what the LAN endpoint answers for the removed /ui* routes and for unknown paths (not stated anywhere)',
-    'G5': 'SPA command manifest: where the SPA sources live (Q13 open) and in which format the commands and parameters it uses are declared, so V3 can compare them with the live help',
-    'G6': 'SPA build: build command and tool (Node stage, Q13/OQ-6), artifact location, how the built SPA exposes its version, and what reproducible means (byte-identical artifacts, V6)',
-    'G7': 'headless runner: which browser driver runs the SPA (planner TODO f5c80e13 names Playwright), where it runs (the pipeline venv has none), and the selectors or test ids of login form, menu and pages (V2, V4)',
-    'G8': 'download authorization through nginx: OQ-5 is open (nginx adds X-API-Key to /downloads/ or the SPA uses fetch and blob), so the answer to a tokenless browser GET of the link is not fixed',
-    'G9': 'page equals command result (V4): which fields of each command result a page must show and in which rendering, and which parameters the SPA sends for sites, libraries (site_id, query, paging) and discovery pages',
-    'G10': 'vue_polling: 7.4 lists a vue_polling check (G4 polling) but the matrix has no V row and no registry entry for it, and Q11 says no push events while /ws is closed; the planner TODO fee58a27 polls the removed REST /api/v1 routes',
-    'G11': 'answer of a removed server HTML route U1..U10 on the service: the matrix says removed but fixes no status; the checks reuse the REST rule (framework 404 {detail: Not Found})',
+    'G5': 'SPA command manifest: frontend/ and /command-manifest.json equal the live help list (R23); the manifest is read from the deployed SPA once it exists',
+    'G6': 'SPA build: two builds of the same source give the same artifacts (R24), run by vue_build with Node 22 where Node exists; the pipeline venv has none',
+    'G7': 'headless runner: Playwright for Python in the pipeline venv, Node and Chromium on the host (PX12 vue_environment); the rendered pages, the key field after a mocked 401, the download click and the action capture need it',
+    'G9': 'page equals command result (V4, A1-A10): the rendered page text equals the result of the same command through the Python client; needs the headless driver',
+    'G10': 'vue_polling (V7, R25): polling interval and the 401 stop; needs the headless driver and the SPA',
 }
 
 
 class LanError(RuntimeError):
-    '''The SPA endpoint of the LAN does not answer the way a deployed nginx would.'''
+    '''The SPA endpoint of the LAN does not answer the way the service mount must.'''
 
 
 def gap(report: Report, gap_id: str, case: str) -> None:
@@ -91,7 +91,7 @@ def deployed(report: Report, label: str) -> str | None:
     try:
         return endpoint(LAN_BASE)
     except PipelineEnvError as exc:
-        report.product.append('%s: the SPA is not deployed, %s (nginx and the Vue SPA arrive with block UI-VUE)' % (label, exc))
+        report.product.append('%s: the SPA is not served at the LAN URL, %s (the service mounts the SPA, revision 8)' % (label, exc))
         return None
 
 
@@ -100,7 +100,7 @@ def lan_request(root: str, method: str, path: str, headers: dict | None = None, 
     parts = urllib.parse.urlsplit(root)
     if parts.scheme not in ('http', 'https') or not parts.hostname:
         raise LanError('the endpoint value is not an http(s) URL')
-    context = live._context() if parts.scheme == 'https' else None
+    context = live._context(client_cert=False) if parts.scheme == 'https' else None
     conn = None
     try:
         if context is not None:
@@ -144,16 +144,22 @@ def lan_rpc(report: Report, label: str, root: str, command: str, params: dict | 
 
 
 def removed_ui(report: Report, rows: tuple[str, ...]) -> None:
-    '''Rows U<n>: the server HTML route is removed from the service (framework 404), proven against the deployed service.'''
+    '''Rows U<n> (revision 8, G4 and 10.15.9.3): the removed server HTML route answers 404 from the mount: never 200, never the index page or the legacy HTML, no redirect, no Set-Cookie.'''
     for row in rows:
         method, path = REMOVED_UI[row]
         label = '%s %s %s' % (row, method, path)
-        got = b4server._try(report, label, base.probe, method, path, b'' if method == 'POST' else None)
-        if got is None or b4server._gated(report, label, got[0], True):
+        got = b4server._try(report, label, base.probe, method, path, b'' if method == 'POST' else None, None, False)
+        if got is None:
             continue
-        if got[0] != 404 or got[2].strip() != base.FRAMEWORK_404:
-            report.product.append('%s: answered %d %s, expected the framework 404 {detail: Not Found} (the server HTML route is removed with ui.py by the Vue SPA, D7, approval 5); still registered at %s'
-                                  % (label, got[0], base.brief(got[2]), base.src_line('src/onedrive_api/ui.py', path.rstrip('/') or path)))
+        status, headers, body = got
+        text = body.decode('utf-8', 'replace').lower()
+        if status != 404:
+            report.product.append('%s: answered %d %s, expected 404 from the SPA mount (the server HTML route is removed with ui.py by the Vue SPA, never 200, never a redirect); still registered at %s'
+                                  % (label, status, base.brief(body), base.src_line('src/onedrive_api/ui.py', path.rstrip('/') or path)))
+        if '<script' in text or 'id="app"' in text or any(marker in text for marker in LEGACY_MARKERS):
+            report.product.append('%s: the body is the SPA index page or the legacy server HTML, expected the plain 404 of the mount' % label)
+        if 'set-cookie' in headers or 'location' in headers:
+            report.product.append('%s: the answer carries %s, expected no cookie and no redirect' % (label, 'Set-Cookie' if 'set-cookie' in headers else 'Location'))
 
 
 def scan_secrets(report: Report, label: str, files: list[str]) -> None:
@@ -170,4 +176,4 @@ def scan_secrets(report: Report, label: str, files: list[str]) -> None:
         if any(marker in text for marker in KEY_MARKERS):
             report.product.append('%s: %s holds a private key marker' % (label, item))
         if any(value in text for value in secrets):
-            report.product.append('%s: %s holds a run credential (login, password or token T)' % (label, item))
+            report.product.append('%s: %s holds the run password' % (label, item))

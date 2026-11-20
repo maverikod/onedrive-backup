@@ -1,11 +1,12 @@
 '''Interim live transport of the pipeline to the production service (replaced by the B4 client).
 
 The service is production-only, so every live check talks to the production server named in
-pipeline/endpoints.env (ONEDRIVE_BACKUP_URL) with one JSON-RPC request per command over mTLS.
-The TLS material is the project own ignored certificate tree under mtls-certs/for-proxy (never
-committed); each file can be overridden with ONEDRIVE_BACKUP_CA, ONEDRIVE_BACKUP_CLIENT_CERT and
-ONEDRIVE_BACKUP_CLIENT_KEY. A service that cannot be reached raises LiveUnreachable, which the
-checks report as an ENVIRONMENT result, separately from a product result.
+pipeline/endpoints.env (ONEDRIVE_BACKUP_URL) with one JSON-RPC request per command over TLS. Revision 8 (10.15): the listener is
+server-auth HTTPS and the CA is the only mandatory TLS file; a client certificate is OPTIONAL and ALL-OR-NONE (cert and key
+together, https without them, mtls with them). The TLS material is the project own ignored certificate tree under
+mtls-certs/for-proxy (never committed); each file can be overridden with ONEDRIVE_BACKUP_CA, ONEDRIVE_BACKUP_CLIENT_CERT and
+ONEDRIVE_BACKUP_CLIENT_KEY. A service that cannot be reached raises LiveUnreachable, which the checks report as an ENVIRONMENT
+result, separately from a product result.
 '''
 
 from __future__ import annotations
@@ -30,20 +31,25 @@ class LiveUnreachable(RuntimeError):
     '''The production service cannot be reached from this pipeline run (environment RED).'''
 
 
-def _tls_files() -> tuple[str, str, str]:
-    return (os.environ.get('ONEDRIVE_BACKUP_CA') or str(CERT_TREE / 'ca' / 'ca.crt'),
-            os.environ.get('ONEDRIVE_BACKUP_CLIENT_CERT') or str(CERT_TREE / 'issued' / 'onedrive-backup.crt'),
-            os.environ.get('ONEDRIVE_BACKUP_CLIENT_KEY') or str(CERT_TREE / 'issued' / 'onedrive-backup.key'))
+def _tls_files() -> tuple[str, str | None, str | None]:
+    '''Return (ca, cert, key); cert and key are both set (mtls) or both None (https): they are all-or-none (relation R26).'''
+    ca = os.environ.get('ONEDRIVE_BACKUP_CA') or str(CERT_TREE / 'ca' / 'ca.crt')
+    cert = os.environ.get('ONEDRIVE_BACKUP_CLIENT_CERT') or str(CERT_TREE / 'issued' / 'onedrive-backup.crt')
+    key = os.environ.get('ONEDRIVE_BACKUP_CLIENT_KEY') or str(CERT_TREE / 'issued' / 'onedrive-backup.key')
+    if not (Path(cert).is_file() and Path(key).is_file()):
+        return ca, None, None
+    return ca, cert, key
 
 
-def _context() -> ssl.SSLContext:
+def _context(client_cert: bool = True) -> ssl.SSLContext:
+    '''TLS context: the CA is mandatory; the client certificate pair is loaded only when it exists and client_cert is true.'''
     ca, cert, key = _tls_files()
-    missing = [item for item in (ca, cert, key) if not Path(item).is_file()]
-    if missing:
-        raise LiveUnreachable('TLS material is not readable: ' + ', '.join(missing))
+    if not Path(ca).is_file():
+        raise LiveUnreachable('TLS material is not readable: ' + ca)
     try:
         context = ssl.create_default_context(cafile=ca)
-        context.load_cert_chain(cert, key)
+        if client_cert and cert and key:
+            context.load_cert_chain(cert, key)
     except (ssl.SSLError, OSError) as exc:
         raise LiveUnreachable('cannot load the TLS material: %s: %s' % (type(exc).__name__, exc))
     return context
@@ -58,10 +64,7 @@ def base_url() -> str:
 
 
 def token() -> str | None:
-    '''Return the interim token T = base64(login:password) of the run credentials (decision D3, row PX11), or None.
-
-    The login and the password are the only inputs (pipeline.credentials); a ready-made token variable is not an input.
-    '''
+    '''Return the X-API-Key value of the run, the optional run password as it is (row PX11), or None when none is configured.'''
     return credentials.token()
 
 

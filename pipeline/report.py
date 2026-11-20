@@ -7,10 +7,10 @@ import re
 from pipeline import credentials
 from pipeline.checks import CheckFailure
 
-# R17: every check whose cases send the token T of the run credentials. A missing or unusable run environment makes the
-# cases that need T RED as STATE or ENVIRONMENT, never PRODUCT, never skipped and never a pass.
+# R17 (revision 8): every check whose cases send the OPTIONAL run password as X-API-Key. An absent password is no problem (the
+# service is open); an UNUSABLE run credentials file (N1, N2, N4) makes the cases RED as STATE or ENVIRONMENT, never PRODUCT.
 TOKEN_CHECKS = ('auth_token', 'cmd_', 'client_cmd_', 'odbcli_', 'download_link', 'transfer_confinement', 'client_download',
-                'client_auth', 'client_call_raw', 'client_fetch_integrity', 'ws_closed', 'surface_framework_routes',
+                'client_auth', 'client_call_raw', 'client_fetch_integrity', 'adapter_native_surface',
                 'rest_removed', 'vue_', 'rclone_remote_access')
 # A finding that only reports what the token gate answered to a request that carried no usable token.
 GATE_ANSWER = re.compile(r'(answered|got|code=|HTTP|status) ?401|ClientAuthenticationError|authentication_error')
@@ -27,11 +27,11 @@ class Report:
 
     product: the code or the deployed service violates the contract (a defect for the coder);
     state: a case needs the owner to provision state first (S1: host directory, container mount,
-    restic password, login and password, finished inventory) and is RED with that reason;
+    restic password, finished inventory) and is RED with that reason;
     environment: the pipeline cannot reach or use what it needs (reported separately, never a defect).
 
-    R17: when the run credentials (login and password of row PX11) are missing or unusable, a token check never reports
-    PRODUCT for what the token gate answered: those findings move to STATE and one ENVIRONMENT line names the problem.
+    R17: when the run credentials file (row PX11) is unusable, a check never reports PRODUCT for what the gate answered: those
+    findings move to STATE and one ENVIRONMENT line names the problem. An absent password is not a problem.
     '''
 
     def __init__(self) -> None:

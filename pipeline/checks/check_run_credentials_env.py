@@ -1,4 +1,4 @@
-'''run_credentials_env: the run-credentials environment (PX11, R17)
+'''run_credentials_env: the environment contract of every live pipeline run, the optional password only (PX11, revision 8)
 
 Mode: live against the production service or its disposable instances (block B4, revision 4 of the matrix TODO); the logic is in pipeline.b4env.
 Findings are kept apart as PRODUCT, STATE and ENVIRONMENT; a case that needs S1 or credentials is RED with that reason.

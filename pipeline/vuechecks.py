@@ -1,8 +1,8 @@
-'''UI-VUE named checks V1..V6: the Vue 3 SPA exercised through its real surface (nginx on the LAN, adapter commands over /api/jsonrpc).
+'''UI-VUE named checks V1..V6: the Vue 3 SPA exercised through its real surface (the service mount over HTTPS on the LAN URL, adapter commands over /api/jsonrpc).
 
-Each function is the body of one pipeline/checks/check_<name>.py. The matrix (rows V1..V6, section 7.4, 8.3 UI-VUE, D3, D5, D7) states
-what the SPA does; what it leaves open is listed in vuebase.GAPS and reported as GAP lines, never invented. Today the SPA does not exist,
-so every check is RED [PRODUCT] for the absent SPA (and for the server HTML routes that the SPA replaces).
+Each function is the body of one pipeline/checks/check_<name>.py. The matrix (rows V1..V6, sections 7.4, 8.3 UI-VUE, 10.11/10.12 as replaced by 10.15.6
+and 10.15.9) states what the SPA does; what needs the headless browser driver is listed in vuebase.GAPS and reported as GAP lines, never invented.
+Today the SPA does not exist, so every check is RED [PRODUCT] for the absent SPA (and for the server HTML routes that the SPA replaces).
 '''
 
 from __future__ import annotations
@@ -12,9 +12,12 @@ import json
 import urllib.parse
 from pathlib import Path
 
-from pipeline import b4base as base, b4server, cmdcases, credentials, live
+import re
+
+from pipeline import b4base as base, b4server, cmdcases, live
 from pipeline.report import Report
-from pipeline.vuebase import ROOT, REFERENCE, SCRIPT_TAG, LEGACY_MARKERS, ASSET_LIMIT, deployed, gap, lan_rpc, lan_try, removed_ui, scan_secrets, spa_files, tracked_files
+from pipeline.vuebase import (ROOT, REFERENCE, SCRIPT_TAG, LEGACY_MARKERS, ASSET_LIMIT, CSP_EXPECTED, CSP_FORBIDDEN, SPA_FILES, deployed, gap, lan_rpc, lan_try,
+                              removed_ui, scan_secrets, spa_files, tracked_files)
 
 # Action table of section 7.4: one SPA action -> the adapter command and the parameters it must send (names; fixed values where stated).
 ACTIONS = (
@@ -40,8 +43,43 @@ def _same_origin(ref: str, host: str) -> str | None:
     return path if path.startswith('/') else '/' + path
 
 
+META_CSP = re.compile(r'<meta[^>]+http-equiv\s*=\s*["\']content-security-policy["\'][^>]*content\s*=\s*["\']([^"\']*)["\']', re.I)
+
+
+def _csp(report: Report, text: str) -> None:
+    '''V1 (PP4): the CSP is carried by a meta tag of index.html and its directive set EQUALS the approved one, with no unsafe or wildcard source.'''
+    found = META_CSP.search(text)
+    if not found:
+        report.product.append('V1 GET /: index.html carries no <meta http-equiv="Content-Security-Policy"> tag (the CSP is a meta tag, nginx headers cannot exist)')
+        return
+    directives = {}
+    for part in found.group(1).split(';'):
+        words = part.split()
+        if words:
+            directives[words[0]] = ' '.join(words[1:])
+    if directives != CSP_EXPECTED:
+        report.product.append('V1 GET /: the meta CSP is %r, expected exactly %r' % (directives, CSP_EXPECTED))
+    for source in CSP_FORBIDDEN:
+        if any(source in value.split() for value in directives.values()):
+            report.product.append('V1 GET /: the meta CSP holds the forbidden source %s' % source)
+
+
+def _assets(report: Report, root: str) -> None:
+    '''V1 (G4, PP-AUTH4): the fixed finite file set is served with the right content type; an unknown path is the mount 404, never the index.'''
+    for path, kinds in SPA_FILES.items():
+        for method in ('GET', 'HEAD'):
+            got = lan_try(report, 'V1 %s %s' % (method, path), root, method, path)
+            if got is None:
+                continue
+            if got[0] != 200 or not any(kind in got[1].get('content-type', '').lower() for kind in kinds):
+                report.product.append('V1 %s %s: answered %d with content-type %r, expected 200 with a %s content type' % (method, path, got[0], got[1].get('content-type'), kinds[0]))
+    got = lan_try(report, 'V1 GET an unknown path', root, 'GET', '/no/such/path')
+    if got is not None and (got[0] != 404 or b'<script' in got[2].lower()):
+        report.product.append('V1 GET /no/such/path: answered %d %s, expected the mount 404 (hash routing, no history fallback, never index.html)' % (got[0], base.brief(got[2])))
+
+
 def _index_cases(report: Report, root: str, got: tuple[int, dict, bytes]) -> None:
-    '''V1 cases on the index page served by the SPA endpoint.'''
+    '''V1 cases on the index page served by the service mount.'''
     status, headers, body = got
     text = body.decode('utf-8', 'replace')
     if status != 200:
@@ -54,10 +92,7 @@ def _index_cases(report: Report, root: str, got: tuple[int, dict, bytes]) -> Non
     for marker in LEGACY_MARKERS:
         if marker in text.lower():
             report.product.append('V1 GET /: the page holds %r, it is the removed server HTML and not the SPA' % marker)
-    if not headers.get('content-security-policy', '').strip():
-        report.product.append('V1 GET /: no Content-Security-Policy header')
-    if 'no-store' not in headers.get('cache-control', '').lower():
-        report.product.append('V1 GET /: Cache-Control %r does not hold no-store' % headers.get('cache-control'))
+    _csp(report, text)
     host = urllib.parse.urlsplit(root).netloc
     seen = 0
     for ref in REFERENCE.findall(text):
@@ -69,15 +104,13 @@ def _index_cases(report: Report, root: str, got: tuple[int, dict, bytes]) -> Non
         if path is None or seen >= ASSET_LIMIT:
             continue
         seen += 1
-        asset = lan_try(report, 'V1 GET ' + path, root, 'GET', path)
-        if asset is None:
-            continue
-        if asset[0] != 200 or asset[1].get('content-type', '').lower().startswith('text/html'):
-            report.product.append('V1 GET %s: answered %d %s, expected 200 with the asset, not the index page' % (path, asset[0], asset[1].get('content-type')))
+        if path not in SPA_FILES and path != '/':
+            report.product.append('V1 GET /: the page references %s, outside the fixed file set %s (public_paths are exact: a new asset name needs a matrix revision)' % (path, sorted(SPA_FILES)))
+    _assets(report, root)
 
 
 def vue_static_serve() -> None:
-    '''V1 (+U1): the SPA is served by nginx on the LAN with CSP and no-store; the server HTML /ui is gone.'''
+    '''V1 (+U1): the SPA is mounted by the service over HTTPS on the LAN URL, no client certificate, CSP by meta tag; the server HTML /ui is gone.'''
     report = Report()
     removed_ui(report, ('U1',))
     root = deployed(report, 'V1 SPA endpoint')
@@ -85,46 +118,31 @@ def vue_static_serve() -> None:
         got = lan_try(report, 'V1 GET /', root, 'GET', '/')
         if got is not None:
             _index_cases(report, root, got)
-    gap(report, 'G2', 'V1 the SPA endpoint is served only after mTLS (7.4) or on the plain LAN (D5)')
-    gap(report, 'G3', 'V1 the exact CSP and no-store values')
-    gap(report, 'G4', 'V1 deep link, unknown path and removed /ui* answers through the SPA endpoint')
+        head = lan_try(report, 'V1 HEAD /', root, 'HEAD', '/')
+        if head is not None and head[0] != 200:
+            report.product.append('V1 HEAD /: answered %d, expected 200 (the mount serves GET and HEAD)' % head[0])
     report.finish('vue_static_serve')
 
 
-def _denied(report: Report, root: str, label: str, token: str | None) -> None:
+def _open(report: Report, root: str, label: str, token: str | None) -> None:
+    '''V2 (revision 8): through the SPA endpoint the open service runs a command with no credential and with a credential header of any value.'''
     got = lan_rpc(report, label, root, 'help', {}, token)
     if got is None:
         return
     status, decoded = got
-    if status != 401:
-        report.product.append('%s POST /api/jsonrpc help through the SPA endpoint: answered %d, expected 401 (the SPA shows the login menu on 401, D3)' % (label, status))
-    elif not b4server._unauthorized(status, decoded):
-        report.product.append('%s: 401 body %r, expected {error: {code: 401, type: authentication_error}}' % (label, decoded))
-
-
-def _auth_transport(report: Report, root: str) -> None:
-    '''V2 transport cases: the answers the SPA turns into the login menu or into a result, asserted through the SPA endpoint.'''
-    _denied(report, root, 'V2 no token', None)
-    _denied(report, root, 'V2 empty token', '')
-    _denied(report, root, 'V2 a token that is not base64(login:password)', 'not-the-token')
-    _denied(report, root, 'V2 a well-formed token of a wrong login and password', credentials.derive('nobody', 'wrong-password'))
-    if not live.token():
-        report.state.append('V2 the correct login runs a command: ' + base.NO_CREDS)
-        return
-    got = lan_rpc(report, 'V2 correct token', root, 'help', {}, live.token())
-    if got is not None and not (got[0] == 200 and isinstance(got[1], dict) and got[1].get('result', {}).get('success') is True):
-        report.product.append('V2 POST /api/jsonrpc help with the correct token T through the SPA endpoint: answered %d %s, expected 200 and success' % (got[0], str(got[1])[:100]))
+    if status != 200 or not (isinstance(decoded, dict) and decoded.get('result', {}).get('success') is True):
+        report.product.append('%s POST /api/jsonrpc help through the SPA endpoint: answered %d %s, expected 200 and success (the service is open, no login form exists while it is open)' % (label, status, str(decoded)[:100]))
 
 
 def vue_auth() -> None:
-    '''V2 (+U2, U3, U4): 401 shows the menu, a wrong password shows the menu, a correct login runs a command; the server login routes are gone.'''
+    '''V2 (+U2, U3, U4): no login form while the service is open; a key field only after a 401 (browser cases need the headless driver); the server login routes are gone.'''
     report = Report()
     removed_ui(report, ('U2', 'U3', 'U4'))
     root = deployed(report, 'V2 SPA endpoint')
     if root is not None:
-        _auth_transport(report, root)
-    gap(report, 'G7', 'V2 the rendered login menu on 401, after a wrong password, and the page that shows the result of a command after a correct login')
-    gap(report, 'G1', 'V2 the SPA endpoint address the form posts to')
+        _open(report, root, 'V2 no credential', None)
+        _open(report, root, 'V2 an X-API-Key value of any kind', 'any-value-at-all')
+    gap(report, 'G7', 'V2 no login form while open; after a mocked 401 a key field only; the key kept in page memory only (no cookie, no web storage, no URL); the Vitest group auth')
     report.finish('vue_auth')
 
 
@@ -193,6 +211,8 @@ def _s1_download(report: Report, root: str) -> None:
         if got is None:
             return
         digest = hashlib.sha256(got[2]).hexdigest()
+        if 'set-cookie' in got[1]:
+            report.product.append('V5 GET %s: the answer carries Set-Cookie, expected none' % url)
         if got[0] != 200 or len(got[2]) != meta['size_bytes'] or digest != meta['sha256']:
             report.product.append('V5 GET %s through the SPA endpoint: answered %d with %d bytes sha256 %s, expected 200 and the metadata size %s sha256 %s'
                                   % (url, got[0], len(got[2]), digest[:12], meta['size_bytes'], meta['sha256'][:12]))
@@ -207,23 +227,45 @@ def vue_download() -> None:
     root = deployed(report, 'V5 SPA endpoint')
     if root is not None:
         unknown = '/downloads/%s/x.bin' % base.ZERO_ID
-        got = lan_try(report, 'V5 GET an unknown link', root, 'GET', unknown, base.auth_headers())
+        got = lan_try(report, 'V5 GET an unknown link', root, 'GET', unknown)
         if got is not None and got[0] != 404:
-            report.product.append('V5 GET %s through the SPA endpoint with the token: answered %d %s, expected 404' % (unknown, got[0], base.brief(got[2])))
+            report.product.append('V5 GET %s through the SPA endpoint without a credential: answered %d %s, expected 404 (unknown well-formed id; the service is open)' % (unknown, got[0], base.brief(got[2])))
         state = b4server._try(report, 'service state', live.service_state)
         if state == 'S1':
             _s1_download(report, root)
         elif state is not None:
-            report.state.append('V5 prepare, link and download of a staged export need an S1 service (host directory, container mount, restic password, login and password, finished inventory) but production answers %s' % state)
-    gap(report, 'G8', 'V5 a tokenless browser GET of the link through the SPA endpoint')
-    gap(report, 'G7', 'V5 the page of an export shows the link and the click downloads the file in a headless browser')
+            report.state.append('V5 prepare, link and download of a staged export need an S1 service (host directory, container mount, restic password, finished inventory) but production answers %s' % state)
+    gap(report, 'G7', 'V5 the page of an export shows the plain link (data-testid download-link, href /downloads/<export_id>/<filename>) and the click downloads the file equal to size_bytes and sha256 in a headless browser; the fetch-and-blob mode after a 401')
     report.finish('vue_download')
 
 
+def _service_build(report: Report) -> None:
+    '''V6 (G6 as replaced, PP2): the SPA is built by a Node stage of the EXISTING service Dockerfile; no second image, no web image; Node 22 pinned; fixed no-hash file names.'''
+    dockerfile = (ROOT / 'docker' / 'Dockerfile').read_text(encoding='utf-8')
+    for needle, why in ((''.join(('node', ':22')), 'a Node 22 build stage'), ('npm ci', 'npm ci in the build stage'), ('npm run build', 'npm run build in the build stage'), ('/app/web', 'the dist copied to /app/web')):
+        if needle not in dockerfile:
+            report.product.append('V6 docker/Dockerfile: %s is missing (%s, one image carries the SPA)' % (needle, why))
+    tracked = tracked_files() or []
+    second = [item for item in tracked if 'onedrive-backup-web' in item or Path(item).name.lower() in ('dockerfile.web', 'nginx.conf')]
+    if second:
+        report.product.append('V6 a second image or nginx artefact is tracked: %s (no second image, no nginx, revision 8)' % second)
+    version_file = ROOT / 'frontend' / '.node-version'
+    if not version_file.is_file() or not version_file.read_text(encoding='utf-8').strip().startswith('22'):
+        report.product.append('V6 frontend/.node-version must exist and pin Node major 22')
+    if 'frontend/package-lock.json' not in tracked:
+        report.product.append('V6 frontend/package-lock.json is not tracked (the lockfile makes the build reproducible)')
+    config = next((ROOT / 'frontend' / name for name in ('vite.config.ts', 'vite.config.js') if (ROOT / 'frontend' / name).is_file()), None)
+    text = config.read_text(encoding='utf-8') if config else ''
+    for needle in ('assets/app.js', 'assets/app.css', 'inlineDynamicImports'):
+        if needle not in text:
+            report.product.append('V6 frontend/vite.config: %s is missing (PP-AUTH4: fixed file names without content hashes, one chunk)' % needle)
+
+
 def vue_build() -> None:
-    '''V6: the SPA build is reproducible, its artifacts hold no secret and its version equals VERSION.'''
+    '''V6: the SPA build is in the service Dockerfile, reproducible, its artifacts hold no secret and its version equals VERSION.'''
     report = Report()
     found = spa_files(report, 'V6 SPA sources')
+    _service_build(report)
     tree = sorted({str(Path(item).parent) for item in found if Path(item).name == 'package.json'})
     below = [item for item in (tracked_files() or []) if any(item.startswith(d.rstrip('/') + '/') for d in tree if d != '.')]
     if below:

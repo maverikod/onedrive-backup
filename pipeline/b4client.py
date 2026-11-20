@@ -2,7 +2,7 @@
 
 Client contract these checks hold the implementation to (the tester reading of matrix rows C-K0..C-K15):
   from onedrive_backup_client import BackupClient, ClientError, ClientAuthenticationError
-  BackupClient(url, ca, cert, key, timeout, login=None, password=None, token=None)
+  BackupClient(url, ca, cert=None, key=None, timeout=180, password=None)   (revision 8: cert and key all-or-none, login and token removed)
   one method per server command, named exactly like the command (help, info, backup_snapshots, ...,
   backup_download_begin), taking the parameters of the matrix row and returning the unpacked result data;
   call(command, params=None) and raw_call(command, params_map) (non-validating send for negative cases);
@@ -21,17 +21,18 @@ import asyncio
 import hashlib
 import importlib
 import inspect
-import os
 import sys
 import tempfile
 from pathlib import Path
 
 from pipeline import b4base as base, cmdcases, credentials, live, matrix
-from pipeline.b4base import NO_CREDS, PACKAGE_DIR, ROOT
+from pipeline.b4base import PACKAGE_DIR
 from pipeline.report import Report
 
 OWN_TRANSPORT = ('urllib.request', 'urllib.error', 'http.client', 'ssl', 'socket', 'requests', 'httpx', 'aiohttp')
-CTOR = ('url', 'ca', 'cert', 'key', 'timeout', 'login', 'password', 'token')
+CTOR = ('url', 'ca', 'cert', 'key', 'timeout', 'password')
+REMOVED_CTOR = ('login', 'token')
+OFFLINE_URL = ''.join(('https', '://', 'localhost', ':1'))  # the offline constructor cases never connect
 UNIFIED = 'execute_command_unified'
 PKG = 'client/onedrive_backup_client'
 
@@ -78,15 +79,16 @@ def load_client(report: Report):
 def make_client(module, report: Report, creds: bool = True):
     '''Build BackupClient against production with keyword arguments of the contract; None after a finding.'''
     ca, cert, key = live._tls_files()
-    kwargs = {'url': live.base_url(), 'ca': ca, 'cert': cert, 'key': key, 'timeout': 30}
+    kwargs = {'url': live.base_url(), 'ca': ca, 'timeout': 30}
+    if cert and key:
+        kwargs.update(cert=cert, key=key)
     if creds and credentials.token():
-        login, password = credentials.load()
-        kwargs.update(login=login, password=password)
+        kwargs.update(password=credentials.token())
     params = inspect.signature(module.BackupClient).parameters
     missing = [name for name in CTOR if name not in params]
     if missing:
-        report.product.append('%s: BackupClient%s has no parameter %s (C-K0: login, password and token are accepted)' % (base.src_line(PKG + '/api.py', 'def __init__'), '', missing))
-        kwargs = {k: v for k, v in kwargs.items() if k in params}
+        report.product.append('%s: BackupClient%s has no parameter %s (C-K0: url, ca, cert, key, timeout, password)' % (base.src_line(PKG + '/api.py', 'def __init__'), '', missing))
+    kwargs = {k: v for k, v in kwargs.items() if k in params}
     try:
         return module.BackupClient(**kwargs)
     except Exception as exc:
@@ -226,27 +228,52 @@ def _site_cases(report: Report, method, state) -> None:
             report.info.append('C-K9 %s conformant: ClientError %d %s' % (cid, code, name))
 
 
+def _ctor_cells(report: Report, module) -> None:
+    '''C-K0 constructor cells (revision 8, K0): password optional, login and token removed, cert and key optional ALL-OR-NONE (R26).'''
+    params = inspect.signature(module.BackupClient).parameters
+    for name in CTOR:
+        if name not in params:
+            report.product.append('C-K0 BackupClient has no parameter %s' % name)
+    for name in REMOVED_CTOR:
+        if name in params:
+            report.product.append('C-K0 BackupClient still accepts %s (%s): the cell is removed in revision 8 (no login exists in adapter 8.11.20, the key is the password)' % (name, base.src_line(PKG + '/api.py', 'def __init__')))
+    ca = live._tls_files()[0]
+    cert = live._tls_files()[1] or ca
+    key = live._tls_files()[2] or ca
+    error = getattr(module, 'ClientError', Exception)
+    try:
+        module.BackupClient(url=OFFLINE_URL, ca=ca, timeout=1)
+    except Exception as exc:
+        report.product.append('C-K0 BackupClient(url, ca) without cert and key: raised %s: %s, expected a client (https, no client certificate; %s requires them today)' % (type(exc).__name__, str(exc)[:80], base.src_line(PKG + '/api.py', 'cert')))
+    for label, extra in (('cert without key', {'cert': cert}), ('key without cert', {'key': key})):
+        try:
+            module.BackupClient(url=OFFLINE_URL, ca=ca, timeout=1, **extra)
+        except error:
+            continue
+        except Exception as exc:
+            report.product.append('C-K0 BackupClient %s: raised %s, expected ClientError (cert and key are all-or-none)' % (label, type(exc).__name__))
+            continue
+        report.product.append('C-K0 BackupClient %s: accepted, expected ClientError (cert and key are all-or-none)' % label)
+
+
 def client_auth() -> None:
-    '''C-K0: constructor with login/password/token; 401 is ClientAuthenticationError; the thin-wrapper contract.'''
+    '''C-K0 (revision 8): constructor cells; the client without a password executes against the open service; the thin-wrapper contract.'''
     report = Report()
     thin_wrapper(report)
     module = load_client(report)
     if module:
+        _ctor_cells(report, module)
         bare = make_client(module, report, creds=False)
         if bare is not None and _state(report) is not None:
             value, exc = drive(getattr(bare, 'help', lambda: (_ for _ in ()).throw(AttributeError('no help method'))))
-            if exc is None:
-                report.product.append('C-K0 client without login or token: help succeeded, expected ClientAuthenticationError on 401 (the server does not enforce the token yet, see auth_token)')
-            elif not isinstance(exc, getattr(module, 'ClientAuthenticationError', ())):
-                report.product.append('C-K0 client without login or token: raised %s, expected ClientAuthenticationError' % type(exc).__name__)
+            if exc is not None:
+                report.product.append('C-K0 client without a password: help raised %s: %s, expected success (the service is open, no auth header is sent)' % (type(exc).__name__, str(exc)[:100]))
         if live.token():
             good = make_client(module, report, creds=True)
             if good is not None:
                 value, exc = drive(getattr(good, 'help', None) or (lambda: (_ for _ in ()).throw(AttributeError('no help method'))))
                 if exc is not None:
-                    report.product.append('C-K0 client with the run credentials: help raised %s: %s' % (type(exc).__name__, str(exc)[:120]))
-        else:
-            report.state.append('C-K0 the client with login and password executes a command: ' + NO_CREDS)
+                    report.product.append('C-K0 client with the run password: help raised %s: %s' % (type(exc).__name__, str(exc)[:120]))
     report.finish('client_auth')
 
 
@@ -286,7 +313,7 @@ def client_fetch_integrity() -> None:
             if need not in params:
                 report.product.append('%s: BackupClient.fetch has no parameter %s (C-K12)' % (base.src_line(PKG + '/api.py', 'def fetch'), need))
         try:
-            bogus = module.BackupClient(**{k: v for k, v in dict(url=live.base_url(), ca=live._tls_files()[0], cert=live._tls_files()[1], key=live._tls_files()[2], timeout=1).items() if k in inspect.signature(module.BackupClient).parameters})
+            bogus = module.BackupClient(**{k: v for k, v in dict(url=live.base_url(), ca=live._tls_files()[0], cert=live._tls_files()[1], key=live._tls_files()[2], timeout=1).items() if v is not None and k in inspect.signature(module.BackupClient).parameters})
         except Exception as exc:
             report.product.append('R9 BackupClient cannot be built offline for the pre-network check: %s: %s' % (type(exc).__name__, exc))
             report.finish('client_fetch_integrity')
@@ -310,7 +337,7 @@ def _s1_or_state(report: Report, what: str) -> bool:
     if state == 'S1':
         return True
     if state is not None:
-        report.state.append('%s needs an S1 service (host directory, container mount, restic password, login and password, finished inventory) but production answers %s' % (what, state))
+        report.state.append('%s needs an S1 service (host directory, container mount, restic password, finished inventory) but production answers %s' % (what, state))
     return False
 
 

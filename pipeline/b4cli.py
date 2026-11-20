@@ -2,7 +2,7 @@
 
 odbcli contract these checks hold the implementation to (tester reading of matrix rows O1..O15, OS1, OS2):
   client/pyproject.toml [project.scripts] odbcli = <module>:<function>; the function is main(argv=None) -> int.
-  global options before the subcommand: --url --ca --cert --key --timeout --login --password --token; each also
+  global options before the subcommand: --url --ca --cert --key --timeout --password (revision 8: cert and key optional all-or-none, login and token removed); each also
   readable from the environment is not required. Subcommands: help [CMDNAME], info [--page N], snapshots [--limit],
   files SNAPSHOT_ID [--prefix --offset --limit], prepare SNAPSHOT_ID [--path], status EXPORT_ID, delete EXPORT_ID,
   sites [--limit --offset --query], libraries SITE_ID [--limit --offset], discovery-status, health,
@@ -19,13 +19,11 @@ import importlib
 import io
 import json
 import re
-import sys
 import tempfile
 import tomllib
 from pathlib import Path
 
 from pipeline import b4base as base, b4client, cmdcases, credentials, live
-from pipeline.b4base import NO_CREDS
 from pipeline.report import Report
 
 PYPROJECT = 'client/pyproject.toml'
@@ -76,9 +74,11 @@ def run_cli(main, argv: list[str]) -> tuple[object, str, str]:
 
 def global_args(creds: bool = True, **extra) -> list[str]:
     ca, cert, key = live._tls_files()
-    args = ['--url', live.base_url(), '--ca', ca, '--cert', cert, '--key', key, '--timeout', '30']
+    args = ['--url', live.base_url(), '--ca', ca, '--timeout', '30']
+    if cert and key:
+        args += ['--cert', cert, '--key', key]
     if creds and live.token():
-        args += ['--token', live.token()]
+        args += ['--password', live.token()]
     for name, value in extra.items():
         args += ['--' + name, value]
     return args
@@ -232,7 +232,7 @@ def odbcli_transfer(row_id: str, sub: str, extra: list[str], flags: list[str], n
             report.env.append('production service unreachable: %s' % exc)
             state = None
         if state is not None and state != 'S1':
-            report.state.append('%s odbcli %s of a staged export needs an S1 service (host directory, container mount, restic password, login and password, finished inventory) but production answers %s' % (row_id, sub, state))
+            report.state.append('%s odbcli %s of a staged export needs an S1 service (host directory, container mount, restic password, finished inventory) but production answers %s' % (row_id, sub, state))
     report.finish(name)
 
 
@@ -254,23 +254,40 @@ def odbcli_call() -> None:
     report.finish('odbcli_call')
 
 
+def _last_line(out: str, err: str) -> str:
+    '''The last non-empty line of the captured output (the argparse or server error), never the usage block.'''
+    lines = [item.strip() for item in (err + out).splitlines() if item.strip()]
+    return lines[-1][:140] if lines else ''
+
+
 def odbcli_auth() -> None:
-    '''OS2: no credentials or a wrong password exit 1; the right login and password exit 0; --token is the alternative.'''
+    '''OS2 (revision 8): odbcli carries an OPTIONAL password (--password, ONEDRIVE_BACKUP_PASSWORD, config key password); cert and key are all-or-none; login and token are removed.'''
     report = Report()
     main = entry(report)
     if main is not None:
+        ca, cert, key = live._tls_files()
+        base_args = ['--url', live.base_url(), '--ca', ca, '--timeout', '30']
         code, out, err = run_cli(main, global_args(creds=False) + ['help'])
-        if code != 1:
-            report.product.append('OS2 odbcli help without login or token: exit %r, expected 1 (authentication, matrix C-K0); the server answers anonymous calls (see auth_token)' % code)
-        code, out, err = run_cli(main, global_args(creds=False, login='nobody', password='wrong') + ['help'])
-        if code != 1:
-            report.product.append('OS2 odbcli help with a wrong login and password: exit %r, expected 1' % code)
+        if code != 0:
+            report.product.append('OS2 odbcli help without a password: exit %r %s, expected 0 (the service is open; REQUIRED is {url}, cert and key are optional)' % (code, _last_line(out, err)))
+        for option in ('--login', '--token'):
+            code, out, err = run_cli(main, global_args(creds=False) + [option, 'x', 'help'])
+            if code != 2 or 'unrecognized arguments' not in out + err:
+                report.product.append('OS2 odbcli %s x help: exit %r %s, expected the usage error 2 "unrecognized arguments" (the option is removed in revision 8)' % (option, code, _last_line(out, err)))
+        for label, pair in (('--cert without --key', ['--cert', cert or ca]), ('--key without --cert', ['--key', key or ca])):
+            code, out, err = run_cli(main, base_args + pair + ['help'])
+            if code not in (1, 2):
+                report.product.append('OS2 odbcli %s: exit %r, expected 1 or 2 (cert and key are all-or-none; the live argparse or config validation decides)' % (label, code))
+        code, out, err = run_cli(main, base_args + ['--password', 'x' * 16, 'help'])
+        if live.token() is None and code not in (0, 1):
+            report.product.append('OS2 odbcli with --password: exit %r, expected 0 on the open service' % code)
+        if 'x' * 16 in out + err:
+            report.product.append('OS2 odbcli with --password: the password appears in stdout or stderr (never printed)')
         if live.token():
             code, out, err = run_cli(main, global_args(creds=True) + ['help'])
             if code != 0:
-                report.product.append('OS2 odbcli help with the run credentials: exit %r %s' % (code, (out + err).strip()[:100]))
-        else:
-            report.state.append('OS2 odbcli with the right login and password: ' + NO_CREDS)
+                report.product.append('OS2 odbcli help with the run password (--password only): exit %r %s' % (code, _last_line(out, err)))
+            _no_secret(report, 'OS2 odbcli with the run password', out, err)
     report.finish('odbcli_auth')
 
 
@@ -318,9 +335,9 @@ def odbcli_surface() -> None:
 
 
 def _no_secret(report: Report, label: str, out: str, err: str) -> None:
-    '''Neither the login, the password nor the token appears in stdout or stderr (O16 contract; the values are never printed).'''
+    '''The password never appears in stdout or stderr (O16 contract; the value is never printed).'''
     if any(secret and (secret in out or secret in err) for secret in credentials.secret_values()):
-        report.product.append('%s: the login, the password or the token appears in stdout or stderr (forbidden in every case)' % label)
+        report.product.append('%s: the password appears in stdout or stderr (forbidden in every case)' % label)
 
 
 def _begin_success(report: Report, main) -> None:
@@ -384,5 +401,5 @@ def odbcli_download_begin() -> None:
         if state == 'S1':
             _begin_success(report, main)
         elif state is not None:
-            report.state.append('O16 baseline odbcli download-begin of a prepared export needs an S1 service (host directory, container mount, restic password, login and password, finished inventory) but production answers %s' % state)
+            report.state.append('O16 baseline odbcli download-begin of a prepared export needs an S1 service (host directory, container mount, restic password, finished inventory) but production answers %s' % state)
     report.finish('odbcli_download_begin')

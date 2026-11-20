@@ -1,6 +1,8 @@
-'''B4 named checks of the server side: REST removal, authentication, routes, download link, transfer, mTLS.
+'''B4 named checks of the server side: REST removal, anonymous access (auth is off, revision 8), the adapter-native route set,
+download link, transfer.
 
-Every check talks to the production service named in pipeline/endpoints.env over mTLS. Findings are kept apart:
+Every check talks to the production service named in pipeline/endpoints.env over TLS; the client certificate pair is used only when
+the pipeline tree holds it (https without, mtls with). Findings are kept apart:
 PRODUCT (the deployed service or its code breaks the contract), STATE (the case needs state or credentials the
 owner has not provisioned) and ENVIRONMENT (the pipeline cannot reach the service).
 '''
@@ -9,18 +11,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
-import shutil
-import socket
-import ssl
-import subprocess
-import tempfile
-import urllib.parse
 
 from pipeline import b4base as base, cmdcases, live
-from pipeline.b4base import JSON_HEADERS, NO_CREDS, ZERO_ID, Q
-from pipeline.environment import PipelineEnvError, endpoint
+from pipeline.b4base import JSON_HEADERS, ZERO_ID, Q
 from pipeline.report import Report
 
 SERVER = 'src/onedrive_api/server.py'
@@ -34,8 +28,6 @@ REST = (
 )
 FILL = {'site_id': 'site-1', 'snapshot_id': 'abcdef12', 'export_id': ZERO_ID}
 COMMANDS = base.COMMANDS
-UPGRADE = {'Connection': 'Upgrade', 'Upgrade': 'websocket', 'Sec-WebSocket-Version': '13',
-           'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ=='}
 URL_RE = re.compile('^/downloads/[0-9a-f]{32}/[^/]+$')
 
 
@@ -55,10 +47,7 @@ def _try(report: Report, label: str, func, *args, **kwargs):
 
 
 def _gated(report: Report, label: str, status: int, auth: bool) -> bool:
-    '''True (and a STATE finding) when 401 is the token gate and the run has no credentials to pass it.'''
-    if status == 401 and not (auth and live.token()):
-        report.state.append('%s: answered 401 and %s, so the case cannot see past the token gate' % (label, base.NO_CREDS))
-        return True
+    '''Revision 8 (AU1): the service is open, there is no token gate; a 401 is a PRODUCT finding of the caller, never a STATE.'''
     return False
 
 
@@ -79,32 +68,6 @@ def rest_removed() -> None:
     report.finish('rest_removed')
 
 
-def _ws_cases(report: Report, prefix: str) -> None:
-    '''F10 (revision 4, 10.2): exact statuses and no tolerance.
-
-    Plain GET /ws answers 404 with and without the run token. A WebSocket Upgrade handshake
-    answers 403 with and without the token (refused by the ASGI server itself), never 101: no handshake completes.
-    '''
-    for label, headers in (('GET /ws', {}), ('GET /ws with a WebSocket Upgrade handshake', UPGRADE)):
-        for auth in (False, True):
-            tag = '%s %s %s' % (prefix, label, 'with token' if auth else 'without token')
-            if auth and not live.token():
-                report.state.append('%s: needs the token T: %s' % (tag, NO_CREDS))
-                continue
-            wanted = 403 if headers is UPGRADE else 404
-            got = _try(report, tag, base.probe, 'GET', '/ws', None, headers, auth)
-            if got is not None and got[0] != wanted:
-                report.product.append('%s: answered %d %s, expected exactly %d (the /ws route stays closed, F10; never 101)'
-                                      % (tag, got[0], base.brief(got[2]), wanted))
-
-
-def ws_closed() -> None:
-    '''F10: /ws stays closed (decision 6, adapter bug c0438b53): plain GET 404 with and without the token, the Upgrade handshake 403 with and without the token, never 101.'''
-    report = Report()
-    _ws_cases(report, 'F10')
-    report.finish('ws_closed')
-
-
 def _openapi(report: Report):
     got = _try(report, 'F5 GET /openapi.json', base.probe, 'GET', '/openapi.json')
     if got is None:
@@ -120,13 +83,23 @@ def _openapi(report: Report):
         return None
 
 
-def surface_framework_routes() -> None:
-    '''F1..F11: framework routes of the adapter plus the returned download routes; /ws, uploads and REST stay closed.'''
+# The adapter-native HTTP routes of mcp-proxy-adapter 8.11.20 (research report 129d1156, R2; app_factory_routes.py and public_downloads.py of the
+# wheel). Revision 8 removes the project route filter, so every one of them is served; any other route is a project-owned addition.
+NATIVE_PATHS = (
+    '/health', '/commands', '/heartbeat', '/api/jsonrpc', '/api/jsonrpc/batch', '/api/async', '/tools/{tool_name}',
+    '/api/transfer/uploads', '/api/transfer/uploads/{transfer_id}', '/api/transfer/uploads/{transfer_id}/chunks',
+    '/api/transfer/uploads/{transfer_id}/complete', '/api/transfer/downloads', '/api/transfer/downloads/{transfer_id}',
+    '/api/transfer/downloads/{transfer_id}/chunks', '/downloads/{file_id}/{filename}',
+)
+
+
+def adapter_native_surface() -> None:
+    '''F1..F11 (revision 8, 10.15.9.3 PP-D1c): the live route set equals the adapter-native set plus the SPA mount; any other route is RED.'''
     report = Report()
 
     def expect(label, method, path, statuses, body=None, headers=None):
         got = _try(report, label, base.probe, method, path, body, headers)
-        if got is None or _gated(report, label, got[0], True):
+        if got is None:
             return None
         if got[0] not in statuses:
             report.product.append('%s: answered %d %s, expected %s' % (label, got[0], base.brief(got[2]), ' or '.join(map(str, statuses))))
@@ -148,81 +121,50 @@ def surface_framework_routes() -> None:
     expect('F7 GET /redoc', 'GET', '/redoc', (200,))
     paths = _openapi(report)
     if paths is not None:
-        for row, wanted in (('F8', '/downloads/{file_id}/{filename}'), ('F9', '/api/transfer/downloads')):
-            if not any(p == wanted or p.startswith(wanted) for p in paths):
-                report.product.append('%s: the route schema has no %s (decision 3: the download routes are returned to the filter at %s)'
-                                      % (row, wanted, base.src_line(SERVER, 'allowed')))
-        for row, forbidden in (('F10', '/ws'), ('F11', '/api/transfer/uploads'), ('H1-H10', '/api/v1')):
-            found = [p for p in paths if p.startswith(forbidden)]
-            if found:
-                report.product.append('%s: the route schema still holds %s' % (row, found))
+        extra = sorted(set(paths) - set(NATIVE_PATHS))
+        if extra:
+            report.product.append('F-surface: the live route set holds %s, which are not adapter-native routes of the pinned adapter: a project-owned route (RED, PP-D1c of revision 8)' % extra)
+        absent = sorted(set(NATIVE_PATHS) - set(paths))
+        if absent:
+            report.product.append('F8-F11: the adapter-native routes %s are not served: the project route filter %s still hides them (10.15.2 (3): removed, nothing replaces it)'
+                                  % (absent, base.src_line(SERVER, 'ALLOWED_ROUTES')))
     else:
-        report.info.append('F8, F9: route presence is not provable without /openapi.json (F5 is RED); the behaviour of both routes is asserted by download_link and transfer_confinement')
-    _ws_cases(report, 'F10')
-    for label, method, path in (('F11 GET /api/transfer/uploads', 'GET', '/api/transfer/uploads'),
-                                ('F11 POST /api/transfer/uploads', 'POST', '/api/transfer/uploads')):
-        expect(label, method, path, (404,), b'{}' if method == 'POST' else None, JSON_HEADERS if method == 'POST' else None)
-    report.finish('surface_framework_routes')
+        report.info.append('F8, F9: route presence is not provable without /openapi.json (F5 is RED)')
+    report.info.append('the WebSocket /ws and the SPA StaticFiles mount are not part of /openapi.json: the mount is asserted by vue_static_serve, /ws is native and no longer asserted closed (F10, F11 retired)')
+    report.finish('adapter_native_surface')
 
 
-def _proxy_identity() -> tuple[str, str]:
-    '''Return the MCP Proxy host name from endpoints.env and its address from DNS (the name when DNS cannot resolve it).'''
-    try:
-        host = urllib.parse.urlsplit(endpoint('MCP_PROXY_URL')).hostname or ''
-    except PipelineEnvError:
-        host = ''
-    try:
-        return host, socket.gethostbyname(host)
-    except OSError:
-        return host, host
-
-
-def spoof_header_sets() -> list[tuple[str, dict]]:
-    '''Request headers that name the MCP Proxy; a direct peer carrying them gains nothing (R18: transport peer only).'''
-    name, address = _proxy_identity()
-    single = (('X-Forwarded-For', {'X-Forwarded-For': address}), ('Forwarded', {'Forwarded': 'for=%s;host=%s' % (address, name)}),
-              ('X-Real-IP', {'X-Real-IP': address}), ('Host', {'Host': name}))
-    merged: dict = {}
-    for _, headers in single:
-        merged.update(headers)
-    return list(single) + [('all four', merged)]
-
-
-def _unauthorized(status: int, decoded) -> bool:
-    error = decoded.get('error') if isinstance(decoded, dict) else None
-    return status == 401 and isinstance(error, dict) and error.get('code') == 401 and error.get('type') == 'authentication_error'
+def _ok(decoded) -> bool:
+    '''True for a JSON-RPC success reply of the adapter.'''
+    return isinstance(decoded, dict) and isinstance(decoded.get('result'), dict) and decoded['result'].get('success') is True
 
 
 def auth_token() -> None:
-    '''AU1..AU3, scope = the DIRECT peer (R18): no token, an empty token, spoofed proxy headers and a wrong token answer 401; the right token T runs the command.'''
+    '''AU1, AU2 (revision 8, 10.15.9.2): auth is off, an anonymous caller executes and a credential header of any value is not interpreted; AU3 is retired.'''
     report = Report()
     cfg = base.src_line('config/server.json', 'use_token')
-    denied = [('AU1 no token', None, None), ('AU1 empty X-API-Key value', '', None)]
-    denied += [('AU1 no token and spoofed %s' % label, None, headers) for label, headers in spoof_header_sets()]
-    denied += [('AU2 a wrong token', 'not-the-token', None), ('AU2 a wrong token and spoofed headers', 'not-the-token', spoof_header_sets()[-1][1])]
-    for label, token, extra in denied:
+    cases = [('AU1 no credential', None, None), ('AU2 an empty X-API-Key value', '', None), ('AU2 an X-API-Key value of any kind', 'any-value-at-all', None),
+             ('AU2 an Authorization Bearer header of any value', None, {'Authorization': 'Bearer any-value-at-all'})]
+    for label, token, extra in cases:
         got = _try(report, label, base.rpc, 'help', {}, token, extra)
         if got is None:
             continue
         status, decoded = got
-        if status != 401:
-            report.product.append('%s POST /api/jsonrpc help: answered %d, expected 401 (a direct peer needs the token T, R18; auth.use_token at %s)' % (label, status, cfg))
-        elif not _unauthorized(status, decoded):
-            report.product.append('%s: 401 body %r, expected {error: {code: 401, type: authentication_error}}' % (label, decoded))
+        if status != 200 or not _ok(decoded):
+            report.product.append('%s POST /api/jsonrpc help: answered %d %s, expected 200 and success: the service is open and interprets no credential (auth.use_token must be false, now at %s)'
+                                  % (label, status, str(decoded)[:100], cfg))
+            continue
+        names = sorted((decoded['result'].get('data') or {}).get('commands', {}))
+        if names != sorted(COMMANDS):
+            report.product.append('%s: help lists %d commands %s, expected exactly the 11 of rows M1..M11' % (label, len(names), names))
     one = json.dumps({'jsonrpc': '2.0', 'method': 'help', 'params': {}, 'id': 1}).encode('utf-8')
     transfer = json.dumps({'source_path': '/x', 'filename': 'x.bin', 'compression': 'identity'}).encode('utf-8')
-    for label, method, path, body in (('AU1 POST /api/jsonrpc/batch without token', 'POST', '/api/jsonrpc/batch', b'[' + one + b']'),
-                                      ('AU1 GET /downloads/<id>/<name> without token', 'GET', '/downloads/%s/x.bin' % ZERO_ID, None),
-                                      ('AU1 POST /api/transfer/downloads without token', 'POST', '/api/transfer/downloads', transfer)):
+    for label, method, path, body, wanted in (('AU1 POST /api/jsonrpc/batch without a credential', 'POST', '/api/jsonrpc/batch', b'[' + one + b']', (200,)),
+                                              ('AU1 GET /downloads/<id>/<name> without a credential', 'GET', '/downloads/%s/x.bin' % ZERO_ID, None, (404,)),
+                                              ('AU1 POST /api/transfer/downloads without a credential', 'POST', '/api/transfer/downloads', transfer, (400, 403, 404, 422))):
         got = _try(report, label, base.probe, method, path, body, JSON_HEADERS if body else None, False)
-        if got is not None and got[0] != 401:
-            report.product.append('%s: answered %d %s, expected 401 (every direct request needs the token T)' % (label, got[0], base.brief(got[2])))
-    if live.token():
-        got = _try(report, 'AU3 correct token', base.rpc, 'help', {}, live.token())
-        if got is not None and not (got[0] == 200 and isinstance(got[1], dict) and got[1].get('result', {}).get('success') is True):
-            report.product.append('AU3 POST /api/jsonrpc help with the correct token T: answered %d %s, expected 200 and success' % (got[0], str(got[1])[:120]))
-    else:
-        report.state.append('AU3 the correct token T = base64(login:password) executes the command: ' + NO_CREDS)
+        if got is not None and got[0] not in wanted:
+            report.product.append('%s: answered %d %s, expected %s (no 401 exists, the service is open; auth.use_token at %s)' % (label, got[0], base.brief(got[2]), ' or '.join(map(str, wanted)), cfg))
     report.finish('auth_token')
 
 
@@ -301,64 +243,20 @@ def _s1_download(report: Report) -> None:
 def download_link() -> None:
     '''Method 1 of decision 3: the temporary uuid4 link /downloads/<export_id>/<filename> of a staged export.'''
     report = Report()
-    probes = (('F8 GET a link without a token', 'GET', '/downloads/%s/x.bin' % ZERO_ID, False, (401,)),
-              ('F8 HEAD a link without a token', 'HEAD', '/downloads/%s/x.bin' % ZERO_ID, False, (401,)))
+    probes = (('F8 GET a link without a credential', 'GET', '/downloads/%s/x.bin' % ZERO_ID, False, (404,)),
+              ('F8 HEAD a link without a credential', 'HEAD', '/downloads/%s/x.bin' % ZERO_ID, False, (404,)))
     for label, method, path, auth, statuses in probes:
         got = _try(report, label, base.probe, method, path, None, None, auth)
         if got is not None and got[0] not in statuses:
-            report.product.append('%s: answered %d %s, expected 401 (the adapter token gate covers /downloads, M5 contract; the route is not served: filter at %s)' % (label, got[0], base.brief(got[2]), base.src_line(SERVER, 'allowed')))
+            report.product.append('%s: answered %d %s, expected 404 (the service is open, AU1: an unknown export id is 404, never a 401 gate; the route filter hides or gates it, see %s)' % (label, got[0], base.brief(got[2]), base.src_line(SERVER, 'allowed')))
     for label, path in (('unknown export id', '/downloads/%s/x.bin' % ZERO_ID), ('malformed export id', '/downloads/not-an-id/x.bin'),
                         ('uppercase export id', '/downloads/%s/x.bin' % ('ABCDEF01' * 4))):
         got = _try(report, 'F8 GET ' + label, base.probe, 'GET', path)
         if got is not None and not _gated(report, 'F8 GET ' + label, got[0], True) and got[0] != 404:
-            report.product.append('F8 GET %s with the token: answered %d, expected 404' % (label, got[0]))
+            report.product.append('F8 GET %s without a credential: answered %d, expected 404' % (label, got[0]))
     state = _try(report, 'service state', live.service_state)
     if state == 'S1':
         _try(report, 'download_link S1', _s1_download, report)
     elif state is not None:
-        report.state.append('M5/M6/F8 prepare, url field and GET of a staged export need an S1 service (host directory, container mount, restic password, login and password, finished inventory) but production answers %s' % state)
+        report.state.append('M5/M6/F8 prepare, url field and GET of a staged export need an S1 service (host directory, container mount, restic password, finished inventory) but production answers %s' % state)
     report.finish('download_link')
-
-
-def _attempt(context: ssl.SSLContext) -> str:
-    '''Return refused: ... when the TLS or HTTP exchange fails, otherwise served: <status>.'''
-    try:
-        status, _, _ = base.http_request('GET', '/health', None, None, context)
-        return 'served: %d' % status
-    except live.LiveUnreachable as exc:
-        return 'refused: %s' % exc
-
-
-def mtls_auth() -> None:
-    '''PX10 (R7, R18): no client certificate and an untrusted one are refused for every peer, the trusted pair is served; mTLS alone does not admit a direct peer.'''
-    report = Report()
-    ca, cert, key = live._tls_files()
-    if not all(os.path.isfile(item) for item in (ca, cert, key)):
-        report.env.append('TLS material is not readable: %s' % [ca, cert, key])
-        report.finish('mtls_auth')
-        return
-    bare = ssl.create_default_context(cafile=ca)
-    if not _attempt(bare).startswith('refused'):
-        report.product.append('a client without a certificate was served: %s' % _attempt(bare))
-    work = tempfile.mkdtemp(prefix='b4mtls')
-    try:
-        if shutil.which('openssl') is None:
-            report.env.append('openssl is not installed: the untrusted-certificate case cannot be built')
-        else:
-            done = subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:' + '2048', '-nodes', '-keyout', work + '/k.pem', '-out', work + '/c.pem', '-subj', '/CN=untrusted-b4', '-days', '1'], capture_output=True, text=True)
-            if done.returncode != 0:
-                report.env.append('openssl could not make the untrusted certificate: ' + done.stderr.strip()[:120])
-            else:
-                other = ssl.create_default_context(cafile=ca)
-                other.load_cert_chain(work + '/c.pem', work + '/k.pem')
-                if not _attempt(other).startswith('refused'):
-                    report.product.append('a client with an untrusted certificate was served: %s' % _attempt(other))
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
-    good = _try(report, 'trusted pair', _attempt, live._context())
-    if good is not None and good != 'served: 200':
-        report.product.append('the trusted client pair got %s, expected served: 200' % good)
-    got = _try(report, 'trusted pair without token', base.rpc, 'help', {}, None)
-    if got is not None and got[0] != 401:
-        report.product.append('the trusted client pair without the token T on POST /api/jsonrpc: answered %d, expected 401 (mTLS is mandatory for every peer, the token T for a direct peer, R7)' % got[0])
-    report.finish('mtls_auth')
