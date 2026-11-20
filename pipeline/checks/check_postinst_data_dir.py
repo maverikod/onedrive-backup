@@ -46,8 +46,7 @@ def _state_directory(report: Report) -> None:
         wanted = ['-d', '-m', '0700', '-o', 'onedrive-backup', '-g', 'onedrive-backup']
         made = [call for call in first.installs() if call[:7] == wanted and str(host.state) in call]
         if first.rc != 0 or not host.state.is_dir():
-            report.product.append('P2 postinst run 1: exit %d, state directory %s exists %s, stderr %r'
-                                   % (first.rc, host.state, host.state.is_dir(), first.err.strip()[:200]))
+            report.product.append('P2 postinst run 1: exit %d, state directory %s exists %s, stderr %r' % (first.rc, host.state, host.state.is_dir(), first.err.strip()[:200]))
             return
         if not made:
             report.product.append('P2 postinst did not create %s with install -d -m 0700 -o onedrive-backup -g onedrive-backup; install calls: %s'
