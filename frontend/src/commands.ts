@@ -1,7 +1,9 @@
 // One typed table of the adapter commands the SPA calls: command -> { parameter -> { type, required } }.
 // It feeds the API client (buildParams) and the build step that writes dist/command-manifest.json.
 
-export type ParamType = 'string' | 'integer' | 'boolean' | 'number' | 'object' | 'array'
+// The live help of the service spells a nullable string parameter (file_path) exactly as the text below (matrix 10.18.7 (3)).
+export const NULLABLE_STRING = "['string', 'null']"
+export type ParamType = 'string' | 'integer' | 'boolean' | 'number' | 'object' | 'array' | typeof NULLABLE_STRING
 export interface ParamSpec {
   type: ParamType
   required: boolean
@@ -13,7 +15,7 @@ const int = (required: boolean): ParamSpec => ({ type: 'integer', required })
 export const COMMANDS: Record<string, Record<string, ParamSpec>> = {
   backup_snapshots: { limit: int(false) },
   backup_list_files: { snapshot_id: str(true), prefix: str(false), offset: int(false), limit: int(false) },
-  backup_prepare_download: { snapshot_id: str(true), file_path: str(false) },
+  backup_prepare_download: { snapshot_id: str(true), file_path: { type: NULLABLE_STRING, required: false } },
   backup_download_status: { export_id: str(true) },
   backup_delete_export: { export_id: str(true) },
   backup_sites_list: { limit: int(false), offset: int(false), query: str(false) },
