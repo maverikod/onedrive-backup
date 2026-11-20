@@ -1,9 +1,5 @@
 {
-  "url": "https://onedrive-backup:8050",
+  "url": "https://192.168.254.26:8443",
   "ca": "/etc/onedrive-backup/certs/proxy-ca.crt",
-  "cert": "/etc/onedrive-backup/certs/client.crt",
-  "key": "/etc/onedrive-backup/certs/client.key",
-  "timeout": 180,
-  "login": "CHANGE_ME",
-  "password": "CHANGE_ME"
+  "timeout": 180
 }

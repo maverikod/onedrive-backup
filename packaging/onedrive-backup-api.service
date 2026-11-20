@@ -1,5 +1,5 @@
 [Unit]
-Description=OneDrive Backup API production Docker container (mTLS)
+Description=OneDrive Backup API production Docker container (HTTPS)
 Wants=network-online.target docker.service
 After=network-online.target docker.service
 Requires=docker.service

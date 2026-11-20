@@ -58,7 +58,7 @@ Priority: optional
 Maintainer: OneDrive Backup maintainers <maintainers@example.org>
 Depends: docker.io | docker-ce | moby-engine, adduser, util-linux, ca-certificates, python3, restic
 Description: OneDrive Business backup API and Docker host controller
- Installs version-pinned Docker service, systemd timer, mTLS configuration,
+ Installs version-pinned Docker service, systemd timer, HTTPS configuration,
  encrypted restic backup management, and host bootstrap tools. No credentials
  or server certificates are included in the Debian package.
 EOF

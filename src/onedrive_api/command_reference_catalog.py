@@ -173,7 +173,7 @@ CATALOG_REFERENCE: dict[str, dict[str, Any]] = {
                     "created_at": "ISO timestamp of staging.",
                     "expires_at": "ISO timestamp of expiry (normally +24 h).",
                     "url": "Temporary download link /downloads/<export_id>/<filename>; "
-                    + "GET it with the API token header.",
+                    + "GET it (with the X-API-Key header once the password mode is on).",
                 },
                 "example": {
                     "export_id": "b" * 32,

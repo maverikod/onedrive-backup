@@ -1,3 +1,27 @@
+## 0.3.19 — adapter-only server-auth HTTPS, open service, LAN port 8443 (matrix revision 8, group A: transport and auth)
+
+- The listener is server-auth HTTPS from the mcp-proxy-adapter configuration alone (`server.protocol` https, `server.ssl`
+  cert and key from the project CA; no `ca`); no client certificate is requested and plain HTTP is refused. `auth.use_token`
+  is false and `proxy_trust` is gone: the service is open on the LAN. The later password mode is the adapter static key,
+  switched on by configuration only (`auth.tokens` or `security.tokens` from a host secret file, header `X-API-Key`), and the
+  later exposure outside the LAN switches the same configuration to mtls.
+- Project-owned transport code removed from `src/onedrive_api/server.py`: `_validate_mtls_config`, `tls_server_settings`
+  (forced `CERT_REQUIRED`), `api_token` / `secure_auth` (base64 token from `api-credentials`), `ProxyTrustMiddleware` and the
+  `proxy_trust` configuration, `ALLOWED_ROUTES` with the route filter. Every route of the adapter is served as the adapter
+  defines it (`/ws`, `/api/transfer/uploads*`, `/api/async`, `/tools/*` included, open on the LAN); the one project hook besides
+  command registration, `set_public_download_resolver` and the transfer configuration is the single `StaticFiles` mount of
+  the SPA directory `/app/web` (`ONEDRIVE_BACKUP_WEB`), added last and empty until the SPA is built into the image.
+- The service port is published on the LAN: `docker-run.sh start` and `docker/compose.yml` map host 8443 to container 8050
+  (`https://192.168.254.26:8443`); the MCP Proxy still reaches `https://onedrive-backup:8050`. `docker-run.sh start` requires
+  only `server.crt` and `server.key` (the CA files stay provisioned, not required) and no longer reports `api-credentials`.
+  `scripts/issue-proxy-certificate.sh` adds the SAN `IP:192.168.254.26`.
+- Client and odbcli: `BackupClient(url, ca=None, cert=None, key=None, timeout=180, password=None)`; `cert` and `key` are
+  all-or-none (both: mTLS, neither: HTTPS), `login` and `token` are removed, `password` is sent as `X-API-Key` when set and
+  never printed. `odbcli`: only `--url` is required, `--login` and `--token` are removed, the password is `--password`,
+  `ONEDRIVE_BACKUP_PASSWORD` or the `password` config key.
+- `scripts/smoke-mtls.sh` is replaced by `scripts/smoke-https.sh`; `build.sh` and the documents name `python -m pipeline
+  smoke_https`. The standards section of `CLAUDE.md` and `AGENTS.md` carries the revision 8 text.
+
 ## 0.3.18 — data directory on /srv/archive and a writable rclone state copy (bugs 6508698d, be82d15d)
 
 - The data directory moves to `/srv/archive/onedrive-backup` (built-in default of `docker/deploy.sh`, `docker-run.sh`,

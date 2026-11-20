@@ -43,8 +43,8 @@ print("Current-release wheel checked:", matches[0].name)
 PY_CHECK_WHEEL
 STEP=docker-build
 docker build -f docker/Dockerfile -t "$IMAGE" -t 'vasilyvz/onedrive-backup:latest' .
-STEP=mtls-smoke
-python3 -m pipeline smoke_mtls
+STEP=https-smoke
+python3 -m pipeline smoke_https
 STEP=deb-build
 bash scripts/build-deb.sh
 STEP=registry-credentials

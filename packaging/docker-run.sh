@@ -95,7 +95,7 @@ case "$action" in
     docker inspect "$name" --format '{{.State.Status}} {{json .NetworkSettings.Ports}}'
     ;;
   ports)
-    echo "Not published on host; internal endpoint: https://$name:8050 (network $network)"
+    echo "Published on the LAN: https://<host>:8443 -> container port 8050; internal endpoint: https://$name:8050 (network $network)"
     ;;
   discover)
     [[ "${2:-}" = "" || "${2:-}" = "--dry-run" ]] || fail "Unknown discover argument"
@@ -130,8 +130,10 @@ case "$action" in
     docker exec "$name" python -m onedrive_api.sharepoint_backup "${@:2}"
     ;;
   start)
-    for f in server.crt server.key ca.crt proxy-ca.crt trust-bundle.pem; do
-      test -s "$config/certs/$f" || fail "Missing mTLS file: $f"
+    # Server-auth HTTPS needs only the server certificate and key; the CA and trust-bundle files stay provisioned for the
+    # later switch to mTLS but are not required.
+    for f in server.crt server.key; do
+      test -s "$config/certs/$f" || fail "Missing TLS file: $f"
     done
     # Protect mounted application credentials from traversal or exposure.
     test -d "$secrets" && ! test -L "$secrets" || fail "Missing private secrets directory"
@@ -149,9 +151,6 @@ case "$action" in
     fi
     seed_rclone_state
     check_state_copy
-    if ! test -s "$secrets/api-credentials"; then
-      echo "API credentials unset: every protected API request answers 401"
-    fi
     test -s "$config/server.json" || fail "Missing server.json"
     test -s "$config/backup.json" || fail "Missing backup.json"
     docker network inspect "$network" >/dev/null || fail "Missing Docker network $network"
@@ -160,6 +159,7 @@ case "$action" in
     docker run -d --name "$name" --restart unless-stopped       --env "ONEDRIVE_SCAFFOLD_MODE=$scaffold" \
       --user "$(id -u onedrive-backup):$(id -g onedrive-backup)" \
       --network "$network" --network-alias "$name" \
+      --publish "8443:8050" \
       --security-opt no-new-privileges:true \
       --mount "type=bind,src=$config,dst=/config,readonly" \
       --mount "type=bind,src=$data,dst=/data" \

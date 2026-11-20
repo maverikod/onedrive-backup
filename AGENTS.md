@@ -124,12 +124,14 @@ Do not read the other runtime's prompt files unless the task explicitly requires
 - One source of version: VERSION. Docker image, Debian package and client must use the identical release version.
 - CAS project ID: f6130c8b-1fde-4a35-bdae-e857dfbd6555. Git remote: git@github.com:maverikod/onedrive-backup.git, branch cas.
 - Inspect changes before writing. Git staging/commit/push only via CAS Git commands.
-- The single authoritative verification entrypoint is python -m pipeline. After image build, run python -m pipeline smoke_mtls.
+- The single authoritative verification entrypoint is python -m pipeline. After image build, run python -m pipeline smoke_https.
 - Release entrypoint build.sh: tests, client wheel/sdist, Docker image, versioned Debian package, Docker Hub, PyPI if authorized or local wheel.
 - Production deploy entrypoint docker/deploy.sh. Never launch an insecure service when certificates or backup mount are unavailable.
 - The local .env is ignored by Git and Docker. Deployment copies it to /var/lib/onedrive-backup/credentials/.env on HOST (0600). The public /etc/default/onedrive-backup contains only its pathname and nonsecret options.
-- mTLS uses trusted CA and one server/client certificate pair; revocation policy is managed by MCP Proxy. FastAPI is restricted to the internal Docker network. Real certificates are never committed or included in build artifacts.
+- Transport is HTTPS with server authentication only, set exclusively by the mcp-proxy-adapter config (server.protocol https, server certificate from the project CA); there is no client certificate, no nginx and no project-owned network, TLS, route-filter, middleware or authentication code. When the service is exposed outside the LAN the SAME adapter config switches to mtls (trusted CA, one server/client certificate pair, revocation by MCP Proxy). The service port is published on the LAN (https://192.168.254.26:8443 -> container port 8050; the MCP Proxy reaches it by the docker alias onedrive-backup). Real certificates are never committed or included in build artifacts.
+- Authentication is off for now (adapter auth.use_token false). The later password mode is the adapter static key (auth.tokens or security.tokens from a host secret file, header X-API-Key) switched on by configuration only; the Python client, odbcli and the SPA carry an optional password setting that is sent when configured.
+- The Vue 3 + Vite + TypeScript SPA (frontend/) is built by a Node stage of the service Dockerfile and mounted as static files by the service itself on the same origin as /api/jsonrpc; there is no second image.
 - Proxy registration is automatic using mcp-proxy:3004 on smart-assistant. Data volume /srv/archive/onedrive-backup must be backed by the mounted /srv/archive filesystem; deploy, postinst and every docker-run.sh action refuse otherwise.
 - The remote API permits read-only browsing and bounded temporary exports identified by opaque IDs; no arbitrary file downloads or adapter admin RPCs.
-- Python client exposes the complete application REST surface and verifies downloaded file size and SHA256 before atomically replacing the output.
+- Python client exposes the complete adapter command (JSON-RPC) surface and verifies downloaded file size and SHA256 before atomically replacing the output.
 - Stop on test errors and report them. All deployments are fail-closed.

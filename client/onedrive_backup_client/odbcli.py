@@ -7,8 +7,10 @@ call and download-link. stdout is JSON only. Exit codes: 0 success, 1 server ref
 2 usage error, 3 connection or local failure.
 
 Connection options come before the subcommand and can also be given as ODBCLI_URL, ODBCLI_CA, ODBCLI_CERT,
-ODBCLI_KEY, ODBCLI_TIMEOUT, ODBCLI_LOGIN, ODBCLI_PASSWORD and ODBCLI_TOKEN, or in the JSON file of --config
-(default ~/.config/onedrive-backup/client.json).
+ODBCLI_KEY, ODBCLI_TIMEOUT and ODBCLI_PASSWORD (or ONEDRIVE_BACKUP_PASSWORD), or in the JSON file of --config
+(default ~/.config/onedrive-backup/client.json). Only the URL is required; the CA is optional, the client
+certificate and key are optional all-or-none (both: mTLS, neither: HTTPS) and the password is optional (it is sent
+as X-API-Key when set and never printed).
 '''
 
 from __future__ import annotations
@@ -23,22 +25,29 @@ from typing import Any, Optional
 from .api import BackupClient
 from .errors import ClientError
 
-SETTINGS = ('url', 'ca', 'cert', 'key', 'timeout', 'login', 'password', 'token')
-REQUIRED = ('url', 'ca', 'cert', 'key')
+SETTINGS = ('url', 'ca', 'cert', 'key', 'timeout', 'password')
+REQUIRED = ('url',)
 DEFAULT_CONFIG = Path.home() / '.config' / 'onedrive-backup' / 'client.json'
+
+
+class _RemovedOption(argparse.Action):
+    """A connection option that no longer exists (login, token): refuse it as an unrecognized argument, whatever follows."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        parser.error('unrecognized arguments: %s' % option_string)
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='odbcli', description='Command line of the OneDrive Backup service; JSON on stdout.')
-    parser.add_argument('--config', help='JSON file with url, ca, cert, key, timeout, login, password or token')
+    parser.add_argument('--config', help='JSON file with url, ca, cert, key, timeout or password')
     parser.add_argument('--url', help='service URL https://host:port')
     parser.add_argument('--ca', help='CA certificate that signed the server certificate')
-    parser.add_argument('--cert', help='client certificate (mTLS)')
-    parser.add_argument('--key', help='client private key (mTLS)')
+    parser.add_argument('--cert', help='client certificate (mTLS); optional, all-or-none with --key')
+    parser.add_argument('--key', help='client private key (mTLS); optional, all-or-none with --cert')
     parser.add_argument('--timeout', type=int, help='request timeout in seconds')
-    parser.add_argument('--login', help='login; with --password it forms the token base64(login:password)')
-    parser.add_argument('--password', help='password of the login')
-    parser.add_argument('--token', help='ready token instead of login and password')
+    parser.add_argument('--password', help='optional password, sent as X-API-Key when the service requires one')
+    for removed in ('--login', '--token'):
+        parser.add_argument(removed, action=_RemovedOption, nargs='?', help=argparse.SUPPRESS)
     cmds = parser.add_subparsers(dest='command', required=True)
     cmds.add_parser('help', help='server command help').add_argument('cmdname', nargs='?', help='command to describe')
     cmds.add_parser('info', help='server information').add_argument('--page', type=int, help='page number')
@@ -103,6 +112,7 @@ def _client(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Backup
     values = {}
     for name in SETTINGS:
         values[name] = getattr(args, name) or os.environ.get('ODBCLI_' + name.upper()) or config.get(name)
+    values['password'] = values['password'] or os.environ.get('ONEDRIVE_BACKUP_PASSWORD')
     missing = [name for name in REQUIRED if not values[name]]
     if missing:
         parser.error('missing connection settings: ' + ', '.join('--' + name for name in missing))

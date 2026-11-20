@@ -1,6 +1,6 @@
 """Private operator CLI for SharePoint Online Graph discovery.
 
-Usage inside a configured mTLS service container:
+Usage inside a configured service container:
 python -m onedrive_api.sharepoint_discover_cli
 """
 

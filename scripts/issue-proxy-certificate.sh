@@ -19,13 +19,13 @@ fi
 trap 'if [[ ! -f "$DEST/$NAME.crt" ]]; then rm -f "$DEST/$NAME.csr" "$DEST/$NAME.key"; fi' EXIT
 openssl req -new -newkey rsa:3072 -nodes -sha256 \
   -subj '/C=UA/O=OneDrive Backup/CN=onedrive-backup' \
-  -addext 'subjectAltName=DNS:onedrive-backup,DNS:localhost,IP:127.0.0.1' \
+  -addext 'subjectAltName=DNS:onedrive-backup,DNS:localhost,IP:127.0.0.1,IP:192.168.254.26' \
   -keyout "$DEST/$NAME.key" -out "$DEST/$NAME.csr"
 cat > "$DEST/leaf.ext" <<'EOF'
 basicConstraints=critical,CA:FALSE
 keyUsage=critical,digitalSignature,keyEncipherment
 extendedKeyUsage=serverAuth,clientAuth
-subjectAltName=DNS:onedrive-backup,DNS:localhost,IP:127.0.0.1
+subjectAltName=DNS:onedrive-backup,DNS:localhost,IP:127.0.0.1,IP:192.168.254.26
 subjectKeyIdentifier=hash
 authorityKeyIdentifier=keyid,issuer
 EOF

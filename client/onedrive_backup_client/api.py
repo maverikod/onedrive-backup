@@ -1,17 +1,16 @@
 '''Python client of the OneDrive Backup command API: a thin wrapper over the mcp-proxy-adapter JsonRpcClient.
 
 The package owns no transport. Every command goes through JsonRpcClient.execute_command_unified (JSON-RPC over
-mTLS, POST /api/jsonrpc), the adapter transfer service moves downloads (/api/transfer/downloads), and the
-temporary uuid4 link /downloads/<export_id>/<filename> is read through the HTTP client of the adapter.
-Authentication is the token T = base64(login:password), or a ready token, in the X-API-Key header; the mTLS
-client certificate is mandatory. A downloaded file is verified (size and SHA256 of the export metadata)
-before it atomically replaces the output.
+server-auth HTTPS, POST /api/jsonrpc), the adapter transfer service moves downloads (/api/transfer/downloads), and
+the temporary uuid4 link /downloads/<export_id>/<filename> is read through the HTTP client of the adapter.
+The service is open: a configured password is sent as the X-API-Key header, none is sent otherwise. A client
+certificate and its key are optional, all-or-none: with both the adapter client uses mTLS, without them HTTPS.
+A downloaded file is verified (size and SHA256 of the export metadata) before it atomically replaces the output.
 '''
 
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
 import os
 import tempfile
@@ -73,26 +72,19 @@ def _digest(path: Path) -> tuple[int, str]:
 class BackupClient:
     '''Every command of the server as a method, plus call, raw_call and the verified downloads.'''
 
-    def __init__(self, url: str, ca: str, cert: str, key: str, timeout: int = 180,
-                 login: Optional[str] = None, password: Optional[str] = None,
-                 token: Optional[str] = None) -> None:
+    def __init__(self, url: str, ca: Optional[str] = None, cert: Optional[str] = None, key: Optional[str] = None,
+                 timeout: int = 180, password: Optional[str] = None) -> None:
         parts = urlsplit(url or '')
         if parts.scheme != 'https' or not parts.hostname:
             raise ClientError('TLS is mandatory: URL must be https://host[:port]')
-        if not (ca and cert and key):
-            raise ClientError('mTLS is mandatory: the CA, the client certificate and its key are required')
+        if bool(cert) != bool(key):
+            raise ClientError('cert and key are all-or-none: give both for mTLS or neither for HTTPS')
         self.url = url.rstrip('/')
-        self.ca, self.cert, self.key = str(ca), str(cert), str(key)
+        self.ca = str(ca) if ca else None
+        self.cert, self.key = (str(cert), str(key)) if cert and key else (None, None)
         self.timeout = timeout
         self._host, self._port = parts.hostname, parts.port or 443
-        if token:
-            self._token: Optional[str] = token
-        elif login is not None or password is not None:
-            if not login or not password or ':' in login:
-                raise ClientError('login and password are both required and the login holds no colon')
-            self._token = base64.b64encode((login + ':' + password).encode('utf-8')).decode('ascii')
-        else:
-            self._token = None
+        self._token: Optional[str] = password or None
 
     def __repr__(self) -> str:
         return 'BackupClient(url=%r, authenticated=%s)' % (self.url, self._token is not None)
@@ -101,7 +93,7 @@ class BackupClient:
 
     def _rpc(self) -> JsonRpcClient:
         return JsonRpcClient(
-            protocol='mtls', host=self._host, port=self._port,
+            protocol='mtls' if self.cert else 'https', host=self._host, port=self._port,
             token_header=TOKEN_HEADER if self._token else None, token=self._token,
             cert=self.cert, key=self.key, ca=self.ca, timeout=float(self.timeout))
 

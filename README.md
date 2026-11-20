@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.18 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.19 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,11 +6,11 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.18, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
-  mcp-proxy-adapter 8.11.20, HTTPS/mTLS TCP port 8050.
-- Debian host package: dist/onedrive-backup_0.3.18_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.18-py3-none-any.whl.
-- Verification: python -m pipeline; after image build: python -m pipeline smoke_mtls.
+- Docker image: vasilyvz/onedrive-backup:0.3.19, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
+  mcp-proxy-adapter 8.11.20, server-auth HTTPS (mcp-proxy-adapter configuration), container port 8050 published on the LAN as 8443.
+- Debian host package: dist/onedrive-backup_0.3.19_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.19-py3-none-any.whl.
+- Verification: python -m pipeline; after image build: python -m pipeline smoke_https.
 
 Build all release artifacts on CAS host via ./build.sh. It tests the code,
 builds Python client wheel and sdist, image, Debian package, publishes image
@@ -21,8 +21,9 @@ Release version is defined only in VERSION.
 ## Network, volumes and secrets
 
 Container: onedrive-backup, Docker network smart-assistant.
-FastAPI listens on container port 8050, but NO port is published on the host.
-Direct API and web UI access is limited to containers on smart-assistant.
+The service listens on container port 8050 with server-authentication HTTPS (no client certificate) and publishes it
+on the LAN as host port 8443 (https://192.168.254.26:8443); the MCP Proxy keeps reaching it by the docker alias
+https://onedrive-backup:8050 on smart-assistant. The service is open for now (adapter auth off).
 Automatic MCP Proxy registration is enabled:
 
 - Service ID: onedrive-backup
@@ -56,20 +57,20 @@ docker/deploy.sh copies it on the HOST to
 settings, not the credentials themselves. These registry credentials
 are NOT mounted into the container.
 
-## Mandatory mTLS certificates
+## Server certificates (HTTPS)
 
 Install the following external files under /etc/onedrive-backup/certs:
 
 - ca.crt: legacy trusted CA for internal client certificates
 - proxy-ca.crt: trust anchor for MCP Proxy and issuer of the service certificate
-- trust-bundle.pem: inbound mTLS trust bundle of both public CAs
-- server.crt and server.key: dual-purpose TLS identity for the server and proxy registration
+- trust-bundle.pem: trust bundle of both public CAs (provisioned for the later switch to mTLS, not required for HTTPS)
+- server.crt and server.key: dual-purpose TLS identity for the server and proxy registration (SAN: onedrive-backup, localhost, 127.0.0.1 and the LAN address 192.168.254.26)
 - client.crt and client.key: optional separately provisioned client identity (not installed by the server package)
 
-The server will not start when any required certificate or key is missing.
+The server will not start when server.crt or server.key is missing.
 For private keys use owner root, group onedrive-backup, mode 0640.
 Config files under /etc/onedrive-backup are owned by root:onedrive-backup.
-Client certificates are verified during the TLS handshake against trusted CAs.
+No client certificate is requested. Exposing the service outside the LAN switches the same adapter configuration to mtls.
 CRL validation and lifecycle are delegated to MCP Proxy, not to this server.
 TLS versions below 1.2, plaintext HTTP and certificates without trust
 validation are not permitted. All smoke-test keys are ephemeral and NEVER
@@ -92,7 +93,7 @@ changes nothing; `restic` must be installed on the host.
 
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.18_all.deb
+    sudo apt install ./onedrive-backup_0.3.19_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
@@ -124,22 +125,19 @@ the configured OneDrive remote is covered (no tenant-wide user discovery).
 ## API, read-only restic access
 
 The API is the set of mcp-proxy-adapter commands over JSON-RPC (`POST /api/jsonrpc`), reachable
-directly over mutual TLS and through MCP Proxy. There is no HTTP fallback and no REST layer: the
-routes `/api/v1/*` are removed. Every JSON-RPC call and every download of a direct peer (odbcli, the Python client, the Vue UI, the pipeline)
-needs the token header `X-API-Key`; the token is base64(login:password) of the one line `login:password` kept in
-`/var/lib/onedrive-backup/secrets/api-credentials` (mode 0600, owner onedrive-backup, mounted
-read-only at `/secrets`). Without a valid file (absent, empty or malformed) the service still starts and every direct request answers 401.
-The MCP Proxy peer is admitted with no token on mutual-TLS transport identity alone (its transport address must be
-one of the `proxy_trust.hosts` names of server.json), on every route it reaches and whether or not that file exists;
-`X-Forwarded-For`, `Forwarded`, `X-Real-IP` and `Host` grant nothing, and with no configured name nobody is
-admitted without a token. `/health` and
-`GET /commands` stay open for MCP Proxy; `/ws` and the upload routes are closed.
+directly over server-authentication HTTPS and through MCP Proxy. There is no HTTP fallback and no REST layer: the
+routes `/api/v1/*` are removed. The service is open for now: adapter `auth.use_token` is false, no credential is
+checked and every route the adapter itself serves (JSON-RPC, `/downloads`, `/api/transfer/*`, `/api/async`, `/tools/*`,
+`/ws`, `/docs`, `/openapi.json`) is reachable by any LAN host; the project owns no route filter, middleware or
+authentication code. The later password mode is the adapter static key, switched on by configuration only
+(`auth.use_token` true with the key in `auth.tokens` or `security.tokens` from a host secret file, header `X-API-Key`);
+the Python client and odbcli then send their optional `password` as that header.
 
 To prepare a single-file export call `backup_prepare_download` with snapshot_id and a relative
 file_path such as Documents/file.pdf. Without file_path the server stages a TAR.GZ export of the
 entire snapshot. The returned opaque export_id grants access only to that staged export, never to
 an arbitrary server-local path, and the field `url` is the temporary download link
-`/downloads/<export_id>/<filename>` (GET with the token header). The same export can be read through
+`/downloads/<export_id>/<filename>` (GET; with the key header once the password mode is on). The same export can be read through
 the adapter transfer service: `backup_download_begin` registers the session and
 `GET /api/transfer/downloads/{transfer_id}/chunks` serves it; the transfer is confined to the
 exports directory (`transfer.allowed_directories`). Temporary exports are plaintext, so treat
@@ -150,11 +148,11 @@ maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.18-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.19-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 
-Set the internal HTTPS URL, trusted CA, client CRT and client key in client.json.
+Set the HTTPS URL and the trusted CA in client.json; the client certificate and key are optional (both or neither: mTLS or HTTPS) and so is `password`.
 
     odbcli health
     odbcli snapshots
@@ -170,28 +168,26 @@ Set the internal HTTPS URL, trusted CA, client CRT and client key in client.json
 
 The Python client (BackupClient) is a thin wrapper over the mcp-proxy-adapter JsonRpcClient and `odbcli` is
 built on it: one method and one subcommand per server command, plus call, raw_call, health, fetch, download and
-download-link. Authentication is login and password (token base64(login:password)) or a ready token; the mTLS
-client certificate is mandatory. Downloads go through the adapter transfer service or the temporary link, and the
+download-link. Authentication is an optional `password`, sent as `X-API-Key` when configured; the client certificate and key are optional, both or neither. Downloads go through the adapter transfer service or the temporary link, and the
 size and SHA-256 of the export are verified before the atomic replace of the output.
 
-Client validates hostname, trusted CA and mutual TLS on every connection.
+Client validates hostname and trusted CA on every connection (mutual TLS when a client certificate is configured).
 Before committing an output, it validates downloaded length and SHA-256,
 then atomically moves its temporary file to the requested destination.
 
 
-## mTLS-сертификаты сервера
+## Сертификаты сервера (HTTPS)
 
 Единый сертификат сервера и исходящего подключения к MCP Proxy:
 mtls-certs/for-proxy/issued/onedrive-backup.crt и onedrive-backup.key.
 Он подписан CA mtls-certs/for-proxy/ca/ca.crt, который отдельно
 устанавливается как proxy-ca.crt для проверки подлинности самого прокси.
 Сертификат содержит CN=onedrive-backup, SAN DNS:onedrive-backup,
-DNS:localhost, IP:127.0.0.1 и EKU serverAuth + clientAuth.
+DNS:localhost, IP:127.0.0.1, IP:192.168.254.26 и EKU serverAuth + clientAuth.
 
 Обе секции server.ssl и registration.ssl указывают на единый
-/config/certs/server.crt и /config/certs/server.key. Для проверки
-входящих клиентских сертификатов используются публичные CA из
-trust-bundle.pem. Приватный ключ CA в контейнер не копируется.
+/config/certs/server.crt и /config/certs/server.key. Клиентский сертификат не запрашивается (server.protocol https);
+trust-bundle.pem остаётся подготовленным для будущего перехода на mtls. Приватный ключ CA в контейнер не копируется.
 CRL внутри сервера и Python-клиента не используются: политика
 отзыва сертификатов выполняется на стороне MCP Proxy.
 Сценарий docker/deploy.sh проверяет и переносит файлы на хост

@@ -74,19 +74,23 @@ class ClientTests(unittest.TestCase):
         with self.assertRaisesRegex(ClientError, 'TLS is mandatory'):
             BackupClient('http://localhost:8050', 'ca', 'cert', 'key')
 
-    def test_mtls_material_is_mandatory(self):
-        with self.assertRaisesRegex(ClientError, 'mTLS is mandatory'):
-            BackupClient('https://onedrive-backup:8050', '', 'cert', 'key')
+    def test_cert_and_key_are_all_or_none(self):
+        with self.assertRaisesRegex(ClientError, 'all-or-none'):
+            BackupClient('https://onedrive-backup:8050', 'ca', 'cert', None)
+        with self.assertRaisesRegex(ClientError, 'all-or-none'):
+            BackupClient('https://onedrive-backup:8050', 'ca', None, 'key')
+        self.assertIsNone(BackupClient('https://onedrive-backup:8050', 'ca').cert)
+        self.assertEqual(BackupClient('https://onedrive-backup:8050', 'ca', 'cert', 'key').cert, 'cert')
 
-    def test_login_and_password_form_the_token(self):
-        client = BackupClient('https://h:1', 'ca', 'cert', 'key', login='user', password='secret')
-        self.assertEqual(client._token, 'dXNlcjpzZWNyZXQ=')
+    def test_password_is_optional_and_never_printed(self):
+        client = BackupClient('https://h:1', 'ca', password='secret')
+        self.assertEqual(client._token, 'secret')
         self.assertNotIn('secret', repr(client))
-        with self.assertRaises(ClientError):
-            BackupClient('https://h:1', 'ca', 'cert', 'key', login='user')
-        with self.assertRaises(ClientError):
-            BackupClient('https://h:1', 'ca', 'cert', 'key', login='a:b', password='x')
-        self.assertEqual(BackupClient('https://h:1', 'ca', 'cert', 'key', token='ready')._token, 'ready')
+        self.assertIsNone(BackupClient('https://h:1', 'ca')._token)
+        with self.assertRaises(TypeError):
+            BackupClient('https://h:1', 'ca', login='user')
+        with self.assertRaises(TypeError):
+            BackupClient('https://h:1', 'ca', token='ready')
 
     def test_methods_send_only_supplied_parameters(self):
         rpc = FakeRpc({'backup_list_files': ok({'items': []})})
@@ -174,13 +178,22 @@ class OdbcliTests(unittest.TestCase):
                 code = exc.code
         return code, out.getvalue(), err.getvalue()
 
-    CONN = ('--url', 'https://h:1', '--ca', 'ca', '--cert', 'cert', '--key', 'key', '--login', 'u', '--password', 'p')
+    CONN = ('--url', 'https://h:1', '--ca', 'ca', '--cert', 'cert', '--key', 'key', '--password', 'p')
 
     def test_usage_errors_exit_2(self):
         self.assertEqual(self.run_cli('files')[0], 2)
         self.assertEqual(self.run_cli('status', '--no-such-option')[0], 2)
         self.assertEqual(self.run_cli(*self.CONN, 'call', 'help', '--params-json', 'not json')[0], 2)
         self.assertEqual(self.run_cli('snapshots')[0], 2)
+
+    def test_removed_login_and_token_options_are_unrecognized(self):
+        for option in ('--login', '--token'):
+            code, out, err = self.run_cli('--url', 'https://h:1', option, 'x', 'help')
+            self.assertEqual((code, out), (2, ''))
+            self.assertIn('unrecognized arguments: ' + option, err)
+
+    def test_cert_without_key_is_a_usage_error(self):
+        self.assertEqual(self.run_cli('--url', 'https://h:1', '--cert', 'cert', 'help')[0], 2)
 
     def test_success_prints_json(self):
         with patch.object(BackupClient, 'backup_snapshots', return_value={'items': [], 'count': 0}):
@@ -193,7 +206,7 @@ class OdbcliTests(unittest.TestCase):
             code, out, err = self.run_cli(*self.CONN, 'download-begin', '0' * 32)
         self.assertEqual((code, out), (1, ''))
         self.assertIn('404', err)
-        self.assertNotIn('dTpw', err)
+        self.assertNotIn('--password', err)
 
     def test_authentication_failure_exits_1(self):
         with patch.object(BackupClient, 'help', side_effect=ClientAuthenticationError('HTTP 401', code=401)):

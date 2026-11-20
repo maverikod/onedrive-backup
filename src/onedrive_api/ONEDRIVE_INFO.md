@@ -10,7 +10,7 @@
 
 В ранних выпусках реализованы Graph discovery и базовый CLI для отдельных зеркал/снимков библиотек. Команды MCP для обнаружения доступны, но реальный Graph и резервирование ещё не приняты: нет проверенного диска `/srv/archive`, restic-password и контрольного восстановления. Systemd timer отключён. Старый каталог выгрузок пока не адаптирован для полноценной навигации сайт → библиотека → снимок.
 
-Сервис поставляется как production-only; HTTP API доступен внутри Docker-сети под обязательным mTLS, без опубликованного порта хоста.
+Сервис поставляется как production-only; HTTP API работает по HTTPS с аутентификацией только сервера (без клиентского сертификата), порт 8050 контейнера опубликован в LAN как 8443 (`https://192.168.254.26:8443`); MCP Proxy обращается к `https://onedrive-backup:8050` по алиасу Docker-сети.
 
 ## Архитектура и поток данных
 
@@ -95,7 +95,7 @@ sudo onedrive-backup-docker status
 | `ONEDRIVE_CLIENT_CA_SOURCE` | Публичный доверенный клиентский CA |
 | `ONEDRIVE_CREDENTIALS_FILE` | Путь к root-only Docker Hub credentials |
 
-Все `*_SOURCE` — абсолютные пути к существующим обычным файлам; не используйте символьные ссылки. При обновлении установщик сохраняет локально изменённые настройки. Если сертификаты заменены, повторно выполняйте штатную процедуру установки и проверку mTLS.
+Все `*_SOURCE` — абсолютные пути к существующим обычным файлам; не используйте символьные ссылки. При обновлении установщик сохраняет локально изменённые настройки. Если сертификаты заменены, повторно выполняйте штатную процедуру установки и проверку HTTPS.
 
 ## Docker Hub credentials и публикация
 
@@ -105,9 +105,9 @@ sudo onedrive-backup-docker status
 
 Не выводите PAT или содержимое секретных файлов в логи, результаты MCP или Git.
 
-## Сертификаты, mTLS и CRL
+## Сертификаты, HTTPS и CRL
 
-Одна пара `server.crt`/`server.key`, выданная доверенным CA прокси, используется и для HTTPS-сервера, и для исходящей регистрации MCP Proxy. Требуются `CN/SAN DNS:onedrive-backup` и EKU `serverAuth`, `clientAuth`. Проверяются цепочка, DNS-имя, соответствие приватного ключа и назначение сертификата.
+Одна пара `server.crt`/`server.key`, выданная доверенным CA прокси, используется и для HTTPS-сервера, и для исходящей регистрации MCP Proxy. Требуются `CN/SAN DNS:onedrive-backup`, `IP:192.168.254.26` для LAN-адреса и EKU `serverAuth`, `clientAuth`. Проверяются цепочка, DNS-имя, соответствие приватного ключа и назначение сертификата. Клиентский сертификат не запрашивается; файлы CA и trust-bundle подготавливаются для будущего перехода на mtls.
 
 Файлы на хосте — `/etc/onedrive-backup/certs/server.crt`, `server.key`, `proxy-ca.crt`, `ca.crt`, `trust-bundle.pem`. В контейнере они видны под `/config/certs`, каталог /config монтируется только для чтения. HTTPS требует клиентский сертификат `CERT_REQUIRED`, TLS не ниже 1.2.
 
@@ -141,14 +141,14 @@ MCP Proxy проверяет `/health` и обращается к `GET /commands
 
 ## Токен API и загрузка выгрузок
 
-API — это команды mcp-proxy-adapter поверх JSON-RPC (`POST /api/jsonrpc`). REST `/api/v1/*` удалён. Каждый вызов JSON-RPC и каждая ссылка `/downloads/...` прямого клиента (odbcli, клиент Python, Vue, pipeline) защищены токеном в заголовке `X-API-Key`. Токен — base64(login:password); логин и пароль хранятся одной строкой `login:password` в файле `/var/lib/onedrive-backup/secrets/api-credentials` на хосте (режим 0600, владелец onedrive-backup; в контейнере `/secrets/api-credentials`). Без действующего файла (он отсутствует, пуст или неверного формата) сервис всё равно запускается, а все защищённые запросы прямых клиентов получают 401. Пир MCP Proxy допускается без токена по идентичности mTLS-соединения (адрес транспортного пира должен совпадать с одним из имён `proxy_trust.hosts` в server.json), на каждом маршруте и независимо от наличия этого файла; заголовки `X-Forwarded-For`, `Forwarded`, `X-Real-IP` и `Host` ничего не дают, а без настроенных имён никто не допускается без токена (fail closed). `/health` и `GET /commands` открыты для MCP Proxy; `/ws` и загрузка файлов на сервер закрыты.
+API — это команды mcp-proxy-adapter поверх JSON-RPC (`POST /api/jsonrpc`). REST `/api/v1/*` удалён. Сервис пока открыт: аутентификация адаптера выключена (`auth.use_token` false), все маршруты, которые обслуживает сам адаптер (`/api/jsonrpc`, `/downloads/...`, `/api/transfer/*`, `/api/async`, `/tools/*`, `/ws`, `/docs`, `/openapi.json`), доступны любому хосту LAN; собственного кода маршрутизации, фильтров, middleware или аутентификации у проекта нет. Позже пароль включается только конфигурацией адаптера (статический ключ `auth.tokens` или `security.tokens` из секретного файла хоста, заголовок `X-API-Key`); клиент Python и odbcli отправляют необязательный `password` этим заголовком.
 
-`backup_prepare_download` и `backup_download_status` возвращают поле `url` — временную ссылку `/downloads/<export_id>/<filename>` (GET с токеном). Другой способ — `backup_download_begin` и адаптерный `GET /api/transfer/downloads/{transfer_id}/chunks`; передача ограничена каталогом `/data/exports` (`transfer.allowed_directories`), размер и SHA-256 нужно проверить после загрузки.
+`backup_prepare_download` и `backup_download_status` возвращают поле `url` — временную ссылку `/downloads/<export_id>/<filename>` (GET; с заголовком ключа, когда включён режим пароля). Другой способ — `backup_download_begin` и адаптерный `GET /api/transfer/downloads/{transfer_id}/chunks`; передача ограничена каталогом `/data/exports` (`transfer.allowed_directories`), размер и SHA-256 нужно проверить после загрузки.
 
 ## Конфигурация server.json
 
 `/etc/onedrive-backup/server.json`, копия шаблона `config/server.json`, разделы:
-- `server`: host=0.0.0.0; port=8050; protocol=mtls; servername/advertised_host=onedrive-backup; cert/key и trust-bundle; log_level.
+- `server`: host=0.0.0.0; port=8050; protocol=https; servername/advertised_host=onedrive-backup; cert/key; log_level. Блок `auth`: use_token=false.
 - `registration`: enabled=true; protocol=mtls; register_url=https://mcp-proxy:3004/register; unregister_url=/unregister; server_id=onedrive-backup; cert/key как у сервера; ca=proxy-ca.crt; DNS/hostname check=true; heartbeat URL и interval.
 - `client.enabled=false`, `queue_manager.enabled=false`; прямой HTTP-клиент адаптера не создаётся.
 - `auth.use_token=false` и `auth.use_roles=false`: машинным клиентам необходим mTLS.
@@ -204,7 +204,7 @@ sudo onedrive-backup-docker check
 
 ## Systemd, расписание и безопасность запуска
 
-`onedrive-backup-api.service` управляет контейнером с mTLS. `onedrive-backup.service` вызывает host runner `onedrive-backup-docker backup` — один цикл discovery + синхронизация всех найденных библиотек + restic snapshots. `onedrive-backup.timer` содержит базовый календарь 02:30 с разбросом до 15 минут, `Persistent=true`. Функция настройки календаря и отслеживания отдельных jobs через MCP ещё не реализована.
+`onedrive-backup-api.service` управляет контейнером с HTTPS. `onedrive-backup.service` вызывает host runner `onedrive-backup-docker backup` — один цикл discovery + синхронизация всех найденных библиотек + restic snapshots. `onedrive-backup.timer` содержит базовый календарь 02:30 с разбросом до 15 минут, `Persistent=true`. Функция настройки календаря и отслеживания отдельных jobs через MCP ещё не реализована.
 
 **Таймер оставлен disabled/inactive.** Перед его включением требуется подтверждённый `/srv/archive`, app-only Graph доступ, `rclone.conf`, `restic-password`, инициализированный restic, полный dry-run, успешный первый снимок, `check` и контрольное восстановление с проверкой SHA-256. Глобальная блокировка `/data/backup.lock` исключает параллельные циклы.
 
@@ -227,7 +227,7 @@ odbcli download SNAPSHOT --output snapshot.tar.gz
 odbcli delete EXPORT_ID
 ```
 
-Клиент - тонкая обертка над JsonRpcClient библиотеки mcp-proxy-adapter, `odbcli` построен на клиенте. Вход: login и password (токен base64(login:password)) или готовый токен; клиентский сертификат mTLS обязателен. Скачивание идет через transfer-сервис адаптера или временную ссылку; размер и SHA-256 проверяются, после чего временный файл атомарно переименовывается. `--force` позволяет заменить уже существующий файл. Проверки TLS и hostname должны оставаться включёнными.
+Клиент - тонкая обертка над JsonRpcClient библиотеки mcp-proxy-adapter, `odbcli` построен на клиенте. Вход: необязательный `password` (отправляется заголовком `X-API-Key`, не печатается); клиентский сертификат и ключ необязательны и задаются вместе или не задаются (оба: mtls, ни одного: https). Скачивание идет через transfer-сервис адаптера или временную ссылку; размер и SHA-256 проверяются, после чего временный файл атомарно переименовывается. `--force` позволяет заменить уже существующий файл. Проверки TLS и hostname должны оставаться включёнными.
 
 ## Восстановление и контрольный прогон
 
@@ -241,7 +241,7 @@ odbcli delete EXPORT_ID
 
 - `help` есть, а `info` отсутствует: установлен старый production-образ либо команда не зарегистрирована.
 - MCP Proxy отвечает `returned no commands via get_methods()`: отсутствует endpoint `GET /commands`; проверьте разрешённые маршруты FastAPI.
-- TLS handshake failed: проверьте SAN, EKU, CA trust, права server.key и mTLS client identity. Не используйте `verify=False`.
+- TLS handshake failed: проверьте SAN (имя или IP, по которому вы подключаетесь), EKU, CA trust и права server.key. Не используйте `verify=False`.
 - `HTTP 503` на снимках в каркасе: ожидаемая блокировка; необходимы диск, секреты rclone и рабочий restic.
 - `HTTP 503` при штатном режиме: проверить mountpoint, `/secrets`, пароль restic и целостность репозитория.
 - `HTTP 400`: неправильные аргументы (snapshot_id, prefix, page).
@@ -254,7 +254,7 @@ odbcli delete EXPORT_ID
 
 ## Сборка, тестирование и правила релиза
 
-Единая контрольная точка: `python3 -m pipeline` — синтаксис, конфигурация, unit tests и безопасность. `python3 -m pipeline smoke_mtls` — реальное mTLS соединение с тестовыми ключами. В production-образе запускаются браузерные тесты FastAPI. После изменения состава команд проверяются `help` и последовательное чтение абсолютно всех страниц `info`.
+Единая контрольная точка: `python3 -m pipeline` — синтаксис, конфигурация, unit tests и безопасность. `python3 -m pipeline smoke_https` — реальное HTTPS-соединение с тестовыми ключами. В production-образе запускаются браузерные тесты FastAPI. После изменения состава команд проверяются `help` и последовательное чтение абсолютно всех страниц `info`.
 
 `build.sh` — единственная сборочная точка: Python wheel/sdist, Docker image, Debian, публикация при наличии прав, установка production. Используйте версию из `VERSION` для образа, пакета и клиента.
 

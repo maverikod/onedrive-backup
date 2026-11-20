@@ -2,13 +2,12 @@
   "server": {
     "host": "0.0.0.0",
     "port": 8050,
-    "protocol": "mtls",
+    "protocol": "https",
     "servername": "onedrive-backup",
     "advertised_host": "onedrive-backup",
     "ssl": {
       "cert": "/config/certs/server.crt",
       "key": "/config/certs/server.key",
-      "ca": "/config/certs/trust-bundle.pem",
       "crl": null,
       "dnscheck": false,
       "check_hostname": null
@@ -61,7 +60,7 @@
     "check_hostname": false
   },
   "auth": {
-    "use_token": true,
+    "use_token": false,
     "use_roles": false,
     "tokens": {},
     "roles": {}
@@ -82,11 +81,6 @@
     "enabled": false,
     "public_paths": [
       "/commands"
-    ]
-  },
-  "proxy_trust": {
-    "hosts": [
-      "mcp-proxy"
     ]
   }
 }
