@@ -115,7 +115,9 @@ def make_app(config_path: str | Path):
     set_public_download_resolver(app, _resolve_download)
     # The built SPA is served by the service itself on the same origin. The mount is the LAST route,
     # so it never shadows an adapter route; it answers GET and HEAD only and 404 for an absent file.
-    app.mount("/", StaticFiles(directory=os.environ.get(WEB_DIR_ENV, DEFAULT_WEB_DIR), check_dir=False), name="web")
+    web_dir = os.environ.get(WEB_DIR_ENV, DEFAULT_WEB_DIR)
+    # html=True serves the index page at / (hash routing: no history fallback, an unknown path stays 404).
+    app.mount("/", StaticFiles(directory=web_dir, html=True, check_dir=False), name="web")
     return app
 
 

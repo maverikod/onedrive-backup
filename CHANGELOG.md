@@ -1,3 +1,19 @@
+## 0.3.20 — Vue SPA served by the service, backup timer kept over an upgrade (matrix revision 8, group B)
+
+- The user's web UI is a Vue 3 + Vite + TypeScript single page application under `frontend/` (`package.json`, lockfile,
+  `.node-version` 22, Vitest groups auth, commands, paging, polling, download, error banner, no-demo-data, `npm test`). It talks only
+  to the adapter command API (`POST /api/jsonrpc`, `X-API-Key` only after a 401 and only in page memory) and to `/downloads`.
+  Hash routes: `#/snapshots`, `#/snapshots/<id>/files`, `#/exports/<export_id>`, `#/sites`, `#/sites/<site_id>/libraries`,
+  `#/discovery`, `#/help`, `#/info`, `#/signed-out`; test ids and the logout and polling rules follow matrix section 10.18
+  (candidate, not approved). The build is reproducible (fixed file names `assets/app.js`, `assets/app.css`, SOURCE_DATE_EPOCH) and
+  emits `command-manifest.json` from the one typed command table `frontend/src/commands.ts`.
+- `docker/Dockerfile` gains a `node:22` build stage (`npm ci`, `npm run build`) and copies the build to `/app/web`, which the
+  existing `StaticFiles` mount serves (now with `html=True`, so `GET /` is the index page; an unknown path stays 404). No second
+  image, no nginx, no new route or transport code. The SPA is at https://192.168.254.26:8443/.
+- `packaging/prerm`: an upgrade no longer disables and stops `onedrive-backup.timer`; an enabled and active timer stays so, a
+  disabled one stays disabled, a removal or deconfigure still disables and stops it, and a fresh install never enables it
+  (TODO 70425f95).
+
 ## 0.3.19 — adapter-only server-auth HTTPS, open service, LAN port 8443 (matrix revision 8, group A: transport and auth)
 
 - The listener is server-auth HTTPS from the mcp-proxy-adapter configuration alone (`server.protocol` https, `server.ssl`

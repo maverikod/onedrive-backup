@@ -1,0 +1,43 @@
+// One typed table of the adapter commands the SPA calls: command -> { parameter -> { type, required } }.
+// It feeds the API client (buildParams) and the build step that writes dist/command-manifest.json.
+
+export type ParamType = 'string' | 'integer' | 'boolean' | 'number' | 'object' | 'array'
+export interface ParamSpec {
+  type: ParamType
+  required: boolean
+}
+
+const str = (required: boolean): ParamSpec => ({ type: 'string', required })
+const int = (required: boolean): ParamSpec => ({ type: 'integer', required })
+
+export const COMMANDS: Record<string, Record<string, ParamSpec>> = {
+  backup_snapshots: { limit: int(false) },
+  backup_list_files: { snapshot_id: str(true), prefix: str(false), offset: int(false), limit: int(false) },
+  backup_prepare_download: { snapshot_id: str(true), file_path: str(false) },
+  backup_download_status: { export_id: str(true) },
+  backup_delete_export: { export_id: str(true) },
+  backup_sites_list: { limit: int(false), offset: int(false), query: str(false) },
+  backup_libraries_list: { site_id: str(true), limit: int(false), offset: int(false) },
+  backup_discovery_status: {},
+  help: { cmdname: str(false) },
+  info: { page: int(false) },
+}
+
+// Commands the SPA deliberately does not call: the download goes through the temporary link, not the adapter transfer path.
+export const NOT_USED: string[] = ['backup_download_begin']
+
+/** Build the parameter object of one command: an unset (undefined or null) optional is omitted, never sent as null. */
+export function buildParams(command: string, values: Record<string, unknown>): Record<string, unknown> {
+  const spec = COMMANDS[command]
+  if (!spec) throw new Error(`command ${command} is not in the command table`)
+  const out: Record<string, unknown> = {}
+  for (const [name, value] of Object.entries(values)) {
+    if (!(name in spec)) throw new Error(`parameter ${name} is not accepted by ${command}`)
+    if (value === undefined || value === null) continue
+    out[name] = value
+  }
+  for (const [name, item] of Object.entries(spec)) {
+    if (item.required && !(name in out)) throw new Error(`parameter ${name} is required by ${command}`)
+  }
+  return out
+}

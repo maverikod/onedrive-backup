@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.19 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.20 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,11 +6,15 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.19, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
+- Docker image: vasilyvz/onedrive-backup:0.3.20, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
   mcp-proxy-adapter 8.11.20, server-auth HTTPS (mcp-proxy-adapter configuration), container port 8050 published on the LAN as 8443.
-- Debian host package: dist/onedrive-backup_0.3.19_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.19-py3-none-any.whl.
+- Debian host package: dist/onedrive-backup_0.3.20_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.20-py3-none-any.whl.
 - Verification: python -m pipeline; after image build: python -m pipeline smoke_https.
+- Web UI: a Vue 3 single page application built into the service image (Node 22 stage of docker/Dockerfile, no nginx, no second
+  image) and served by the service itself at https://192.168.254.26:8443/ (the same origin as /api/jsonrpc and /downloads, server-auth
+  HTTPS, hash routes: #/snapshots, #/sites, #/discovery, #/help, #/info). The service is open on the LAN, so the page asks for a key
+  only after a 401 answer and keeps it in page memory. Sources: frontend/ (`npm ci`, `npm run build`, `npm test`).
 
 Build all release artifacts on CAS host via ./build.sh. It tests the code,
 builds Python client wheel and sdist, image, Debian package, publishes image
@@ -93,7 +97,7 @@ changes nothing; `restic` must be installed on the host.
 
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.19_all.deb
+    sudo apt install ./onedrive-backup_0.3.20_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
@@ -148,7 +152,7 @@ maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.19-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.20-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 

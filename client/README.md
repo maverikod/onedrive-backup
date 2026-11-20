@@ -10,7 +10,7 @@ all-or-none (both: mTLS, neither: HTTPS). The service is open for now; an option
 `X-API-Key` header when configured (`--password`, `ONEDRIVE_BACKUP_PASSWORD` or the `password` config key) and is never printed.
 
 ```bash
-python3 -m pip install onedrive_backup_client-0.3.19-py3-none-any.whl
+python3 -m pip install onedrive_backup_client-0.3.20-py3-none-any.whl
 odbcli --config client.json snapshots
 odbcli --config client.json files <snapshot_id>
 odbcli --config client.json download <snapshot_id> --path Documents/file.pdf --output file.pdf

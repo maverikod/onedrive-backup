@@ -23,6 +23,16 @@ RUN set -eu; \
     chmod 0755 /out/rclone; \
     /out/rclone version
 
+# The Vue SPA of the service: built in a Node 22 stage (reproducible: npm ci from the lockfile, fixed SOURCE_DATE_EPOCH)
+# and copied to /app/web, which the service mounts as static files. No second image, no nginx.
+FROM node:22-bookworm-slim AS web-build
+WORKDIR /build/frontend
+COPY frontend/package.json frontend/package-lock.json frontend/.node-version ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ ./
+ENV SOURCE_DATE_EPOCH=1700000000
+RUN npm run build
+
 FROM python:3.12-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     ONEDRIVE_BACKUP_CONFIG=/config/backup.json ONEDRIVE_BACKUP_DATA=/data
@@ -38,6 +48,7 @@ COPY VERSION /opt/onedrive-backup/VERSION
 RUN groupadd -g 1000 onedriveagent && useradd -u 1000 -g onedriveagent -s /usr/sbin/nologin -M onedriveagent \
     && mkdir -p /config /data /secrets /rclone-state /app/web \
     && chmod 755 /opt/onedrive-backup
+COPY --from=web-build /build/frontend/dist/ /app/web/
 WORKDIR /opt/onedrive-backup
 ENV PYTHONPATH=/opt/onedrive-backup
 # The container runs as the host service uid, which has no passwd entry, so HOME is / and restic would try
