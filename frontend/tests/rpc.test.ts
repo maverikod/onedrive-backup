@@ -59,8 +59,8 @@ describe('auth', () => {
 })
 
 describe('commands', () => {
-  it('has one table of the ten commands the SPA calls and one it does not', () => {
-    expect(Object.keys(COMMANDS)).toHaveLength(10)
+  it('has one table of the thirteen commands the SPA calls and one it does not', () => {
+    expect(Object.keys(COMMANDS)).toHaveLength(13)
     expect(NOT_USED).toEqual(['backup_download_begin'])
   })
 
@@ -94,15 +94,20 @@ describe('download', () => {
 
 describe('routes', () => {
   it('parses every hash route of the route table', () => {
-    expect(parseHash('').name).toBe('redirect')
-    expect(parseHash('#/snapshots').name).toBe('snapshots')
-    expect(parseHash('#/snapshots/abc/files?prefix=a%2Fb&offset=100')).toMatchObject({ name: 'files', params: { id: 'abc' } })
-    expect(parseHash('#/snapshots/abc/files?prefix=a%2Fb').query.get('prefix')).toBe('a/b')
+    expect(parseHash('').name).toBe('main')
+    expect(parseHash('#/').name).toBe('main')
+    expect(parseHash('#/service').name).toBe('service')
+    expect(parseHash('#/service/snapshots/abc/files?prefix=a%2Fb&offset=100')).toMatchObject({ name: 'files', params: { id: 'abc' } })
+    expect(parseHash('#/service/snapshots/abc/files?prefix=a%2Fb').query.get('prefix')).toBe('a/b')
     expect(parseHash('#/exports/xyz')).toMatchObject({ name: 'export', params: { id: 'xyz' } })
-    expect(parseHash('#/sites/a%2Cb/libraries')).toMatchObject({ name: 'libraries', params: { id: 'a,b' } })
-    expect(parseHash('#/help/info')).toMatchObject({ name: 'help', params: { cmd: 'info' } })
+    expect(parseHash('#/service/sites/a%2Cb/libraries')).toMatchObject({ name: 'libraries', params: { id: 'a,b' } })
     expect(parseHash('#/signed-out').name).toBe('signed-out')
     expect(parseHash('#/nowhere').name).toBe('notfound')
+  })
+  it('treats every route of the old table as an unknown route', () => {
+    for (const old of ['#/snapshots', '#/sites', '#/discovery', '#/help', '#/help/backup_snapshots', '#/info', '#/snapshots/abcdef12/files', '#/sites/site-1/libraries']) {
+      expect(parseHash(old).name).toBe('notfound')
+    }
   })
   it('builds hashes that parse back', () => {
     expect(parseHash(hrefFiles('a b', 'dir/x', 200)).params.id).toBe('a b')
@@ -125,5 +130,18 @@ describe('logout', () => {
     await expect(pending).rejects.toBeInstanceOf(Aborted)
     expect(auth.hasKey).toBe(false)
     expect(auth.needKey).toBe(false)
+  })
+  it('aborts one request alone when its own signal fires', async () => {
+    const hang = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        }),
+    )
+    vi.stubGlobal('fetch', hang)
+    const one = new AbortController()
+    const pending = call('help', {}, one.signal)
+    one.abort()
+    await expect(pending).rejects.toBeInstanceOf(Aborted)
   })
 })
