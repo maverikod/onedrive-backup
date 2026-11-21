@@ -10,12 +10,12 @@ with snapshots is not synced and an error is recorded; the checked-at timestamp 
 
 from __future__ import annotations
 
-from pipeline import be1
+from pipeline import be1rev10
 from pipeline.report import Report
 
 
 def run() -> None:
     '''Raise CheckFailure when the backup cycle does not meet the BE1 contract.'''
     report = Report()
-    be1.run_all(report)
+    be1rev10.run_all(report)
     report.finish('backup_empty_library')
