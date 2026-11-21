@@ -59,7 +59,7 @@ def http_request(method: str, path: str, body: bytes | None = None, headers: dic
                  context: ssl.SSLContext | None = None) -> tuple[int, dict, bytes]:
     '''Send one HTTPS request to the production service; return (status, lower-cased headers, body).'''
     parts = urllib.parse.urlsplit(live.base_url())
-    conn = http.client.HTTPSConnection(parts.hostname, parts.port or 443, context=context or live._context(), timeout=30)
+    conn = http.client.HTTPSConnection(parts.hostname or '', parts.port or 443, context=context or live._context(), timeout=30)
     try:
         conn.request(method, urllib.parse.quote(path, safe='/%?=&'), body=body, headers=headers or {})
         reply = conn.getresponse()
@@ -115,6 +115,8 @@ def command_params(command: str) -> list[str]:
     '''Return the parameter names the live service documents for one command (help cmdname).'''
     status, decoded = rpc('help', {'cmdname': command}, live.token())
     try:
+        if not isinstance(decoded, dict):
+            return []
         return sorted(decoded['result']['data']['metadata']['parameters'])
     except (KeyError, TypeError):
         return []
@@ -192,7 +194,6 @@ def unknown_site_id() -> str:
     kind, code, message, data = live.request('backup_sites_list', {'limit': 1000})
     known = {str(item.get('site_id')) for item in (data.get('items', []) if kind == 'success' and isinstance(data, dict) else []) if isinstance(item, dict)}
     return next((site for site in UNKNOWN_SITE_CANDIDATES if site not in known), 'unknown-site-' + '0' * 8)
-
 
 
 def site_cases(state) -> list[tuple[str, str, int, str, bool]]:
