@@ -70,7 +70,7 @@ class SharePointBackupTests(unittest.TestCase):
         """
         self.calls.append([str(value) for value in command])
         if "lsjson" in command:
-            return '[{"Name":"file.txt","IsDir":false}]'
+            return "[]" if "-R" in command else '[{"Name":"file.txt","IsDir":false}]'
         return ""
 
     def invoke(self, *, dry_run: bool = False) -> dict:
@@ -198,7 +198,7 @@ class SharePointBackupTests(unittest.TestCase):
             self.calls.append([str(value) for value in command])
             if "lsjson" in command:
                 drive = command[command.index("--onedrive-drive-id") + 1]
-                return "[]" if drive == "drive-A" else \
+                return "[]" if ("drive-A" if "-R" in command else drive) == "drive-A" else \
                     '[{"Name":"file.txt","IsDir":false}]'
             return ""
 
