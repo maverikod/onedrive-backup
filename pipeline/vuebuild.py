@@ -42,6 +42,8 @@ def live_schema(command: str) -> dict:
     '''Parameters the live help documents for one command: name -> specification.'''
     status, decoded = base.rpc('help', {'cmdname': command}, live.token())
     try:
+        if not isinstance(decoded, dict):
+            return {}
         return dict(decoded['result']['data']['metadata']['parameters'])
     except (KeyError, TypeError, ValueError):
         return {}
@@ -178,8 +180,7 @@ def build_cases(report: Report) -> None:
     if digests and digests[0] != digests[1]:
         differ = sorted(set(digests[0]) ^ set(digests[1]) | {n for n in set(digests[0]) & set(digests[1]) if digests[0][n] != digests[1][n]})
         report.product.append('V6 two builds of the same source differ: %s (the build must be reproducible: same file list and SHA-256 per file)' % differ[:8])
-    names = ' '.join(DESCRIBE.findall(' '.join((ROOT / item).read_text(encoding='utf-8', errors='replace') for item in (tracked_files() or [])
-                                                if item.startswith('frontend/') and re.search(r'\.(test|spec)\.[jt]s$', item)))).lower()
+    names = ' '.join(DESCRIBE.findall(' '.join((ROOT / item).read_text(encoding='utf-8', errors='replace') for item in (tracked_files() or []) if item.startswith('frontend/') and re.search(r'\.(test|spec)\.[jt]s$', item)))).lower()
     absent = [group for group in GROUPS if group not in names]
     if absent:
         report.product.append('V6 the Vitest groups %s are missing (required: %s)' % (absent, list(GROUPS)))
