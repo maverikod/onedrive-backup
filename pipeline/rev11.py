@@ -250,7 +250,7 @@ def _page(case: Case, limit: int, offset: int) -> bool:
         case.bad('limit/offset echo %s/%s or %d items for total %s, expected %s/%s' % (data['limit'], data['offset'], len(data['items']), data['total'], limit, offset))
     for item in data['items']:
         text = json.dumps([item.get('name'), item.get('dir'), item.get('site_name'), item.get('library_name')], ensure_ascii=False)
-        if sorted(item) != ITEM_KEYS or '.dup-' in text or 'sharepoint/' in text or KEY_SEGMENT.search(text):
+        if sorted(item) != sorted(ITEM_KEYS) or '.dup-' in text or 'sharepoint/' in text or KEY_SEGMENT.search(text):
             case.bad('item %s has other fields than %s or a key, sharepoint/ or .dup- fragment in a shown value' % (str(item)[:100], ITEM_KEYS))
             break
     order = [(key(i['name']), [-ord(c) for c in i['snapshot_time']]) for i in data['items']]
@@ -553,9 +553,10 @@ def client_check(command: str, method: str, name: str) -> None:
         if names != CLIENT_METHODS[method]:
             report.product.append('BackupClient.%s takes %s, expected %s' % (method, names, CLIENT_METHODS[method]))
         elif client is not None:
-            got = b4client.drive(getattr(client, method), **BASELINE[command])
-            if got != _call(command, BASELINE[command]):
-                report.product.append('BackupClient.%s(%s) returned %s, not the result of %s' % (method, BASELINE[command], str(got)[:100], command))
+            got, error = b4client.drive(getattr(client, method), **BASELINE[command])
+            if error is not None or got != _call(command, BASELINE[command]):
+                report.product.append('BackupClient.%s(%s) returned %s (error %s), not the result of %s'
+                                      % (method, BASELINE[command], str(got)[:100], error, command))
     report.finish(name)
 
 
