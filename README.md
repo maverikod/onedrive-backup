@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.20 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.21 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,10 +6,10 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.20, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
+- Docker image: vasilyvz/onedrive-backup:0.3.21, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
   mcp-proxy-adapter 8.11.20, server-auth HTTPS (mcp-proxy-adapter configuration), container port 8050 published on the LAN as 8443.
-- Debian host package: dist/onedrive-backup_0.3.20_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.20-py3-none-any.whl.
+- Debian host package: dist/onedrive-backup_0.3.21_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.21-py3-none-any.whl.
 - Verification: python -m pipeline; after image build: python -m pipeline smoke_https.
 - Web UI: a Vue 3 single page application built into the service image (Node 22 stage of docker/Dockerfile, no nginx, no second
   image) and served by the service itself at https://192.168.254.26:8443/ (the same origin as /api/jsonrpc and /downloads, server-auth
@@ -21,6 +21,17 @@ builds Python client wheel and sdist, image, Debian package, publishes image
 to Docker Hub, and optionally publishes client to PyPI. If the PyPI
 token is missing or dontpubpypi is configured, the client remains local.
 Release version is defined only in VERSION.
+
+Colliding names (matrix revision 10). Two files of one library that share a folder and whose names are equal after
+Unicode NFC normalisation and case folding (for example one name typed in the NFC and the NFD form) cannot both live at
+one mirror path: rclone mirrors the first and ignores the rest. Every further copy is kept: the service scans the library
+read-only, lets the sync mirror the first object, then fetches each extra by its Graph item id (read-only GET, the
+redirect target without the Authorization header) and stores it beside its twin as `<stem>.dup-<h><ext>`, where `<h>` is
+the first 8 hex digits of sha256 of the item id (more digits on a name clash). The copy is verified against the size and
+quickXorHash of the listing and lands in the same restic snapshot. A kept and verified copy leaves the library `ok` and is
+reported by the `duplicates` list and `duplicate_summary` of the run record and by one WARNING log line; a failed fetch or a
+hash mismatch makes the library `duplicate_incomplete` (an error library, exit code 1). A real source object named like a
+stored copy is not synced and is reported (`DUPLICATE_NAME_RESERVED`). No command, parameter or response schema changes.
 
 ## Network, volumes and secrets
 
@@ -97,7 +108,7 @@ changes nothing; `restic` must be installed on the host.
 
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.20_all.deb
+    sudo apt install ./onedrive-backup_0.3.21_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
@@ -152,7 +163,7 @@ maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.20-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.21-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 
