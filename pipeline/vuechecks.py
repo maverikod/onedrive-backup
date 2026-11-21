@@ -20,7 +20,7 @@ from pipeline.vuebase import (ROOT, REFERENCE, SCRIPT_TAG, LEGACY_MARKERS, ASSET
                               removed_ui, scan_secrets, spa_files, tracked_files)
 
 # Action table of section 7.4: one SPA action -> the adapter command and the parameters it must send (names; fixed values where stated).
-ACTIONS = (
+ACTIONS: tuple[tuple[str, str, tuple[str, ...], dict[str, int]], ...] = (
     ('V4 snapshot list (U5)', 'backup_snapshots', ('limit',), {'limit': 100}),
     ('V4 snapshot files (U6)', 'backup_list_files', ('snapshot_id', 'prefix', 'offset', 'limit'), {'limit': 100}),
     ('V4 export start (U7)', 'backup_prepare_download', ('snapshot_id', 'file_path'), {}),
