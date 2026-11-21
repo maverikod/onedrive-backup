@@ -9,7 +9,6 @@ postinst is redirected as in pipeline.postinstfix.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from pipeline import archivefs, postinstfix
 
