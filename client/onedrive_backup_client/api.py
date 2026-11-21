@@ -184,6 +184,21 @@ class BackupClient:
     def backup_download_begin(self, export_id: str) -> Any:
         return self._command('backup_download_begin', export_id=export_id)
 
+    def filter_options(self, site_ids: Optional[list] = None) -> Any:
+        '''Sites that have indexed snapshots and the backup dates of the ticked sites (backup_filter_options).'''
+        return self._command('backup_filter_options', site_ids=site_ids)
+
+    def search_files(self, site_ids: Optional[list] = None, dates: Optional[list] = None, name_part: str = '',
+                     limit: int = 100, offset: int = 0) -> Any:
+        '''Files of the ticked sites and dates whose name matches, star is a wildcard (backup_search_files).'''
+        return self._command('backup_search_files', site_ids=site_ids or None, dates=dates or None,
+                             name_part=name_part or None, limit=limit, offset=offset)
+
+    def suggest_names(self, text: str, site_ids: Optional[list] = None, dates: Optional[list] = None,
+                      limit: int = 10) -> Any:
+        '''Distinct file names for the autocomplete list (backup_suggest_names).'''
+        return self._command('backup_suggest_names', text=text, site_ids=site_ids or None, dates=dates or None, limit=limit)
+
     # verified downloads
 
     @staticmethod
