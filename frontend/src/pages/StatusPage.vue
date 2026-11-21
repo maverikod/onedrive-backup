@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// A8 discovery status (polled every 30 s), A9 help, A10 info.
+// svc-discovery (A8, polled every 30 s while visible), svc-help (A9), svc-info (A10) of the service page.
 import { useCommand } from '../command'
 import DataView from '../components/DataView.vue'
 import ErrorBanner from '../components/ErrorBanner.vue'
@@ -8,7 +8,7 @@ import { invoke } from '../rpc'
 
 const props = defineProps<{ kind: 'discovery' | 'help' | 'info'; route: Route }>()
 
-const command = props.route.params.cmd ?? ''
+const command = props.route.query.get('cmd') ?? ''
 const page = Math.max(1, intParam(props.route.query, 'page', 1))
 
 function load(): Promise<unknown> {
@@ -32,12 +32,12 @@ const titles = { discovery: 'Discovery status', help: 'Help', info: 'Info' }
 </script>
 
 <template>
-  <section v-if="settled" :data-testid="'page-' + kind">
+  <section v-if="settled" :data-testid="'svc-' + kind">
     <h1>{{ titles[kind] }}</h1>
     <ErrorBanner :banner="banner" />
     <p v-if="stale" data-testid="stale">Showing the last good answer from {{ lastGood }}.</p>
     <DataView v-if="!banner" :data="data" />
-    <p v-if="kind === 'help' && command !== ''"><a href="#/help">All commands</a></p>
+    <p v-if="kind === 'help' && command !== ''"><a :href="hrefHelp()">All commands</a></p>
     <ul v-if="kind === 'help' && !banner">
       <li v-for="name in names()" :key="name"><a :href="hrefHelp(name)">{{ name }}</a></li>
     </ul>
