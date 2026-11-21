@@ -8,12 +8,14 @@ from typing import Any
 from .command_reference_catalog import CATALOG_REFERENCE
 from .command_reference_core import CORE_REFERENCE
 from .command_reference_exports import EXPORT_REFERENCE
+from .command_reference_filter import FILTER_REFERENCE
 from .command_reference_sharepoint import SHAREPOINT_REFERENCE
 
 REFERENCE: dict[str, dict[str, Any]] = {
     **SHAREPOINT_REFERENCE,
     "help": CORE_REFERENCE["help"],
     **CATALOG_REFERENCE,
+    **FILTER_REFERENCE,
     **EXPORT_REFERENCE,
     "info": CORE_REFERENCE["info"],
 }
