@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The single filter page '#/': site and date checkboxes, the file name field with its autocomplete, ONE result area with exactly
 // three columns (site, file name, date) and the inline export panel. The filter state lives in the hash (pushState, no remount).
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { Banner } from '../command'
 import ErrorBanner from '../components/ErrorBanner.vue'
 import {
@@ -22,7 +22,7 @@ import {
   type Filter,
   type Route,
 } from '../lib'
-import { Aborted, AuthRequired, RpcError, invoke } from '../rpc'
+import { Aborted, AuthRequired, RpcError, auth, invoke } from '../rpc'
 import ExportPage from './ExportPage.vue'
 
 const props = defineProps<{ route: Route }>()
@@ -106,6 +106,8 @@ async function start(): Promise<void> {
   await applyFilter(filter, false)
 }
 void start()
+// After a key was typed following a 401 the page loads again, as every page of the SPA does.
+watch(() => auth.epoch, () => void start())
 
 async function toggleSite(id: string): Promise<void> {
   tickedSites.value = tickedSites.value.includes(id) ? tickedSites.value.filter((item) => item !== id) : [...tickedSites.value, id]
