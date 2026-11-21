@@ -19,7 +19,8 @@ import subprocess
 import urllib.parse
 from pathlib import Path
 
-from pipeline import b4base as base, live
+from typing import Any
+from pipeline import live
 from pipeline.report import Report
 
 # Section 10.11.10 action table: command -> (keys always sent, keys sent only when set, fixed values).
@@ -46,7 +47,7 @@ SETTLE_MS = 600
 def problem() -> str | None:
     '''Return why the driver cannot run (package or Chromium missing), or None when it can.'''
     try:
-        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]  # the gate mypy environment lacks the pinned playwright package
     except ImportError as exc:
         return 'the playwright package is not importable in the pipeline environment (%s); install pipeline/requirements.txt' % exc
     try:
@@ -68,7 +69,7 @@ def _spki(root: str) -> str:
                 der = tls.getpeercert(binary_form=True)
     except (OSError, ssl.SSLError) as exc:
         raise live.LiveUnreachable('the certificate of %s is not verified by the project CA: %s: %s' % (root, type(exc).__name__, exc))
-    pub = subprocess.run(['openssl', 'x509', '-pubkey', '-noout'], input=ssl.DER_cert_to_PEM_cert(der), capture_output=True, text=True, check=True).stdout
+    pub = subprocess.run(['openssl', 'x509', '-pubkey', '-noout'], input=ssl.DER_cert_to_PEM_cert(der or b''), capture_output=True, text=True, check=True).stdout
     key = subprocess.run(['openssl', 'pkey', '-pubin', '-outform', 'DER'], input=pub.encode(), capture_output=True, check=True).stdout
     return base64.b64encode(hashlib.sha256(key).digest()).decode()
 
@@ -78,10 +79,11 @@ class Driver:
 
     def __init__(self, root: str) -> None:
         self.root = root.rstrip('/')
-        self.play = self.browser = None
+        self.play: Any = None
+        self.browser: Any = None
 
     def __enter__(self) -> 'Driver':
-        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]  # the gate mypy environment lacks the pinned playwright package
         self.play = sync_playwright().start()
         self.browser = self.play.chromium.launch(headless=True, args=['--ignore-certificate-errors-spki-list=' + _spki(self.root)])
         return self
