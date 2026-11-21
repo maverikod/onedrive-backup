@@ -67,6 +67,7 @@ def _register_commands() -> None:
         BackupSnapshots,
     )
     from .commands_base import BackupHelpCommand
+    from .commands_filter import BackupFilterOptions, BackupSearchFiles, BackupSuggestNames
     from .commands_sharepoint import (
         BackupDiscoveryStatus,
         BackupLibrariesList,
@@ -87,8 +88,19 @@ def _register_commands() -> None:
         BackupSitesList,
         BackupLibrariesList,
         BackupDiscoveryStatus,
+        BackupFilterOptions,
+        BackupSearchFiles,
+        BackupSuggestNames,
     ):
         registry.register(cls, "custom")
+
+
+def _start_index_catchup() -> None:
+    """Index in the background every snapshot that the file name index does not know yet (matrix 10.19.6)."""
+    from .file_index import FileIndex
+    from .file_index_build import ensure_catchup
+
+    ensure_catchup(_catalog, FileIndex(os.environ.get("ONEDRIVE_BACKUP_DATA", "/data")))
 
 
 def make_app(config_path: str | Path):
@@ -115,9 +127,10 @@ def make_app(config_path: str | Path):
     # this server's configuration file on its own: without this call every transfer is denied.
     get_config().set("transfer", transfer)
     _register_commands()
+    _start_index_catchup()
     set_public_download_resolver(app, _resolve_download)
-    # The built SPA is served by the service itself on the same origin. The mount is the LAST route,
-    # so it never shadows an adapter route; it answers GET and HEAD only and 404 for an absent file.
+    # The built SPA is served by the service itself on the same origin as the last route, so it never shadows an adapter
+    # route; it answers GET and HEAD only and 404 for an absent file.
     web_dir = os.environ.get(WEB_DIR_ENV, DEFAULT_WEB_DIR)
     # html=True serves the index page at / (hash routing: no history fallback, an unknown path stays 404).
     app.mount("/", StaticFiles(directory=web_dir, html=True, check_dir=False), name="web")
