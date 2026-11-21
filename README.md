@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.21 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.22 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,10 +6,11 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.21, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
+- Docker image: vasilyvz/onedrive-backup:0.3.22, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
   mcp-proxy-adapter 8.11.20, server-auth HTTPS (mcp-proxy-adapter configuration), container port 8050 published on the LAN as 8443.
-- Debian host package: dist/onedrive-backup_0.3.21_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.21-py3-none-any.whl.
+- Debian host package: dist/onedrive-backup_0.3.22_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.22-py3-none-any.whl.
+- File filter (0.3.22): the commands `backup_filter_options`, `backup_search_files` and `backup_suggest_names` search the files of every backup by site, backup date (calendar day in Europe/Kyiv, setting `ONEDRIVE_UI_TIMEZONE`) and name part (no star: contains; a star is a wildcard and anchors the pattern; backslash-star is a literal star; case and Unicode normalisation are ignored). They read a persistent per-snapshot name index (SQLite, `<data>/file-index/index.sqlite3`, derived from restic, rebuilt in the background for every snapshot that is not indexed yet and filled after every backup run). Client methods `filter_options`, `search_files`, `suggest_names`; odbcli subcommands `filter-options`, `search-files`, `suggest-names`. The web UI is one filter page `#/` (site and date checkboxes, name field with autocomplete, result table site / file name / date, download of a row) and one service page `#/service` (snapshots, sites, discovery, help, info).
 - Verification: python -m pipeline; after image build: python -m pipeline smoke_https.
 - Web UI: a Vue 3 single page application built into the service image (Node 22 stage of docker/Dockerfile, no nginx, no second
   image) and served by the service itself at https://192.168.254.26:8443/ (the same origin as /api/jsonrpc and /downloads, server-auth
@@ -108,7 +109,7 @@ changes nothing; `restic` must be installed on the host.
 
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.21_all.deb
+    sudo apt install ./onedrive-backup_0.3.22_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
@@ -163,7 +164,7 @@ maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.21-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.22-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 
