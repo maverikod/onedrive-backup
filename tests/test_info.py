@@ -70,6 +70,9 @@ class ReferenceContractTests(unittest.TestCase):
             "backup_sites_list",
             "backup_libraries_list",
             "backup_discovery_status",
+            "backup_filter_options",
+            "backup_search_files",
+            "backup_suggest_names",
             "help",
         ):
             category = "backup"
