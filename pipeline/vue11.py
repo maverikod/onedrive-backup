@@ -10,7 +10,6 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Any, Callable
-from unittest import mock
 
 from pipeline import b4base, live, rev11, vuebrowser, vuebuild, vuechecks, vueroutes
 from pipeline.checks import CheckFailure
@@ -264,7 +263,11 @@ class Cases:
             want = {'snapshot_id': row.get_attribute('data-snapshot-id'), 'file_path': row.get_attribute('data-path')}
             start = len(sess.calls)
             row.locator('[data-testid=result-download]').first.click()
-            page.wait_for_timeout(SETTLE_MS * 3)
+            page.wait_for_timeout(SETTLE_MS)
+            for _ in range(75):
+                if [c for c in sess.calls[start:] if c['method'] == 'backup_prepare_download' and c['reply'] is not None]:
+                    break
+                page.wait_for_timeout(200)
             sent = [c for c in sess.calls[start:] if c['method'] == 'backup_prepare_download']
             meta = vueroutes.reply_data(sent[0]) if sent else None
             if len(sent) != 1 or sent[0]['params'] != want or not isinstance(meta, dict):
@@ -291,6 +294,7 @@ class Cases:
             page = sess.page
             if not self.have('V9 L7', page, ('name-input',)):
                 return
+            page.clock.pause_at(page.evaluate('Date.now()') + 1000)
             start = len(sess.calls)
             tid(page, 'name-input').fill('акт')
             page.clock.fast_forward(200)
@@ -456,8 +460,7 @@ def vue_command_contract() -> None:
     Returns:
         None.
     '''
-    with mock.patch.object(b4base, 'COMMANDS', tuple(b4base.COMMANDS) + NEW_COMMANDS):
-        compose('vue_command_contract', vuechecks.vue_command_contract, _manifest)
+    compose('vue_command_contract', vuechecks.vue_command_contract, _manifest)
 
 
 def _calls(report: Report) -> None:
