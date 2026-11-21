@@ -267,7 +267,7 @@ def nav_cases(report: Report, drv: Driver) -> None:
         if (links - set(NAV.values()) - set(rows)) or (set(NAV.values()) - links):
             report.product.append('V8 index links: %s, expected exactly the nav %s plus the snap-open rows %s' % (sorted(links), sorted(NAV.values()), rows[:3]))
         kind, _, _, snaps = live.request('backup_snapshots', {'limit': PAGE_SIZE})
-        if kind == 'success' and snaps.get('items') and rows and rows[0] != '#/snapshots/%s/files' % snaps['items'][0]['id']:
+        if kind == 'success' and isinstance(snaps, dict) and snaps.get('items') and rows and rows[0] != '#/snapshots/%s/files' % snaps['items'][0]['id']:
             report.product.append('V8 snap-open: first href %s, expected #/snapshots/%s/files' % (rows[0], snaps['items'][0]['id']))
     finally:
         sess.close()
@@ -423,8 +423,12 @@ def _card(report: Report, sess: Session, eid: str, meta: dict, root: str) -> Non
 
 def _delete(report: Report, sess: Session, sid: str, eid: str, root: str) -> None:
     '''G7d (5): export-delete sends one backup_delete_export, asks no confirmation, navigates to the files page; the export is gone.'''
-    page, dialogs = sess.page, []
-    page.on('dialog', lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
+    def on_dialog(dialog) -> None:
+        dialogs.append(dialog.message)
+        dialog.dismiss()
+    page = sess.page
+    dialogs: list[str] = []
+    page.on('dialog', on_dialog)
     start = len(sess.calls)
     tid(page, 'export-delete').click()
     wait_hash(page, '#/snapshots/%s/files' % sid)
