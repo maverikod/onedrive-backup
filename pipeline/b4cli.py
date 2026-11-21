@@ -78,7 +78,7 @@ def global_args(creds: bool = True, **extra) -> list[str]:
     if cert and key:
         args += ['--cert', cert, '--key', key]
     if creds and live.token():
-        args += ['--password', live.token()]
+        args += ['--password', str(live.token())]
     for name, value in extra.items():
         args += ['--' + name, value]
     return args
