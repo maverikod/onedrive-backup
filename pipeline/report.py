@@ -11,7 +11,7 @@ from pipeline.checks import CheckFailure
 # service is open); an UNUSABLE run credentials file (N1, N2, N4) makes the cases RED as STATE or ENVIRONMENT, never PRODUCT.
 TOKEN_CHECKS = ('auth_token', 'cmd_', 'client_cmd_', 'odbcli_', 'download_link', 'transfer_confinement', 'client_download',
                 'client_auth', 'client_call_raw', 'client_fetch_integrity', 'adapter_native_surface',
-                'rest_removed', 'vue_', 'rclone_remote_access')
+                'rest_removed', 'vue_', 'rclone_remote_access', 'duplicate_')
 # A finding that only reports what the token gate answered to a request that carried no usable token.
 GATE_ANSWER = re.compile(r'(answered|got|code=|HTTP|status) ?401|ClientAuthenticationError|authentication_error')
 
