@@ -209,7 +209,7 @@ class FileIndex:
             return 0, []
         where, params = self._where(snapshot_ids, pattern)
         cases = "".join("WHEN ? THEN %d " % number for number in range(len(site_order)))
-        rank = "CASE s.site_key " + cases + "ELSE 100000 END"
+        rank = "CASE s.site_key " + cases + "ELSE 100000 END" if site_order else "0"
         conn = self.connect()
         try:
             total = conn.execute("SELECT COUNT(*) FROM file f WHERE " + where, params).fetchone()[0]
@@ -234,11 +234,11 @@ class FileIndex:
         if not snapshot_ids:
             return [], False
         where, params = self._where(snapshot_ids, pattern)
-        first = "CASE WHEN f.name_key LIKE ?" + ESCAPE + " THEN 0 ELSE 1 END" if pattern.prefix else "0"
+        first = "CASE WHEN f.name_key LIKE ?" + ESCAPE + " THEN 0 ELSE 1 END, f.name_key" if pattern.prefix else "f.name_key"
         conn = self.connect()
         try:
             query = "SELECT f.name_key, MIN(f.name) FROM file f WHERE " + where
-            query += " GROUP BY f.name_key ORDER BY " + first + ", f.name_key LIMIT ?"
+            query += " GROUP BY f.name_key ORDER BY " + first + " LIMIT ?"
             extra = [pattern.prefix] if pattern.prefix else []
             rows = conn.execute(query, params + extra + [limit + 1]).fetchall()
         finally:
