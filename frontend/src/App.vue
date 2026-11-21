@@ -6,18 +6,14 @@ import { parseHash } from './lib'
 import ExportPage from './pages/ExportPage.vue'
 import FilesPage from './pages/FilesPage.vue'
 import ListPage from './pages/ListPage.vue'
-import StatusPage from './pages/StatusPage.vue'
+import MainPage from './pages/MainPage.vue'
+import ServicePage from './pages/ServicePage.vue'
 import { auth, forgetAndAbort, setKey } from './rpc'
 
-function currentHash(): string {
-  if (parseHash(window.location.hash).name === 'redirect') window.history.replaceState(null, '', '#/snapshots')
-  return window.location.hash
-}
-
-const hash = ref(currentHash())
+const hash = ref(window.location.hash)
 const route = computed(() => parseHash(hash.value))
 function onHashChange(): void {
-  hash.value = currentHash()
+  hash.value = window.location.hash
 }
 window.addEventListener('hashchange', onHashChange)
 onBeforeUnmount(() => window.removeEventListener('hashchange', onHashChange))
@@ -47,28 +43,19 @@ function logout(): void {
 
 const notFound = { code: 404, message: 'route not found' }
 const views: Record<string, unknown> = {
-  snapshots: ListPage,
-  sites: ListPage,
+  main: MainPage,
+  service: ServicePage,
   libraries: ListPage,
   files: FilesPage,
   export: ExportPage,
-  discovery: StatusPage,
-  help: StatusPage,
-  info: StatusPage,
 }
-const viewProps = computed(() => {
-  const name = route.value.name
-  return ['snapshots', 'sites', 'libraries', 'discovery', 'help', 'info'].includes(name) ? { kind: name, route: route.value } : { route: route.value }
-})
+const viewProps = computed(() => (route.value.name === 'libraries' ? { kind: 'libraries', route: route.value } : { route: route.value }))
 </script>
 
 <template>
   <nav data-testid="nav">
-    <a data-testid="nav-snapshots" href="#/snapshots">Snapshots</a>
-    <a data-testid="nav-sites" href="#/sites">Sites</a>
-    <a data-testid="nav-discovery" href="#/discovery">Discovery</a>
-    <a data-testid="nav-help" href="#/help">Help</a>
-    <a data-testid="nav-info" href="#/info">Info</a>
+    <a data-testid="nav-search" href="#/">Поиск файлов</a>
+    <a data-testid="nav-service" href="#/service">Служебные</a>
     <button type="button" data-testid="logout" @click="logout">Log out</button>
   </nav>
   <form v-if="auth.needKey" class="key-form" data-testid="key-form" @submit.prevent="submitKey">
@@ -81,7 +68,7 @@ const viewProps = computed(() => {
   <main>
     <section v-if="route.name === 'signed-out'" data-testid="page-signed-out">
       <p>Signed out. No request is sent until you open a page.</p>
-      <a data-testid="signin" href="#/snapshots">Sign in</a>
+      <a data-testid="signin" href="#/">Sign in</a>
     </section>
     <section v-else-if="route.name === 'notfound'" data-testid="page-notfound">
       <ErrorBanner :banner="notFound" />
