@@ -114,4 +114,3 @@ class Postinst:
 
     def __exit__(self, *_exc: object) -> None:
         self.close()
-
