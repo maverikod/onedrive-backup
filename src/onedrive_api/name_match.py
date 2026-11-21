@@ -9,7 +9,7 @@ import unicodedata
 MAX_PATTERN = 128
 MAX_STARS = 8
 MIN_SUGGEST_CHARS = 2
-CONTROL = re.compile("[\u0000-\u001f\u007f]")
+CONTROL = re.compile("[\\u0000-\\u001f\\u007f]")
 # A stored copy of a document library collision: <stem>.dup-<h><ext>, h = 8, 12, 16 ... lowercase hex digits.
 COPY = re.compile(r"^(?P<stem>.*)\.dup-(?P<h>[0-9a-f]{8,64})(?P<ext>\.[^.]*)?$", re.S)
 
@@ -80,7 +80,7 @@ def parse_pattern(value: object) -> Pattern:
     text = value.strip()
     if len(text) > MAX_PATTERN or CONTROL.search(text):
         raise PatternError("name part is longer than %d characters or holds a control character" % MAX_PATTERN)
-    source, parts, stars, literal, plain, index = key(text), [], 0, 0, [], 0
+    source, parts, stars, literal, index = key(text), [], 0, 0, 0
     while index < len(source):
         char = source[index]
         if char == "\\" and source[index + 1:index + 2] in ("*", "\\"):
@@ -89,11 +89,9 @@ def parse_pattern(value: object) -> Pattern:
         elif char == "*":
             stars += 1
             parts.append("%")
-            plain.append("%")
             index += 1
             continue
         parts.append(_like_char(char))
-        plain.append(_like_char(char))
         literal += 1
         index += 1
     if stars > MAX_STARS:
