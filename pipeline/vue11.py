@@ -76,7 +76,13 @@ class Cases:
     '''
 
     def __init__(self, report: Report, drv: Any, root: str) -> None:
-        '''Keep the run parts.'''
+        '''Keep the run parts.
+
+                Args:
+                    report: the findings collector.
+                    drv: the headless driver.
+                    root: the SPA endpoint URL.
+                '''
         self.report, self.drv, self.root = report, drv, root
 
     def bad(self, text: str) -> None:
