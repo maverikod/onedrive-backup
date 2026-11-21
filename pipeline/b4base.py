@@ -35,7 +35,7 @@ NO_CREDS = 'the run credentials are unusable: ' + (credentials.problem() or 'no 
 URL_PATTERN = '/downloads/<32 lowercase hex>/<filename>'
 COMMANDS = ('help', 'info', 'backup_snapshots', 'backup_list_files', 'backup_prepare_download', 'backup_download_status',
             'backup_delete_export', 'backup_sites_list', 'backup_libraries_list', 'backup_discovery_status',
-            'backup_download_begin')
+            'backup_download_begin', 'backup_filter_options', 'backup_search_files', 'backup_suggest_names')
 FRAMEWORK_404 = b'{"detail":"Not Found"}'
 
 
