@@ -2,9 +2,9 @@
 
 It never talks to the server on its own: every subcommand calls the Python client, which is a thin wrapper over the
 mcp-proxy-adapter JsonRpcClient. One subcommand per server command (help, info, snapshots, files, prepare, status,
-delete, sites, libraries, discovery-status, download-begin) with all its arguments, plus health, fetch, download,
-call and download-link. stdout is JSON only. Exit codes: 0 success, 1 server refusal or authentication failure,
-2 usage error, 3 connection or local failure.
+delete, sites, libraries, discovery-status, download-begin, filter-options, search-files, suggest-names) with all its
+arguments, plus health, fetch, download, call and download-link. stdout is JSON only. Exit codes: 0 success, 1 server
+refusal or authentication failure, 2 usage error, 3 connection or local failure.
 
 Connection options come before the subcommand and can also be given as ODBCLI_URL, ODBCLI_CA, ODBCLI_CERT,
 ODBCLI_KEY, ODBCLI_TIMEOUT and ODBCLI_PASSWORD (or ONEDRIVE_BACKUP_PASSWORD), or in the JSON file of --config
@@ -35,6 +35,13 @@ class _RemovedOption(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         parser.error('unrecognized arguments: %s' % option_string)
+
+
+def _filters(sub: argparse.ArgumentParser, dates: bool = True) -> None:
+    '''Add the site and date filter arguments of the filter commands to a subparser.'''
+    sub.add_argument('--site-id', action='append', dest='site_ids', help='ticked site id; repeat for several sites')
+    if dates:
+        sub.add_argument('--date', action='append', dest='dates', help='ticked backup date YYYY-MM-DD; repeatable')
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -71,6 +78,16 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_argument('--limit', type=int)
     sub.add_argument('--offset', type=int)
     cmds.add_parser('discovery-status', help='state of the SharePoint inventory')
+    _filters(cmds.add_parser('filter-options', help='sites with backups and backup dates of the ticked sites'), dates=False)
+    sub = cmds.add_parser('search-files', help='search files by site, backup date and name part (a star is a wildcard)')
+    _filters(sub)
+    sub.add_argument('--name-part', default='', help='name part: no star contains, a star anchors the pattern')
+    sub.add_argument('--limit', type=int, default=100, help='page size 1..500')
+    sub.add_argument('--offset', type=int, default=0, help='rows to skip')
+    sub = cmds.add_parser('suggest-names', help='suggest file names for the typed text (2+ characters besides stars)')
+    sub.add_argument('--text', required=True, help='typed text')
+    _filters(sub)
+    sub.add_argument('--limit', type=int, default=10, help='maximum names 1..20')
     cmds.add_parser('health', help='probe the service with help')
     sub = cmds.add_parser('fetch', help='download a staged export through the transfer service')
     sub.add_argument('export_id')
@@ -160,6 +177,12 @@ def _execute(client: BackupClient, args: argparse.Namespace, params: dict) -> An
         return client.backup_libraries_list(args.site_id, args.limit, args.offset)
     if command == 'discovery-status':
         return client.backup_discovery_status()
+    if command == 'filter-options':
+        return client.filter_options(args.site_ids)
+    if command == 'search-files':
+        return client.search_files(args.site_ids, args.dates, args.name_part, args.limit, args.offset)
+    if command == 'suggest-names':
+        return client.suggest_names(args.text, args.site_ids, args.dates, args.limit)
     if command == 'download-begin':
         return client.backup_download_begin(args.export_id)
     if command == 'download-link':
