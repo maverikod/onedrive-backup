@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// A1 snapshots, A6 sites (search and paging), A7 libraries of one site (paging).
+// svc-snapshots (A1) and svc-sites (A6, search and paging) of the service page, page-libraries (A7, paging) of one site.
 import { ref } from 'vue'
 import { useCommand } from '../command'
 import DataView from '../components/DataView.vue'
@@ -22,8 +22,8 @@ function load(): Promise<unknown> {
 const { data, banner, settled } = useCommand(load)
 
 const config = {
-  snapshots: { title: 'Snapshots', page: 'page-snapshots', row: 'snap-row', link: 'snap-open', field: 'id' },
-  sites: { title: 'Sites', page: 'page-sites', row: 'site-row', link: 'site-libraries', field: 'site_id' },
+  snapshots: { title: 'Snapshots', page: 'svc-snapshots', row: 'snap-row', link: 'snap-open', field: 'id' },
+  sites: { title: 'Sites', page: 'svc-sites', row: 'site-row', link: 'site-libraries', field: 'site_id' },
   libraries: { title: 'Libraries', page: 'page-libraries', row: 'library-row', link: undefined, field: undefined },
 }[props.kind]
 
