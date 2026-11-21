@@ -17,15 +17,15 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from pipeline import checks, matrix
+from pipeline import checks, inv11, matrix
 from pipeline.checks import CheckFailure
 
 ROOT = Path(__file__).resolve().parents[2]
 SURFACES = ('mcp', 'rest', 'framework', 'client', 'cli', 'odbcli', 'ui', 'vue', 'auth', 'platform',
             'version', 'pipeline')
 BLOCKS = ('B1', 'B2', 'B3', 'B4', 'UI-VUE', 'B-SPLIT', 'FIRST-RUN', 'BACKUP-EMPTY', 'RCLONE-ACCESS', 'DATA-ARCHIVE-REV9', 'TRANSPORT-REV8', 'TIMER-PRESERVE', 'UI-ROUTES',
-          'DUP-KEEP-REV10')
-TAG = re.compile(r'^(CURRENT|(PLANNED|RETIRED)[(](B1|B2|B3|B4|UI-VUE|FIRST-RUN|BACKUP-EMPTY|RCLONE-ACCESS|DATA-ARCHIVE-REV9|TRANSPORT-REV8|TIMER-PRESERVE|UI-ROUTES|DUP-KEEP-REV10)[)])$')
+          'DUP-KEEP-REV10', 'FILTER-REV11', 'UI-FILTER')
+TAG = re.compile(r'^(CURRENT|(PLANNED|RETIRED)[(](B1|B2|B3|B4|UI-VUE|FIRST-RUN|BACKUP-EMPTY|RCLONE-ACCESS|DATA-ARCHIVE-REV9|TRANSPORT-REV8|TIMER-PRESERVE|UI-ROUTES|DUP-KEEP-REV10|FILTER-REV11|UI-FILTER)[)])$')
 STATUSES = ('legacy', 'implemented', 'pending', 'deprecated')
 ROW_KEYS = ('id', 'surface', 'name', 'tag', 'source', 'checks')
 PARAM_KEYS = ('types', 'required', 'default', 'constraints', 'valid', 'invalid')
@@ -259,7 +259,7 @@ def _rev10_problems(data: dict, names: dict[str, dict], problems: list[str]) -> 
 
 
 def run() -> None:
-    '''Raise CheckFailure when the matrix rows, registry, counts, source or revision 10 content do not match.
+    '''Raise CheckFailure when the matrix rows, registry, counts, source or revision 10 and 11 content do not match.
 
     Returns:
         None.
@@ -279,6 +279,7 @@ def run() -> None:
                         % (dict(sorted(counts.items())), data['expected_counts']))
     _source_problems(data, problems)
     _rev10_problems(data, names, problems)
+    problems += inv11.problems(data, names)
     if problems:
         raise CheckFailure('%d violation(s):\n  - %s' % (len(problems), '\n  - '.join(problems)))
     print('[INFO] rows %d, checks %d (%s)' % (len(data['rows']), len(names),
