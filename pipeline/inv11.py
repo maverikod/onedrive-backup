@@ -19,7 +19,7 @@ V9 = ('load_calls', 'site_tick_options_only', 'apply_one_search', 'name_wildcard
       'row_download_inline_export', 'autocomplete_keyboard_and_logout')
 V10 = ('service_tabs_lazy_and_poll', 'old_routes_notfound')
 ROWS = {
-    'M12': ('mcp', TAG, M12), 'M13': ('mcp', TAG, M13), 'M14': ('mcp', TAG, M14),
+    'M12': ('mcp', 'CURRENT', M12), 'M13': ('mcp', 'CURRENT', M13), 'M14': ('mcp', 'CURRENT', M14),
     'PL14': ('platform', TAG, ('catchup_all_snapshots_indexed',)),
     'C-K16': ('client', TAG, ()), 'C-K17': ('client', TAG, ()), 'C-K18': ('client', TAG, ()),
     'O17': ('odbcli', TAG, ()), 'O18': ('odbcli', TAG, ()), 'O19': ('odbcli', TAG, ()),
