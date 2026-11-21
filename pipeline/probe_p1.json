@@ -1,0 +1,78 @@
+{
+ "probe": "P1 duplicate_collision_probe, matrix TODO 10.17.11 (1) and 10.17.14 CONDITION",
+ "taken": "2026-11-21",
+ "service": {
+  "version": "0.3.20",
+  "container": "onedrive-backup",
+  "rclone": "1.76.0"
+ },
+ "command": "read-only: docker exec onedrive-backup python3 (onedrive_backup.rclone_base + --onedrive-drive-id <drive_id> --onedrive-drive-type documentLibrary lsjson -R --files-only --hash --no-mimetype onedrive:); no file content was read",
+ "library": {
+  "site_id": "makeiteasy1c.sharepoint.com,645e2016-60c6-4898-ba80-29e12074a79d,a7d70f2c-bd00-4090-99d3-21b7392b1cbf",
+  "drive_id": "b!FiBeZMZgmEi6gCnhIHSnnSwP16cAvZBAmdMhtzkrHL-2bnLqQPbJQ65sKH0hs0ea",
+  "display_name": "Документи",
+  "web_url": "https://makeiteasy1c.sharepoint.com/sites/accounting/Shared%20Documents"
+ },
+ "scan": {
+  "entries": 66448,
+  "collision_groups_by_key": 2,
+  "collision_groups_exact_path": 0,
+  "key": "casefold(NFC(name)) inside one parent folder"
+ },
+ "rule": "b",
+ "rule_text": "10.17.2 (b): the names are equal after NFC normalisation; inside each group one name is NFC and the other NFD (the letter i-breve as one code point against i plus U+0306); case and extension are equal, the paths are not identical, so (a), (c) and (d) do not apply; the premise of 10.17.2 holds",
+ "folder": "ЭКСПОРТ/Экспорт Анна/Акты Полынько/Новая папка/Telegram Desktop",
+ "groups": [
+  {
+   "members": [
+    {
+     "name": "Счет_фактура_по_коммунальным_платежам_май_2022_общий_31_37.xls",
+     "form": "NFD",
+     "item_id": "01ELVGAHEOVQDGLUFAT5DK4TQVERGWRWNB",
+     "size": 62976,
+     "quickxor_hex": "6bd1f79316daaee7b590bc4a0797768485a564a8"
+    },
+    {
+     "name": "Счет_фактура_по_коммунальным_платежам_май_2022_общий_31_37.xls",
+     "form": "NFC",
+     "item_id": "01ELVGAHDKXSZYM6NNXRB2IQPC4T4U2RSM",
+     "size": 62976,
+     "quickxor_hex": "23702fe370bc44fad37c28fec936e536a1b3e874"
+    }
+   ]
+  },
+  {
+   "members": [
+    {
+     "name": "ШАБЛОН Бумажный проект.xlsx",
+     "form": "NFD",
+     "item_id": "01ELVGAHHCXYBHCIBRWNHY7FRBVMMD7EFY",
+     "size": 54448,
+     "quickxor_hex": "d380890b60ebd844e1cfa7ccdcb5c1f59df82e7d"
+    },
+    {
+     "name": "ШАБЛОН Бумажный проект.xlsx",
+     "form": "NFC",
+     "item_id": "01ELVGAHADVN3SKY5DOVEZSLPZEXHY2CWC",
+     "size": 53473,
+     "quickxor_hex": "e16fb028dea7df1acb888f919312c9ee773ae154"
+    }
+   ]
+  }
+ ],
+ "snapshot_0_3_20": {
+  "snapshot_id": "50a6076f71d176dc41fdf4a28442be43f5cd3d7ce5213b1f3b3b9e49a195857f",
+  "time": "2026-11-21T12:47:52.101294648Z",
+  "note": "backup_list_files of this snapshot lists exactly one object of each group, the NFD named one, with these sizes; the NFC named objects are in no snapshot",
+  "plain": [
+   {
+    "name": "Счет_фактура_по_коммунальным_платежам_май_2022_общий_31_37.xls",
+    "size": 62976
+   },
+   {
+    "name": "ШАБЛОН Бумажный проект.xlsx",
+    "size": 54448
+   }
+  ]
+ }
+}
