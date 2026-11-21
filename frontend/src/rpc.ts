@@ -80,8 +80,16 @@ function retryAfter(response: Response): number {
   return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0
 }
 
-/** One JSON-RPC command; resolves with the result data or throws RpcError, AuthRequired, RateLimited, NetworkError or Aborted. */
-export async function call(command: string, params: Record<string, unknown> = {}): Promise<unknown> {
+/**
+ * One JSON-RPC command; resolves with the result data or throws RpcError, AuthRequired, RateLimited, NetworkError or Aborted.
+ * The optional signal aborts this one request (a newer keystroke of the autocomplete); a logout aborts every request.
+ */
+export async function call(command: string, params: Record<string, unknown> = {}, extra?: AbortSignal): Promise<unknown> {
+  const own = new AbortController()
+  const stop = (): void => own.abort()
+  controller.signal.addEventListener('abort', stop)
+  extra?.addEventListener('abort', stop)
+  if (controller.signal.aborted || extra?.aborted) own.abort()
   let response: Response
   try {
     response = await fetch('/api/jsonrpc', {
@@ -90,11 +98,14 @@ export async function call(command: string, params: Record<string, unknown> = {}
       body: JSON.stringify({ jsonrpc: '2.0', method: command, params, id: ++counter }),
       credentials: 'omit',
       cache: 'no-store',
-      signal: controller.signal,
+      signal: own.signal,
     })
   } catch (exc) {
     if ((exc as Error).name === 'AbortError') throw new Aborted()
     throw new NetworkError((exc as Error).message)
+  } finally {
+    controller.signal.removeEventListener('abort', stop)
+    extra?.removeEventListener('abort', stop)
   }
   if (response.status === 401 || response.status === 403) throw rejected()
   if (response.status === 429) throw new RateLimited(retryAfter(response))
@@ -115,8 +126,8 @@ export async function call(command: string, params: Record<string, unknown> = {}
 }
 
 /** A command of the table with its parameters checked against it. */
-export function invoke(command: string, values: Record<string, unknown> = {}): Promise<unknown> {
-  return call(command, buildParams(command, values))
+export function invoke(command: string, values: Record<string, unknown> = {}, signal?: AbortSignal): Promise<unknown> {
+  return call(command, buildParams(command, values), signal)
 }
 
 /** Download a link with the held key (fetch with X-API-Key and save the blob); used only after a 401. */
