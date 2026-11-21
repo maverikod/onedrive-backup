@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // A4 export card with the plain download link, A5 delete. Polls backup_download_status every 5 s ONLY while the answer is not final.
+// As a page ('#/exports/<id>') it is page-export; inline on the main page (exportId prop) it is the card inside export-panel.
 import { computed, ref } from 'vue'
 import { useCommand, type Banner } from '../command'
 import DataView from '../components/DataView.vue'
@@ -7,9 +8,11 @@ import ErrorBanner from '../components/ErrorBanner.vue'
 import { POLL_EXPORT_MS, downloadUrl, hrefFiles, isExpired, isFinalExport, isRecord, type Route } from '../lib'
 import { Aborted, AuthRequired, RpcError, auth, downloadWithKey, invoke } from '../rpc'
 
-const props = defineProps<{ route: Route }>()
+const props = defineProps<{ route?: Route; exportId?: string }>()
+const emit = defineEmits<{ (event: 'gone'): void }>()
 
-const exportId = props.route.params.id ?? ''
+const inline = props.exportId !== undefined
+const exportId = props.exportId ?? props.route?.params.id ?? ''
 const STOP_CODES = [404, 410]
 
 const { data, banner, settled } = useCommand(() => invoke('backup_download_status', { export_id: exportId }), {
@@ -37,7 +40,7 @@ async function saveWithKey(event: Event): Promise<void> {
   }
 }
 
-/** Delete the export: exactly one backup_delete_export, no confirmation, then back to the files of its snapshot. */
+/** Delete the export: exactly one backup_delete_export, no confirmation; the page goes back to the files of its snapshot, the inline card closes. */
 async function remove(): Promise<void> {
   if (busy.value || card.value === null) return
   busy.value = true
@@ -45,7 +48,8 @@ async function remove(): Promise<void> {
   const snapshot = String(card.value.snapshot_id ?? '')
   try {
     await invoke('backup_delete_export', { export_id: exportId })
-    window.location.hash = hrefFiles(snapshot)
+    if (inline) emit('gone')
+    else window.location.hash = hrefFiles(snapshot)
   } catch (exc) {
     if (exc instanceof RpcError) failed.value = { code: exc.code, message: exc.message }
     else if (!(exc instanceof Aborted) && !(exc instanceof AuthRequired)) failed.value = { code: 'NETWORK', message: (exc as Error).message }
@@ -56,8 +60,8 @@ async function remove(): Promise<void> {
 </script>
 
 <template>
-  <section v-if="settled" data-testid="page-export">
-    <h1>Export {{ exportId }}</h1>
+  <section v-if="settled" :data-testid="inline ? undefined : 'page-export'">
+    <h1 v-if="!inline">Export {{ exportId }}</h1>
     <ErrorBanner :banner="banner ?? failed" />
     <div v-if="card" data-testid="export-card">
       <DataView :data="card" />
