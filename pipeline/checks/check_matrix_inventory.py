@@ -23,8 +23,9 @@ from pipeline.checks import CheckFailure
 ROOT = Path(__file__).resolve().parents[2]
 SURFACES = ('mcp', 'rest', 'framework', 'client', 'cli', 'odbcli', 'ui', 'vue', 'auth', 'platform',
             'version', 'pipeline')
-BLOCKS = ('B1', 'B2', 'B3', 'B4', 'UI-VUE', 'B-SPLIT', 'FIRST-RUN', 'BACKUP-EMPTY', 'RCLONE-ACCESS', 'DATA-ARCHIVE-REV9', 'TRANSPORT-REV8', 'TIMER-PRESERVE', 'UI-ROUTES')
-TAG = re.compile(r'^(CURRENT|(PLANNED|RETIRED)[(](B1|B2|B3|B4|UI-VUE|FIRST-RUN|BACKUP-EMPTY|RCLONE-ACCESS|DATA-ARCHIVE-REV9|TRANSPORT-REV8|TIMER-PRESERVE|UI-ROUTES)[)])$')
+BLOCKS = ('B1', 'B2', 'B3', 'B4', 'UI-VUE', 'B-SPLIT', 'FIRST-RUN', 'BACKUP-EMPTY', 'RCLONE-ACCESS', 'DATA-ARCHIVE-REV9', 'TRANSPORT-REV8', 'TIMER-PRESERVE', 'UI-ROUTES',
+          'DUP-KEEP-REV10')
+TAG = re.compile(r'^(CURRENT|(PLANNED|RETIRED)[(](B1|B2|B3|B4|UI-VUE|FIRST-RUN|BACKUP-EMPTY|RCLONE-ACCESS|DATA-ARCHIVE-REV9|TRANSPORT-REV8|TIMER-PRESERVE|UI-ROUTES|DUP-KEEP-REV10)[)])$')
 STATUSES = ('legacy', 'implemented', 'pending', 'deprecated')
 ROW_KEYS = ('id', 'surface', 'name', 'tag', 'source', 'checks')
 PARAM_KEYS = ('types', 'required', 'default', 'constraints', 'valid', 'invalid')
@@ -32,9 +33,29 @@ TOP_KEYS = ('identity', 'parameter_columns', 'rows', 'relations', 'result_contra
             'expected_counts')
 NAME_LINE = re.compile(r'^[ ]+name = .([a-z_]+).$', re.M)
 ROUTE = re.compile(r'@app[.](get|post|delete)[(].(/api/v1[^)]*).[)]')
+REV10 = 'DUP-KEEP-REV10'
+REV10_CASES = {
+    'BE2': ('no_collision', 'pair_same_name_group', 'pair_case_or_nfc_group', 'three_member_group', 'primary_by_hash',
+            'primary_by_smallest_id_tie', 'reserved_name_in_source', 'scan_failure', 'duplicate_directory_unsupported'),
+    'BE3': ('extra_stored_and_snapshotted', 'name_stable_across_runs', 'name_clash_extends_hex', 'rerun_no_refetch',
+            'sync_does_not_delete_stored_copy', 'integrity_hash_mismatch_kept_and_error', 'hash_unavailable_size_checked',
+            'fetch_failure_no_file_and_error', 'dry_run_writes_nothing', 'source_object_never_written'),
+    'BE4': ('both_objects_listed', 'prepare_download_of_copy', 'plain_name_unchanged'),
+}
+REV10_CHECKS = {'backup_duplicate_names': ['BE2', 'BE3'], 'duplicate_collision_probe': ['BE2'], 'duplicate_copies_in_snapshot': ['BE4']}
+REV10_RELATIONS = ('R32', 'R33', 'R34', 'R35', 'R36')
 
 
 def _source_problems(data: dict, problems: list[str]) -> None:
+    '''Compare the CURRENT and RETIRED rows with the registration code of src/onedrive_api/server.py.
+
+    Args:
+        data: the loaded matrix.
+        problems: the list the violations are appended to.
+
+    Returns:
+        None.
+    '''
     server = (ROOT / 'src/onedrive_api/server.py').read_text(encoding='utf-8')
     tree = ast.parse(server)
     registered: set[str] = set()
@@ -72,6 +93,16 @@ def _source_problems(data: dict, problems: list[str]) -> None:
 
 
 def _row_problems(data: dict, names: dict[str, dict], problems: list[str]) -> Counter:
+    '''Check every row, its parameter cells, relations, cases and result contracts, and count the rows per surface and tag.
+
+    Args:
+        data: the loaded matrix.
+        names: the check registry entries by name.
+        problems: the list the violations are appended to.
+
+    Returns:
+        The row counts keyed by surface and CURRENT, PLANNED or RETIRED.
+    '''
     columns = set(data['parameter_columns'])
     rels = {rel['id'] for rel in data['relations']}
     contracts = data['result_contracts']
@@ -129,6 +160,15 @@ def _row_problems(data: dict, names: dict[str, dict], problems: list[str]) -> Co
 
 
 def _registry_problems(data: dict, problems: list[str]) -> dict[str, dict]:
+    '''Check the check registry against the check files, the legacy functions and the pending stubs.
+
+    Args:
+        data: the loaded matrix.
+        problems: the list the violations are appended to.
+
+    Returns:
+        The registry entries by check name.
+    '''
     names: dict[str, dict] = {}
     legacy = {node.name for node in ast.parse((ROOT / 'pipeline/__main__.py').read_text()).body
               if isinstance(node, ast.FunctionDef)}
@@ -175,7 +215,55 @@ def _registry_problems(data: dict, problems: list[str]) -> dict[str, dict]:
     return names
 
 
+def _rev10_problems(data: dict, names: dict[str, dict], problems: list[str]) -> None:
+    '''Check that the matrix carries revision 10 (matrix TODO 10.17.8 to 10.17.11, block DUP-KEEP-REV10).
+
+    Args:
+        data: the loaded matrix.
+        names: the check registry entries by name.
+        problems: the list the violations are appended to.
+
+    Returns:
+        None.
+    '''
+    rows = {row.get('id'): row for row in data['rows']}
+    for rid, wanted in REV10_CASES.items():
+        row = rows.get(rid)
+        if row is None:
+            problems.append('rev10: row %s of matrix TODO 10.17.8 is absent' % rid)
+            continue
+        if row.get('surface') != 'platform' or row.get('tag') != 'PLANNED(%s)' % REV10:
+            problems.append('rev10: row %s is %r/%r, expected platform/PLANNED(%s)' % (rid, row.get('surface'), row.get('tag'), REV10))
+        got = tuple(case.get('id') for case in row.get('cases', []))
+        if got != wanted:
+            problems.append('rev10: row %s cases %s differ from 10.17.10 and 10.17.11 %s' % (rid, got, wanted))
+    be1 = rows.get('BE1') or {}
+    if 'mixed_run_with_duplicate_incomplete' not in [case.get('id') for case in be1.get('cases', [])]:
+        problems.append('rev10: row BE1 lacks the case mixed_run_with_duplicate_incomplete (10.17.11 (3))')
+    baseline = str(data['result_contracts'].get('BE1', {}).get('baseline'))
+    for word in ('duplicates', 'duplicate_summary', 'duplicate_incomplete'):
+        if word not in baseline:
+            problems.append('rev10: the BE1 baseline result contract does not name %s (10.17.6)' % word)
+    relations = {rel.get('id') for rel in data['relations']}
+    for rel in REV10_RELATIONS:
+        if rel not in relations:
+            problems.append('rev10: relation %s is absent (10.17.9, numbered R32-R36 in the snapshot)' % rel)
+    for name, wanted_rows in REV10_CHECKS.items():
+        entry = names.get(name) or {}
+        if REV10 not in entry.get('blocks', []) or entry.get('rows') != wanted_rows:
+            problems.append('rev10: check %s is registered as %r, expected block %s and rows %s' % (name, entry, REV10, wanted_rows))
+    if REV10 not in (names.get('backup_empty_library') or {}).get('blocks', []):
+        problems.append('rev10: backup_empty_library is not registered under block %s' % REV10)
+    if 'reconciliations_10_17' not in data['identity']:
+        problems.append('rev10: identity.reconciliations_10_17 is absent')
+
+
 def run() -> None:
+    '''Raise CheckFailure when the matrix rows, registry, counts, source or revision 10 content do not match.
+
+    Returns:
+        None.
+    '''
     try:
         data = matrix.load()
     except (OSError, ValueError) as exc:
@@ -190,6 +278,7 @@ def run() -> None:
         problems.append('row counts %s differ from the counts recorded from the matrix TODO %s'
                         % (dict(sorted(counts.items())), data['expected_counts']))
     _source_problems(data, problems)
+    _rev10_problems(data, names, problems)
     if problems:
         raise CheckFailure('%d violation(s):\n  - %s' % (len(problems), '\n  - '.join(problems)))
     print('[INFO] rows %d, checks %d (%s)' % (len(data['rows']), len(names),
