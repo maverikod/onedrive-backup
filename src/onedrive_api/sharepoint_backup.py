@@ -30,6 +30,8 @@ from onedrive_backup import (
 
 from .sharepoint_discover_cli import discover
 from .sharepoint_discovery import DiscoveryError, IDENTIFIER
+from .sharepoint_dupnames import EXCLUDE_PATTERN, scan_library
+from .sharepoint_duplicates import empty_record, keep_duplicates
 
 LOG = logging.getLogger("onedrive_backup")
 
@@ -180,8 +182,11 @@ def library_has_backup(target: Path) -> bool:
 def sync_library(
     cfg: dict[str, Any], site_id: str, drive_id: str, target: Path, *,
     dry_run: bool
-) -> None:
-    """Sync one library into its mirror and snapshot the mirror.
+) -> dict[str, Any]:
+    """Scan, sync, keep the duplicate copies and snapshot one library.
+
+    Order: read-only scan, rclone sync (which never deletes a stored copy),
+    fetch of every extra of a collision group, restic backup of the mirror.
 
     Args:
         cfg: Validated local backup configuration.
@@ -191,27 +196,38 @@ def sync_library(
         dry_run: When true, only plan the sync and change nothing.
 
     Returns:
-        None. Raises BackupError when rclone or restic fails.
+        Run record fields of the library: outcome "ok" or
+        "duplicate_incomplete", error (first error code or None),
+        duplicates and duplicate_summary. Raises BackupError when rclone or
+        restic fails.
     """
+    base = library_rclone(cfg, drive_id)
+    scan = scan_library(run_command, base)
     if not dry_run:
         target.mkdir(mode=0o700, parents=True, exist_ok=True)
-    command = library_rclone(cfg, drive_id) + [
+    command = base + [
         "sync", "onedrive:", str(target),
         "--max-delete", str(cfg["max_delete"]),
         "--transfers", str(cfg["transfers"]),
         "--checkers", str(cfg["checkers"]),
         "--retries", "3", "--low-level-retries", "10",
-        "--create-empty-src-dirs",
+        "--create-empty-src-dirs", "--exclude", EXCLUDE_PATTERN,
     ]
     if dry_run:
         command.append("--dry-run")
     run_command(command)
+    record = keep_duplicates(cfg, run_command, drive_id, target, scan,
+                             dry_run=dry_run)
+    errors = record.pop("errors")
+    record["outcome"] = "duplicate_incomplete" if errors else "ok"
+    record["error"] = errors[0] if errors else None
     if not dry_run:
         run_command(restic_base(cfg) + [
             "backup", str(target), "--tag", "sharepoint",
             "--tag", "site-" + stable_key(site_id),
             "--tag", "drive-" + stable_key(drive_id),
         ], restic_env(cfg))
+    return record
 
 
 def backup_libraries(
@@ -223,9 +239,12 @@ def backup_libraries(
     An empty library that was never backed up is skipped (outcome "empty").
     A library that has a mirror but is now empty is not synced, so the mirror
     and the snapshots stay intact, and an error is recorded (outcome
-    "source_emptied"). Neither case stops the run. Any other failure still
-    raises BackupError. allow_empty_source=true syncs an empty source as
-    before, under the unchanged max_delete protection.
+    "source_emptied"). Colliding files are all kept (see sync_library); a
+    library whose extra copy could not be stored with verified integrity gets
+    outcome "duplicate_incomplete", which is an error library. Neither case
+    stops the run. Any other failure still raises BackupError.
+    allow_empty_source=true syncs an empty source as before, under the
+    unchanged max_delete protection.
 
     Args:
         cfg: Validated local backup configuration.
@@ -235,9 +254,12 @@ def backup_libraries(
     Returns:
         Run record {"status": "ok" | "partial" | "failed", "libraries":
         [{"site_id", "drive_id", "outcome": "ok" | "empty" |
-        "source_emptied", "error": None | code}]}. The status is "ok" when
-        no library recorded an error, "partial" when an error and a handled
-        library coexist, "failed" when every library recorded an error.
+        "source_emptied" | "duplicate_incomplete", "error": None | code,
+        "duplicates": [...], "duplicate_summary": {...}}]}. The status is
+        "ok" when no library recorded an error (kept and verified duplicates
+        are no error, they are listed and logged as warnings), "partial" when
+        an error and a handled library coexist, "failed" when every library
+        recorded an error.
     """
     libraries = inventory_libraries(report)
     assert_repository(cfg)
@@ -248,22 +270,25 @@ def backup_libraries(
         target = library_mirror(cfg, site_id, drive_id)
         LOG.info("Library %d/%d site_id=%s drive_id=%s",
                  number, len(libraries), site_id, drive_id)
-        outcome, error = "ok", None
+        row: dict[str, Any] = {"site_id": site_id, "drive_id": drive_id,
+                               "outcome": "ok", "error": None}
+        row.update(empty_record())
         if not check_library_source(cfg, drive_id) \
                 and not cfg["allow_empty_source"]:
             if library_has_backup(target):
-                outcome, error = "source_emptied", "SHAREPOINT_LIBRARY_EMPTY"
+                row["outcome"] = "source_emptied"
+                row["error"] = "SHAREPOINT_LIBRARY_EMPTY"
                 LOG.error("Library site_id=%s drive_id=%s is empty but has "
                           "a backup; not synced, mirror and snapshots kept: "
-                          "%s", site_id, drive_id, error)
+                          "%s", site_id, drive_id, row["error"])
             else:
-                outcome = "empty"
+                row["outcome"] = "empty"
                 LOG.info("Library site_id=%s drive_id=%s is empty and was "
                          "never backed up; skipped", site_id, drive_id)
-        if outcome == "ok":
-            sync_library(cfg, site_id, drive_id, target, dry_run=dry_run)
-        results.append({"site_id": site_id, "drive_id": drive_id,
-                        "outcome": outcome, "error": error})
+        if row["outcome"] == "ok":
+            row.update(sync_library(cfg, site_id, drive_id, target,
+                                    dry_run=dry_run))
+        results.append(row)
     failed = sum(1 for row in results if row["error"])
     status = "ok" if not failed else (
         "failed" if failed == len(results) else "partial")
