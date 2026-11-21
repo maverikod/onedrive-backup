@@ -127,7 +127,7 @@ case "$action" in
     require_state_copy
     docker inspect "$name" --format '{{.State.Running}}' | grep -qx true || fail "Container is not running"
     docker exec "$name" sh -c '[ "$ONEDRIVE_SCAFFOLD_MODE" = 0 ]' || fail "Scaffold mode"
-    docker exec "$name" python -m onedrive_api.sharepoint_backup "${@:2}"
+    docker exec "$name" python -m onedrive_api.backup_run "${@:2}"
     ;;
   start)
     # Server-auth HTTPS needs only the server certificate and key; the CA and trust-bundle files stay provisioned for the
