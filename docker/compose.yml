@@ -1,6 +1,6 @@
 services:
   onedrive-backup:
-    image: ${ONEDRIVE_IMAGE:-vasilyvz/onedrive-backup:0.3.24}
+    image: ${ONEDRIVE_IMAGE:-vasilyvz/onedrive-backup:0.3.25}
     container_name: onedrive-backup
     restart: unless-stopped
     user: "1000:1000"
