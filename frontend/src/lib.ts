@@ -4,6 +4,7 @@ import { AuthRequired, RateLimited } from './rpc'
 
 export const PAGE_SIZE = 100
 export const POLL_DISCOVERY_MS = 30000
+export const POLL_SCHEDULE_MS = 15000
 export const POLL_EXPORT_MS = 5000
 export const POLL_MIN_MS = 5000
 export const POLL_MAX_MS = 120000
@@ -61,7 +62,7 @@ export interface Route {
   query: URLSearchParams
 }
 
-export const SECTIONS = ['snapshots', 'sites', 'discovery', 'help', 'info'] as const
+export const SECTIONS = ['snapshots', 'sites', 'discovery', 'help', 'info', 'schedule'] as const
 export type Section = (typeof SECTIONS)[number]
 /** The only command(s) a section of the service page sends: sections load lazily, one at a time. */
 export const SECTION_COMMANDS: Record<Section, string> = {
@@ -70,6 +71,7 @@ export const SECTION_COMMANDS: Record<Section, string> = {
   discovery: 'backup_discovery_status',
   help: 'help',
   info: 'info',
+  schedule: 'backup_schedule_get',
 }
 
 const enc = encodeURIComponent
