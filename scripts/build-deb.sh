@@ -27,17 +27,13 @@ install -m 0644 "$ROOT/config/server.json" "$PKG/etc/onedrive-backup/server.json
 install -m 0644 "$ROOT/config/backup.json" "$PKG/etc/onedrive-backup/backup.json"
 install -m 0644 "$ROOT/packaging/onedrive-backup-api.service" \
   "$PKG/lib/systemd/system/onedrive-backup-api.service"
-install -m 0644 "$ROOT/packaging/onedrive-backup.service" \
-  "$PKG/lib/systemd/system/onedrive-backup.service"
-install -m 0644 "$ROOT/packaging/onedrive-backup.timer" \
-  "$PKG/lib/systemd/system/onedrive-backup.timer"
 install -m 0644 "$ROOT/README.md" "$PKG/usr/share/doc/onedrive-backup/README.md"
 install -m 0644 "$ROOT/LICENSE" "$PKG/usr/share/doc/onedrive-backup/copyright"
 install -m 0644 "$ROOT/CHANGELOG.md" "$PKG/usr/share/doc/onedrive-backup/CHANGELOG.md"
 install -m 0644 "$ROOT/packaging/onedrive-backup.8" \
   "$PKG/usr/share/man/man8/onedrive-backup.8"
 gzip -n -9 "$PKG/usr/share/man/man8/onedrive-backup.8"
-for name in postinst prerm postrm; do
+for name in preinst postinst prerm postrm; do
   install -m 0755 "$ROOT/packaging/$name" "$PKG/DEBIAN/$name"
 done
 printf '/etc/onedrive-backup/server.json\n/etc/onedrive-backup/backup.json\n' \
@@ -58,7 +54,7 @@ Priority: optional
 Maintainer: OneDrive Backup maintainers <maintainers@example.org>
 Depends: docker.io | docker-ce | moby-engine, adduser, util-linux, ca-certificates, python3, restic
 Description: OneDrive Business backup API and Docker host controller
- Installs version-pinned Docker service, systemd timer, HTTPS configuration,
+ Installs version-pinned Docker service, backup schedule file, HTTPS configuration,
  encrypted restic backup management, and host bootstrap tools. No credentials
  or server certificates are included in the Debian package.
 EOF
