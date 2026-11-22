@@ -46,6 +46,7 @@ let alive = true
 let timer: ReturnType<typeof setTimeout> | null = null
 let pending: AbortController | null = null
 let lastAsked = ''
+let searchSeq = 0
 
 function fail(exc: unknown): void {
   if (exc instanceof Aborted || exc instanceof AuthRequired) return
@@ -69,14 +70,19 @@ async function refreshOptions(): Promise<boolean> {
   }
 }
 
-/** One backup_search_files for the filter; a command error shows the banner and no rows. */
+/**
+ * One backup_search_files for the filter; a command error shows the banner and no rows. Only the newest search may render:
+ * the answer of a superseded search (the default view that is still running when the user applies a filter) is dropped.
+ */
 async function runSearch(filter: Filter): Promise<void> {
+  const mine = ++searchSeq
   try {
     const data = await invoke('backup_search_files', searchValues(filter))
-    if (!alive) return
+    if (!alive || mine !== searchSeq) return
     result.value = isRecord(data) ? data : null
     banner.value = null
   } catch (exc) {
+    if (!alive || mine !== searchSeq) return
     result.value = null
     fail(exc)
   }
