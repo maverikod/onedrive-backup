@@ -123,8 +123,15 @@ else
   password=""; again=""
 fi
 
-# Debian postinst creates /etc/default on first install and preserves it later.
+# A running backup holds the backup lock; replacing the container would interrupt it (matrix 10.20.8 U4).
+if [[ -e "$DATA_DIR/backup.lock" ]] && ! flock -n "$DATA_DIR/backup.lock" true; then
+  fail "deploy: a backup is running (backup.lock is held); deploy after it has finished" 3
+fi
+
+# Debian postinst creates /etc/default on first install and preserves it later; it also retires the old systemd timer.
 dpkg -i "$ROOT/dist/onedrive-backup_$VERSION""_all.deb"
+echo "deploy: the backup schedule is the file schedule/schedule.cron of the data directory (odbcli schedule-get/set)."
+echo "deploy: rollback to a version with the systemd timer: dpkg -i the old .deb, then systemctl enable --now onedrive-backup.timer"
 
 # The service user exists now: create the repository and hand it to the service user.
 if [[ "$new_repo" == 1 ]]; then
