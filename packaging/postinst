@@ -125,6 +125,63 @@ PY_MIGRATE_CRL
     echo "onedrive-backup: the data directory $real is not on the $archive filesystem: it is on $(fs_describe "$real")" >&2
     exit 2
   fi
+  # Matrix 10.20.8 (rev 12): the host systemd timer is retired, the schedule is the file <data>/schedule/schedule.cron.
+  # The state of the old timer comes from the preinst capture of this upgrade, else from systemctl; a fresh install has
+  # no timer. The file is created only when absent; the retired timer's state decides ENABLED (never silently resumed).
+  prev="${2:-}"
+  timer=onedrive-backup.timer
+  captured=/var/lib/onedrive-backup/timer-state.pre
+  tenabled=no
+  tactive=no
+  show=""
+  if [ -f "$captured" ]; then
+    tenabled="$(sed -n 's/^enabled=//p' "$captured" | head -n 1)"
+    tactive="$(sed -n 's/^active=//p' "$captured" | head -n 1)"
+    show="$(grep -v '^enabled=\|^active=' "$captured" || true)"
+    rm -f "$captured"
+  elif [ -n "$prev" ] && [ -d /run/systemd/system ]; then
+    if systemctl is-enabled "$timer" >/dev/null 2>&1; then tenabled=yes; fi
+    if systemctl is-active "$timer" >/dev/null 2>&1; then tactive=yes; fi
+    show="$(systemctl show "$timer" 2>/dev/null || true)"
+  fi
+  if [ -n "$prev" ] && [ -d /run/systemd/system ]; then
+    systemctl disable --now "$timer" >/dev/null 2>&1 || true
+  fi
+  if [ "$tenabled" = yes ] || [ "$tactive" = yes ]; then schedule_enabled=yes; else schedule_enabled=no; fi
+  if [ -n "$show" ] || [ "$schedule_enabled" = yes ]; then
+    ( umask 077
+      {
+        echo '# previous systemd timer onedrive-backup.timer, retired by the schedule file'
+        echo "enabled=$tenabled"
+        echo "active=$tactive"
+        printf '%s\n' "$show" | grep -E '^(OnCalendar|TimersCalendar|RandomizedDelay|Persistent|DropInPaths)' || true
+      } > /var/lib/onedrive-backup/timer-migration.txt )
+    chmod 0600 /var/lib/onedrive-backup/timer-migration.txt
+    oncal="$(printf '%s\n' "$show" | sed -n -e 's/^OnCalendar=//p' -e 's/^TimersCalendar={ OnCalendar=\([^;]*[^ ;]\) *;.*/\1/p' | head -n 1)"
+    dropin="$(printf '%s\n' "$show" | sed -n 's/^DropInPaths=//p' | head -n 1)"
+    if [ "$oncal" != '*-*-* 02:30:00' ] || [ -n "$dropin" ]; then
+      echo 'onedrive-backup: NOT MIGRATED: re-enter the schedule; the old timer settings are in /var/lib/onedrive-backup/timer-migration.txt'
+    fi
+  fi
+  schedule_dir="$data_dir/schedule"
+  if [ ! -e "$schedule_dir/schedule.cron" ]; then
+    install -d -m 0700 -o onedrive-backup -g onedrive-backup "$schedule_dir"
+    schedule_tmp="$(mktemp)"
+    {
+      printf '%s\n' '# OneDrive backup schedule (edit through the API, the client, odbcli or the UI).' \
+        '# Fields: minute hour day-of-month month day-of-week. Lines starting with # are comments.' \
+        'TZ=Europe/Kyiv' 'JITTER=15m' 'CATCHUP=24h'
+      if [ "$schedule_enabled" != yes ]; then printf '%s\n' 'ENABLED=no'; fi
+      printf '%s\n' '30 2 * * *'
+    } > "$schedule_tmp"
+    install -m 0600 -o onedrive-backup -g onedrive-backup "$schedule_tmp" "$schedule_dir/schedule.cron"
+    rm -f "$schedule_tmp"
+    if [ "$schedule_enabled" = yes ]; then
+      echo 'onedrive-backup: the daily backup moved from the systemd timer to the schedule file schedule/schedule.cron (02:30 Europe/Kyiv)'
+    else
+      echo 'onedrive-backup: the backup schedule file was created with ENABLED=no; set ENABLED=yes (odbcli schedule-set) to start backups'
+    fi
+  fi
   if /usr/lib/onedrive-backup/install-runtime.sh; then
     if [ -d /run/systemd/system ]; then
       systemctl daemon-reload
@@ -146,7 +203,6 @@ PY_MIGRATE_CRL
   if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
   fi
-  # Restricted scaffold is permitted; the backup timer stays disabled.
+  # Restricted scaffold is permitted; the schedule file decides when backups start (ENABLED, entries).
 fi
 exit 0
-
