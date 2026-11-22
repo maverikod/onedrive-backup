@@ -412,6 +412,7 @@ def _u_basic(case: Case) -> None:
         None.
     '''
     _u_check(case, 10, case.params['text'])
+    _u_case(case)
 
 
 def _u_glob(case: Case) -> None:
@@ -468,7 +469,7 @@ def _u_case(case: Case) -> None:
 VALIDATORS: dict[str, Callable[[Case], None]] = {
     'fo_base': _fo_base, 'fo_site': _fo_site, 'fo_unknown': _fo_unknown, 'nowrite': _nowrite, 's_default': _s_default, 's_dates': _s_dates,
     's_case': _s_case, 's_glob': _s_glob, 's_contains': _s_contains, 's_versions': _s_versions, 's_paging': _s_paging, 's_beyond': _s_beyond,
-    'u_basic': _u_basic, 'u_glob': _u_glob, 'u_rf3': _u_rf3, 'u_case': _u_case,
+    'u_basic': _u_basic, 'u_glob': _u_glob, 'u_rf3': _u_rf3,
 }
 
 
