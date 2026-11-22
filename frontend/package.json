@@ -1,6 +1,6 @@
 {
   "name": "onedrive-backup-web",
-  "version": "0.3.23",
+  "version": "0.3.24",
   "private": true,
   "type": "module",
   "description": "Vue 3 single page application served by the onedrive-backup service",
