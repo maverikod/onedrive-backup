@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any, Callable
 
 from pipeline import b4base, live, rev11, vuebrowser, vuebuild, vuechecks, vueroutes
@@ -486,6 +487,138 @@ class Cases:
                     self.bad('V10 L9 %s: page-notfound %d and the calls %s, expected one page-notfound and no command' % (route, tid(sess.page, 'page-notfound').count(), pairs(sess)))
             finally:
                 sess.close()
+    BOX_MIN = 24
+    GAP_MIN = 4
+
+    def row_findings(self, label: str, items: list[tuple[str, Any]]) -> None:
+        '''Assert that controls are button-like boxes in one row: a border or a background each, no overlap, a gap between neighbours.
+
+        Args:
+            label: the case label.
+            items: pairs of the control name and its locator.
+
+        Returns:
+            None.
+        '''
+        script = '(e) => { const s = getComputedStyle(e); return {border: parseFloat(s.borderTopWidth) > 0 && s.borderTopStyle !== "none" && s.borderTopStyle !== "hidden", background: s.backgroundColor !== "rgba(0, 0, 0, 0)" && s.backgroundColor !== "transparent"}; }'
+        boxes: list[tuple[str, dict]] = []
+        for name, loc in items:
+            box = loc.bounding_box()
+            if box is None or box['width'] < self.BOX_MIN or box['height'] < self.BOX_MIN:
+                self.bad('%s: %s has the box %s, expected a visible box of at least %dx%d px' % (label, name, box, self.BOX_MIN, self.BOX_MIN))
+                continue
+            style = loc.evaluate(script)
+            if not (style['border'] or style['background']):
+                self.bad('%s: %s has neither a visible border nor a background (%s), expected a button-like box' % (label, name, style))
+            boxes.append((name, box))
+        if len(boxes) < 2:
+            return
+        centres = [box['y'] + box['height'] / 2 for _, box in boxes]
+        if max(centres) - min(centres) > 6:
+            self.bad('%s: the controls are not in one row, centre y values %s' % (label, [round(c) for c in centres]))
+        ordered = sorted(boxes, key=lambda item: item[1]['x'])
+        for (left, one), (right, two) in zip(ordered, ordered[1:]):
+            gap = two['x'] - (one['x'] + one['width'])
+            if gap < self.GAP_MIN:
+                self.bad('%s: the gap between %s and %s is %.1f px, expected >= %d px (distinct non-overlapping boxes)' % (label, left, right, gap, self.GAP_MIN))
+
+    def service_toolbar(self) -> None:
+        '''L10 (user correction of 2026-11-23): the section links of #/service form the toolbar svc-toolbar of button-like boxes in one row, the active one marked.
+
+        Returns:
+            None.
+        '''
+        label = 'V12 L10 toolbar'
+        names = ['snapshots', 'sites', 'discovery', 'help', 'info', 'schedule']
+        sess = Session(self.drv)
+        try:
+            sess.page.set_viewport_size({'width': 1600, 'height': 900})
+            sess.go('#/service')
+            page = sess.page
+            tabs = page.locator('[data-testid^=svc-tab-]')
+            found = [loc.get_attribute('data-testid') for loc in tabs.all()]
+            if found != ['svc-tab-' + name for name in names]:
+                self.bad('%s: the tabs are %s, expected %s in this order' % (label, found, ['svc-tab-' + name for name in names]))
+                return
+            bar = tid(page, 'svc-toolbar')
+            if bar.count() != 1:
+                self.bad('%s: %d element with data-testid svc-toolbar, expected one' % (label, bar.count()))
+            elif bar.locator('[data-testid^=svc-tab-]').count() != len(names):
+                self.bad('%s: svc-toolbar holds %d section links, expected %d' % (label, bar.locator('[data-testid^=svc-tab-]').count(), len(names)))
+            bad_href = [name for name in names if 'service' not in (tid(page, 'svc-tab-' + name).get_attribute('href') or '')]
+            if bad_href:
+                self.bad('%s: the section links %s have no #/service href' % (label, bad_href))
+            self.row_findings(label, [(name, tid(page, 'svc-tab-' + name)) for name in names])
+            signature = '(e) => { const s = getComputedStyle(e); return [s.backgroundColor, s.color, s.fontWeight, s.borderTopColor, s.textDecorationLine].join("|"); }'
+            for current, other in (('snapshots', 'sites'), ('sites', 'snapshots')):
+                marked = [name for name in names if tid(page, 'svc-tab-' + name).get_attribute('aria-current') == 'page']
+                if marked != [current]:
+                    self.bad('%s: the active section links are %s, expected only [%s] (aria-current=page)' % (label, marked, current))
+                elif tid(page, 'svc-tab-' + current).evaluate(signature) == tid(page, 'svc-tab-' + other).evaluate(signature):
+                    self.bad('%s: the active link %s looks the same as %s, expected a visible active marker' % (label, current, other))
+                if current == 'snapshots':
+                    tid(page, 'svc-tab-sites').click()
+                    page.wait_for_timeout(SETTLE_MS)
+        finally:
+            sess.close()
+
+    def result_pager(self) -> None:
+        '''L11 (user correction of 2026-11-23): the result list of #/ has the pagination toolbar result-pager with first, previous, next and last buttons and the page numbers, over the limit and offset of backup_search_files.
+
+        Returns:
+            None.
+        '''
+        label = 'V12 L11 pager'
+        sess = Session(self.drv)
+        try:
+            sess.page.set_viewport_size({'width': 1600, 'height': 900})
+            sess.go('')
+            page = sess.page
+            if not self.have(label, page, ('result-table', 'result-count', 'page-prev', 'page-next')):
+                return
+            total = int(tid(page, 'result-count').get_attribute('data-raw') or 0)
+            first = [params for method, params in pairs(sess) if method == 'backup_search_files']
+            limit = int((first[0] if first else {}).get('limit', 100))
+            pages = max(1, -(-total // limit))
+            if tid(page, 'result-pager').count() == 0:
+                self.bad('%s: the page has no element with data-testid result-pager (total %d, limit %d, %d pages)' % (label, total, limit, pages))
+                return
+            pager = tid(page, 'result-pager').first
+            ids = ('page-first', 'page-prev', 'page-next', 'page-last')
+            if [pager.locator('[data-testid=%s]' % name).count() for name in ids] != [1, 1, 1, 1] or pager.locator('[data-testid=page-info]').count() != 1:
+                self.bad('%s: result-pager must hold one each of %s and page-info' % (label, list(ids)))
+                return
+            self.row_findings(label, [(name, pager.locator('[data-testid=%s]' % name)) for name in ids])
+            numbers = {int(n) for n in re.findall(r'\d+', pager.locator('[data-testid=page-info]').inner_text())}
+            if not ({1, pages} <= numbers or {1, min(limit, total), total} <= numbers):
+                self.bad('%s: page-info shows the numbers %s, expected page 1 and %d pages, or rows 1-%d of %d' % (label, sorted(numbers), pages, min(limit, total), total))
+            if pages < 2:
+                self.report.state.append('%s: the result has %d rows, at most one page of %d, the paging cannot be exercised' % (label, total, limit))
+                return
+            for name, want in (('page-first', True), ('page-prev', True), ('page-next', False), ('page-last', False)):
+                if pager.locator('[data-testid=%s]' % name).is_disabled() != want:
+                    self.bad('%s: on page 1 %s disabled is %s, expected %s' % (label, name, not want, want))
+            for name, offset in (('page-next', limit), ('page-last', (pages - 1) * limit), ('page-first', 0)):
+                before = tid(page, 'result-row').first.inner_text()
+                start = len(sess.calls)
+                pager.locator('[data-testid=%s]' % name).click()
+                for _ in range(50):
+                    if [c for c in sess.calls[start:] if c['method'] == 'backup_search_files' and c['reply'] is not None]:
+                        break
+                    page.wait_for_timeout(200)
+                page.wait_for_timeout(SETTLE_MS)
+                sent = [params for method, params in pairs(sess, start) if method == 'backup_search_files']
+                if len(sent) != 1 or int(sent[0].get('offset', 0)) != offset or int(sent[0].get('limit', limit)) != limit:
+                    self.bad('%s: a click on %s sent %s, expected exactly one backup_search_files with offset %d and limit %d' % (label, name, pairs(sess, start), offset, limit))
+                    continue
+                if tid(page, 'result-row').count() != min(limit, total - offset) or tid(page, 'result-row').first.inner_text() == before:
+                    self.bad('%s: after %s the table has %d rows, expected %d rows replaced by the page at offset %d' % (label, name, tid(page, 'result-row').count(), min(limit, total - offset), offset))
+                last_page = offset + limit >= total
+                for check, want in (('page-first', offset == 0), ('page-prev', offset == 0), ('page-next', last_page), ('page-last', last_page)):
+                    if pager.locator('[data-testid=%s]' % check).is_disabled() != want:
+                        self.bad('%s: at offset %d %s disabled is %s, expected %s' % (label, offset, check, not want, want))
+        finally:
+            sess.close()
 
 
 def _case(root: str, name: str) -> Callable[[Report, Any], None]:
@@ -580,7 +713,7 @@ def _calls(report: Report) -> None:
     if root is not None:
         spa_files(report, 'V4 SPA sources')
         vuechecks.with_driver(report, 'V4 browser', root, vuebrowser.table_cases, vuebrowser.page_equals_result,
-                              *[_case(root, name) for name in ('nav_ids', 'load_calls', 'site_tick', 'apply_one', 'wildcard_rows', 'columns', 'service_tabs', 'old_routes')])
+                              *[_case(root, name) for name in ('nav_ids', 'load_calls', 'site_tick', 'apply_one', 'wildcard_rows', 'columns', 'service_tabs', 'old_routes', 'service_toolbar', 'result_pager')])
 
 
 def vue_command_calls() -> None:
