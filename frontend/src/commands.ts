@@ -11,6 +11,7 @@ export interface ParamSpec {
 
 const str = (required: boolean): ParamSpec => ({ type: 'string', required })
 const int = (required: boolean): ParamSpec => ({ type: 'integer', required })
+const bool = (required: boolean): ParamSpec => ({ type: 'boolean', required })
 const list = (required: boolean): ParamSpec => ({ type: 'array', required })
 
 export const COMMANDS: Record<string, Record<string, ParamSpec>> = {
@@ -25,6 +26,9 @@ export const COMMANDS: Record<string, Record<string, ParamSpec>> = {
   backup_filter_options: { site_ids: list(false) },
   backup_search_files: { site_ids: list(false), dates: list(false), name_part: str(false), limit: int(false), offset: int(false) },
   backup_suggest_names: { text: str(true), site_ids: list(false), dates: list(false), limit: int(false) },
+  backup_schedule_get: { next_count: int(false) },
+  backup_schedule_set: { text: str(true), expected_revision: str(false), dry_run: bool(false), next_count: int(false), actor: str(false) },
+  backup_schedule_status: { history_limit: int(false) },
   help: { cmdname: str(false) },
   info: { page: int(false) },
 }
