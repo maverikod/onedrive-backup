@@ -450,7 +450,7 @@ def run_row(row_id: str, name: str) -> None:
         for case in row['cases'] if state == 'S1' else []:
             expect = contracts.get(case['id'], {}).get('expect')
             params = ctx.resolve(case['params'])
-            desc = '%s %s %s(%s)' % (row_id, case['id'], row['command'], json.dumps(params, ensure_ascii=False)[:160])
+            desc = '%s %s %s(%s)' % (row_id, case['id'], row['command'], json.dumps(params)[:160])
             if expect is None:
                 report.product.append('%s: no result contract with an expectation in pipeline/matrix.yaml' % desc)
             else:
