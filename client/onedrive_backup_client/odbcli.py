@@ -24,6 +24,7 @@ from typing import Any, Optional
 
 from .api import BackupClient
 from .errors import ClientError
+from . import odbcli_schedule as schedule
 
 SETTINGS = ('url', 'ca', 'cert', 'key', 'timeout', 'password')
 REQUIRED = ('url',)
@@ -88,6 +89,7 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_argument('--text', required=True, help='typed text')
     _filters(sub)
     sub.add_argument('--limit', type=int, default=10, help='maximum names 1..20')
+    schedule.add_parsers(cmds)
     cmds.add_parser('health', help='probe the service with help')
     sub = cmds.add_parser('fetch', help='download a staged export through the transfer service')
     sub.add_argument('export_id')
@@ -155,6 +157,8 @@ def _params(parser: argparse.ArgumentParser, text: str) -> dict:
 
 def _execute(client: BackupClient, args: argparse.Namespace, params: dict) -> Any:
     command = args.command
+    if command.startswith('schedule-'):
+        return schedule.execute(client, args)
     if command == 'help':
         return client.help(args.cmdname)
     if command == 'health':
@@ -201,6 +205,9 @@ def _failure(exc: ClientError) -> str:
     text = 'odbcli: ' + str(exc)
     if exc.code is not None and str(exc.code) not in text:
         text += ' (code %s)' % exc.code
+    problems = schedule.problem_lines(exc.data)
+    if problems:
+        return '\n'.join([text] + problems)
     if isinstance(exc.data, dict) and exc.data:
         text += ' data=' + json.dumps(exc.data, ensure_ascii=False, sort_keys=True)[:400]
     return text
@@ -216,7 +223,10 @@ def main(argv: Optional[list] = None) -> int:
     except ClientError as exc:
         print(_failure(exc), file=sys.stderr)
         return 1 if exc.code is not None or type(exc).__name__ == 'ClientAuthenticationError' else 3
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    if args.command.startswith('schedule-'):
+        print(schedule.render(args, result))
+    else:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 
 
