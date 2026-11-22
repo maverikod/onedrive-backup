@@ -26,6 +26,12 @@ GROUPS12 = ('schedule-editor', 'schedule-problems', 'schedule-conflict', 'schedu
 COMMANDS12 = (('backup_schedule_get', ('next_count',)), ('backup_schedule_set', ('text', 'expected_revision', 'dry_run', 'next_count', 'actor')),
               ('backup_schedule_status', ('history_limit',)))
 POLL_MS = 15000
+STATUS_MARK_JS = (
+    '(() => { const f = window.fetch; window.__statusDone = [];'
+    ' window.fetch = function (...a) { const b = a[1] && typeof a[1].body === "string" ? a[1].body : "";'
+    ' const p = f.apply(this, a); if (b.indexOf("backup_schedule_status") >= 0) {'
+    ' p.then(() => window.__statusDone.push(Date.now()), () => undefined); } return p; }; })();'
+)
 vue11.ACTIONS.update({'backup_schedule_get': ((), ('next_count',), {}), 'backup_schedule_set': (('text',), ('expected_revision', 'dry_run', 'next_count', 'actor'), {}),
                       'backup_schedule_status': ((), ('history_limit',), {})})
 
@@ -173,12 +179,19 @@ class Cases12(vue11.Cases):
         '''
         sess = Session(self.drv, clock=True)
         try:
+            sess.page.add_init_script(STATUS_MARK_JS)
             sess.go(ROUTE)
             page = sess.page
             if not self.present('V11 L13', page):
                 return
+            marks = page.evaluate('window.__statusDone')
+            if not marks:
+                self.bad('V11 L13 poll: the page received no backup_schedule_status answer, the 15 s poll cannot be timed')
+                return
+            page.clock.pause_at(page.evaluate('Date.now()') + 500)
+            since = page.evaluate('Date.now()') - marks[-1]
             start = len(sess.calls)
-            page.clock.fast_forward(POLL_MS - 1000)
+            page.clock.fast_forward(max(POLL_MS - 1000 - since, 1))
             page.wait_for_timeout(SETTLE_MS)
             early = [m for m, _ in pairs(sess, start)]
             page.clock.fast_forward(2000)
@@ -193,6 +206,7 @@ class Cases12(vue11.Cases):
             page.wait_for_timeout(SETTLE_MS)
             if [m for m, _ in pairs(sess, left) if m.startswith('backup_schedule')]:
                 self.bad('V11 L13: a schedule command is still sent after the section was left: %s' % pairs(sess, left))
+            page.clock.resume()
             sess.go(ROUTE)
             page.wait_for_timeout(SETTLE_MS)
             if tid(page, 'logout').count() == 1:
