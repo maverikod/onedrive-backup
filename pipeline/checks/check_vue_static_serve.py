@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pipeline import vue11
+from pipeline import vue12
 
 
 def run() -> None:
-    '''Raise CheckFailure when the check is RED.
+    '''Raise CheckFailure when the check is RED (revision 12: the service page carries the tab svc-tab-schedule, rows V1, V11).
 
     Returns:
         None.
     '''
-    vue11.vue_static_serve()
+    vue12.vue_static_serve()
