@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.22 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.23 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
