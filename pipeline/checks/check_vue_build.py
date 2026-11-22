@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pipeline import vue11
+from pipeline import vue12
 
 
 def run() -> None:
-    '''Raise CheckFailure when the check is RED.
+    '''Raise CheckFailure when the check is RED (revision 12 adds the Vitest groups of the schedule section, rows V6, V11).
 
     Returns:
         None.
     '''
-    vue11.vue_build()
+    vue12.vue_build()
