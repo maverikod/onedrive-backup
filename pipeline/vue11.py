@@ -337,6 +337,36 @@ class Cases:
         finally:
             sess.close()
 
+    def autocomplete_case(self) -> None:
+        '''L7 case (10.19.3 RF2): the same text typed as акт, АКТ and Акт sends one suggest call carrying the text as typed and lists the same names in the same order.
+
+        Returns:
+            None.
+        '''
+        seen: dict[str, list[str]] = {}
+        for text in ('акт', 'АКТ', 'Акт'):
+            sess = Session(self.drv, clock=True)
+            try:
+                sess.go('')
+                page = sess.page
+                if not self.have('V9 L7 case', page, ('name-input',)):
+                    return
+                page.clock.pause_at(page.evaluate('Date.now()') + 1000)
+                start = len(sess.calls)
+                tid(page, 'name-input').fill(text)
+                page.clock.fast_forward(300)
+                page.wait_for_timeout(SETTLE_MS)
+                late = [p for m, p in pairs(sess, start) if m == 'backup_suggest_names']
+                if len(late) != 1 or not isinstance(late[0], dict) or late[0].get('text') != text:
+                    self.bad('V9 L7 case: typed %r, the backup_suggest_names calls are %s, expected exactly one with that text' % (text, late))
+                    return
+                items = tid(page, 'name-suggest-item')
+                seen[text] = [items.nth(index).get_attribute('data-raw') or '' for index in range(items.count())]
+            finally:
+                sess.close()
+        if not seen['акт'] or len({json.dumps(names, ensure_ascii=False) for names in seen.values()}) != 1:
+            self.bad('V9 L7 case: the listbox names differ by letter case, expected the same non-empty names for акт, АКТ and Акт: %s' % json.dumps(seen, ensure_ascii=False)[:600])
+
     def service_tabs(self) -> None:
         '''L8: #/service sends only the snapshots command, a tab sends only its section commands and the discovery poll stops when the tab is left.
 
@@ -533,7 +563,7 @@ def _polling(report: Report) -> None:
     '''
     root = vuechecks.deployed(report, 'V7 SPA endpoint')
     if root is not None:
-        vuechecks.with_driver(report, 'V7 browser', root, _case(root, 'service_tabs'), _case(root, 'autocomplete'), vueroutes.export_poll_case)
+        vuechecks.with_driver(report, 'V7 browser', root, _case(root, 'service_tabs'), _case(root, 'autocomplete'), _case(root, 'autocomplete_case'), vueroutes.export_poll_case)
 
 
 def vue_polling() -> None:
