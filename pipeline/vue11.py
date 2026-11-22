@@ -287,6 +287,73 @@ class Cases:
             for export_id in made:
                 live.request('backup_delete_export', {'export_id': export_id})
 
+    def detail_panel(self) -> None:
+        '''L6 side panel (user correction of 2026-11-22): at 1600x900 a click on the LAST row of a long result list shows the file properties and the download controls in `detail-panel`, right of the result table and inside the viewport.
+
+        Returns:
+            None.
+        '''
+        sess = Session(self.drv)
+        made: list[str] = []
+        try:
+            sess.page.set_viewport_size({'width': 1600, 'height': 900})
+            sess.go('')
+            page = sess.page
+            if not self.have('V9 L6 side panel', page, ('result-table', 'result-row', 'result-download')):
+                return
+            rows = tid(page, 'result-row')
+            table = tid(page, 'result-table').bounding_box()
+            if rows.count() < 20 or table is None or table['height'] <= 900:
+                self.report.state.append('V9 L6 side panel: %d result rows, table height %s at 1600x900, the list must be longer than the viewport' % (rows.count(), None if table is None else table['height']))
+                return
+            last = rows.nth(rows.count() - 1)
+            last.scroll_into_view_if_needed()
+            facts = [last.locator('[data-field=site_name]').get_attribute('data-raw'), last.locator('[data-field=name]').get_attribute('data-raw'), last.get_attribute('data-library'), last.locator('[data-field=snapshot_time]').inner_text()]
+            marks = last.locator('[data-testid=result-copy-mark]')
+            if marks.count():
+                facts.append(marks.first.inner_text())
+            start = len(sess.calls)
+            last.locator('[data-testid=result-download]').first.click()
+            sent: list[dict] = []
+            for _ in range(75):
+                sent = [c for c in sess.calls[start:] if c['method'] == 'backup_prepare_download' and c['reply'] is not None]
+                if sent:
+                    break
+                page.wait_for_timeout(200)
+            meta = vueroutes.reply_data(sent[0]) if sent else None
+            if not isinstance(meta, dict) or not meta.get('export_id'):
+                self.bad('V9 L6 side panel: the click on the last row sent %s, expected one backup_prepare_download with a result' % pairs(sess, start))
+                return
+            made.append(meta['export_id'])
+            page.wait_for_timeout(SETTLE_MS)
+            if not self.have('V9 L6 side panel', page, ('detail-panel',)):
+                return
+            panel = tid(page, 'detail-panel')
+            link = panel.locator('[data-testid=download-link]')
+            for _ in range(150):
+                if link.count() == 1:
+                    break
+                page.wait_for_timeout(200)
+            if panel.count() != 1 or link.count() != 1 or panel.locator('[data-testid=export-panel] [data-testid=export-card]').count() != 1:
+                self.bad('V9 L6 side panel: %d detail-panel, %d download-link and %d export-card inside it, expected one of each' % (panel.count(), link.count(), panel.locator('[data-testid=export-card]').count()))
+                return
+            box, table, point, view = panel.bounding_box(), tid(page, 'result-table').bounding_box(), link.bounding_box(), page.viewport_size
+            if box is None or table is None or point is None or view is None:
+                self.bad('V9 L6 side panel: no bounding box for the panel, the table or the download link')
+                return
+            if box['x'] < table['x'] + table['width'] - 8:
+                self.bad('V9 L6 side panel: detail-panel x %.0f is not right of the result table (x %.0f, width %.0f), expected x >= table right edge - 8' % (box['x'], table['x'], table['width']))
+            if box['y'] < 0 or box['y'] >= view['height'] or point['y'] < 0 or point['y'] + point['height'] > view['height'] or box['x'] + box['width'] > view['width'] + 1:
+                self.bad('V9 L6 side panel: after a click on the last row the panel box %s and the download-link box %s are not inside the %dx%d viewport (visible without scrolling the page)' % (box, point, view['width'], view['height']))
+            text = ' '.join(panel.inner_text().split())
+            missing = [fact for fact in facts if fact and ' '.join(fact.split()) not in text]
+            if missing:
+                self.bad('V9 L6 side panel: detail-panel text lacks the properties %s of the clicked row (site, shown name, library/folder, date/time, copy marker)' % missing)
+        finally:
+            sess.close()
+            for export_id in made:
+                live.request('backup_delete_export', {'export_id': export_id})
+
     def autocomplete(self) -> None:
         '''L7: the drop-down opens only after 250 ms and 2 characters with one suggest call, keyboard pick fills and applies, Escape closes, logout sends nothing.
 
@@ -526,7 +593,7 @@ def vue_command_calls() -> None:
 
 
 def _download(report: Report) -> None:
-    '''V5 on revision 11: the unknown link, the staged export and the row download of the main page.
+    '''V5 on revision 11: the unknown link, the staged export, the row download and the side panel of the main page.
 
     Args:
         report: the findings collector.
@@ -544,6 +611,7 @@ def _download(report: Report) -> None:
     if live.service_state() == 'S1':
         vuechecks._s1_download(report, root)
         vuechecks.with_driver(report, 'V5 browser', root, _case(root, 'download_row'))
+        vuechecks.with_driver(report, 'V9 L6 side panel browser', root, _case(root, 'detail_panel'))
     else:
         report.state.append('V5 the staged export and the row download need an S1 service')
 
