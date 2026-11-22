@@ -1,8 +1,9 @@
 <script setup lang="ts">
-// The one service page: five sections behind tabs. Only the visible section is mounted, so only its command is sent (lazy).
+// The one service page: six sections behind tabs. Only the visible section is mounted, so only its command is sent (lazy).
 import { computed } from 'vue'
 import { SECTIONS, hrefSection, type Route, type Section } from '../lib'
 import ListPage from './ListPage.vue'
+import SchedulePage from './SchedulePage.vue'
 import StatusPage from './StatusPage.vue'
 
 const props = defineProps<{ route: Route }>()
@@ -13,6 +14,7 @@ const titles: Record<Section, string> = {
   discovery: 'Обнаружение',
   help: 'Справка',
   info: 'Информация',
+  schedule: 'Расписание',
 }
 </script>
 
@@ -23,6 +25,7 @@ const titles: Record<Section, string> = {
       <a v-for="name in SECTIONS" :key="name" :data-testid="'svc-tab-' + name" :href="hrefSection(name)" :aria-current="name === section ? 'page' : undefined">{{ titles[name] }}</a>
     </p>
     <ListPage v-if="section === 'snapshots' || section === 'sites'" :kind="section" :route="route" />
+    <SchedulePage v-else-if="section === 'schedule'" />
     <StatusPage v-else :kind="section" :route="route" />
   </section>
 </template>
