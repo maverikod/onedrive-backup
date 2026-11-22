@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import atexit
-import fcntl
-import json
 import logging
 import os
 import subprocess
@@ -13,12 +11,14 @@ import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from functools import partial
 from typing import Any, Callable
 
 from .run_records import append_complete, load_runs, reconcile, runs_path, trim
 from .schedule_cron import iso_utc, jitter_delay
 from .schedule_store import ScheduleStore
 from .scheduler_decide import Action, decide, next_state, slots
+from . import scheduler_support as support
 
 __all__ = ["Action", "Scheduler", "decide", "jitter_delay", "next_state", "slots", "start_scheduler"]
 
@@ -78,10 +78,17 @@ class Scheduler:
         _dropped: The slots already logged as dropped.
     """
 
-    def __init__(self, data_dir: str | Path, *, clock: Callable[[], datetime] | None = None,
-                 runner: Callable[[list[str], dict[str, str]], Any] | None = None,
-                 lock_probe: Callable[[], bool] | None = None, storage_ok: Callable[[], bool] | None = None,
-                 scaffold: bool | None = None, manage_leader: bool = False) -> None:
+    def __init__(
+        self,
+        data_dir: str | Path,
+        *,
+        clock: Callable[[], datetime] | None = None,
+        runner: Callable[[list[str], dict[str, str]], Any] | None = None,
+        lock_probe: Callable[[], bool] | None = None,
+        storage_ok: Callable[[], bool] | None = None,
+        scaffold: bool | None = None,
+        manage_leader: bool = False,
+    ) -> None:
         """Build the scheduler; nothing is read or started.
 
         Args:
@@ -96,8 +103,8 @@ class Scheduler:
         self.data_dir = Path(data_dir)
         self.clock = clock or (lambda: datetime.now(UTC))
         self.runner = runner or spawn
-        self.lock_probe = lock_probe or self._probe
-        self.storage_guard = storage_ok or self._guard
+        self.lock_probe = lock_probe or partial(support.probe_lock, self.data_dir)
+        self.storage_guard = storage_ok or partial(support.storage_guard, self.data_dir)
         self.scaffold = os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1" if scaffold is None else scaffold
         self.manage_leader = manage_leader
         self.leader = True
@@ -121,78 +128,14 @@ class Scheduler:
         self._leader_fd: int | None = None
         self._dropped: set[str] = set()
 
-    def _guard(self) -> bool:
-        """Check the archive storage guard G2: the data directory is writable and not on the state filesystem.
-
-        Returns:
-            True when the storage is usable.
-        """
-        try:
-            data = os.stat(self.data_dir)
-            state = Path(os.environ.get("ONEDRIVE_RCLONE_STATE", "/rclone-state"))
-            if state.exists() and os.stat(state).st_dev == data.st_dev:
-                return False
-            return os.access(self.data_dir, os.W_OK)
-        except OSError:
-            return False
-
-    def _probe(self) -> bool:
-        """Probe the backup lock without taking it.
-
-        Returns:
-            True when another process holds <data>/backup.lock.
-        """
-        try:
-            handle = os.open(self.data_dir / "backup.lock", os.O_RDONLY)
-        except FileNotFoundError:
-            return False
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            fcntl.flock(handle, fcntl.LOCK_UN)
-            return False
-        except BlockingIOError:
-            return True
-        finally:
-            os.close(handle)
-
     def _take_leader(self) -> bool:
         """Take the leader lock for the life of the process.
 
         Returns:
             True when this process is the leader.
         """
-        try:
-            folder = self.data_dir / "schedule"
-            folder.mkdir(mode=0o700, parents=True, exist_ok=True)
-            handle = os.open(folder / "scheduler.lock", os.O_RDWR | os.O_CREAT, 0o600)
-        except OSError:
-            return False
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            os.close(handle)
-            return False
-        self._leader_fd = handle
-        return True
-
-    def _save_state(self, state: dict[str, Any]) -> None:
-        """Store the baseline state; a failure is only logged.
-
-        Args:
-            state: The state.
-
-        Returns:
-            None.
-        """
-        path = self.data_dir / "schedule" / "state.json"
-        body = {"schema": 1, "schedule_revision": state.get("schedule_revision"), "baseline_utc": state.get("baseline_utc")}
-        temp = path.with_name(path.name + ".tmp-%d" % os.getpid())
-        try:
-            temp.write_text(json.dumps(body), encoding="utf-8")
-            os.replace(temp, path)
-        except OSError as exc:
-            LOG.warning("scheduler: state not stored: %s", exc)
-            temp.unlink(missing_ok=True)
+        self._leader_fd = support.take_leader(self.data_dir)
+        return self._leader_fd is not None
 
     def _observe(self, parsed: dict[str, Any], now: datetime) -> dict[str, Any]:
         """Apply the baseline rule to the revision of the effective schedule and keep the state.
@@ -205,33 +148,19 @@ class Scheduler:
             The state.
         """
         if self.state is None:
-            try:
-                stored = json.loads((self.data_dir / "schedule" / "state.json").read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                stored = None
-            if not isinstance(stored, dict) or not stored.get("baseline_utc"):
+            stored = support.load_state(self.data_dir)
+            if stored is None:
                 stored = {"schedule_revision": parsed["revision"], "baseline_utc": iso_utc(self.started)}
-                self._save_state(stored)
+                support.save_state(self.data_dir, stored)
             self.state = dict(stored, thread_started_utc=iso_utc(self.started))
         updated = next_state(self.state, parsed["revision"], now)
         if updated["schedule_revision"] != self.state["schedule_revision"]:
-            self._save_state(updated)
-            LOG.info("scheduler: schedule revision %s in force, baseline %s", parsed["revision"][:12], updated["baseline_utc"])
-            if parsed["revision"] not in self._known_changes():
+            support.save_state(self.data_dir, updated)
+            LOG.info("scheduler: schedule revision %s in force", parsed["revision"][:12])
+            if parsed["revision"] not in support.changes_tail(self.data_dir):
                 self.store.log_change("file", self.state["schedule_revision"], parsed["revision"], parsed)
         self.state = updated
         return updated
-
-    def _known_changes(self) -> str:
-        """Read the tail of changes.jsonl.
-
-        Returns:
-            The text of the last lines, empty when there is none.
-        """
-        try:
-            return "".join((self.data_dir / "schedule" / "changes.jsonl").read_text(encoding="utf-8").splitlines(True)[-5:])
-        except OSError:
-            return ""
 
     def _live(self) -> list[dict[str, Any]]:
         """Describe the child of this scheduler as a running record while it lives.
