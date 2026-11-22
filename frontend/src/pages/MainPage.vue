@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// The single filter page '#/': site and date checkboxes, the file name field with its autocomplete, ONE result area with exactly
-// three columns (site, file name, date) and the inline export panel. The filter state lives in the hash (pushState, no remount).
+// The single filter page '#/': site and date checkboxes, the file name field with its autocomplete and a two-column area: the result list
+// (exactly three columns: site, file name, date) on the left and the side panel `detail-panel` on the right with the properties of the
+// clicked row and its export controls. The filter state lives in the hash (pushState, no remount).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { Banner } from '../command'
 import ErrorBanner from '../components/ErrorBanner.vue'
@@ -9,6 +10,7 @@ import {
   SUGGEST_LIMIT,
   copyMarker,
   escapeName,
+  formatBytes,
   formatSnapshot,
   hasFilter,
   hasNext,
@@ -36,6 +38,7 @@ const dropped = ref(false)
 const result = ref<Record<string, unknown> | null>(null)
 const banner = ref<Banner | null>(null)
 const exportId = ref('')
+const selected = ref<Record<string, unknown> | null>(null)
 const busy = ref(false)
 const zone = ref('Europe/Kyiv')
 const applied = ref<Filter>(parseFilter(props.route.query))
@@ -228,10 +231,11 @@ function go(offset: number): void {
   void applyFilter({ ...applied.value, offset })
 }
 
-/** Download of a row through the export flow: exactly one backup_prepare_download, then the inline export card. */
+/** Download of a row through the export flow: the row's properties go to the side panel, exactly one backup_prepare_download, then the export card in it. */
 async function download(item: Record<string, unknown>): Promise<void> {
   if (busy.value) return
   busy.value = true
+  selected.value = item
   try {
     const out = await invoke('backup_prepare_download', { snapshot_id: String(item.snapshot_id), file_path: String(item.file_path) })
     const id = isRecord(out) ? out.export_id : undefined
@@ -316,49 +320,70 @@ onBeforeUnmount(() => {
       <button type="button" data-testid="filter-reset" @click="reset">Сбросить</button>
     </form>
 
-    <section data-testid="result-area">
-      <ErrorBanner :banner="banner" />
-      <p data-testid="result-count" data-field="total" :data-raw="String(total)">{{ total }}</p>
-      <p v-if="notIndexed > 0" data-testid="result-index-note">индекс ещё строится: {{ notIndexed }} снимков не учтено</p>
-      <p v-if="result !== null && total === 0" data-testid="result-empty">Ничего не найдено</p>
-      <table data-testid="result-table">
-        <thead>
-          <tr>
-            <th data-testid="col-site">Имя сайта</th>
-            <th data-testid="col-name">Имя файла</th>
-            <th data-testid="col-date">Дата</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(item, index) in rows"
-            :key="index"
-            data-testid="result-row"
-            :data-snapshot-id="String(item.snapshot_id)"
-            :data-path="String(item.file_path)"
-            :data-library="String(item.library_name)"
-            :data-size="String(item.size)"
-            :data-copy-index="String(item.copy_index)"
-          >
-            <td data-field="site_name" :data-raw="String(item.site_name)">{{ item.site_name }}</td>
-            <td data-field="name" :data-raw="String(item.name)">
-              <span data-testid="result-where" :title="where(item)" :data-raw="where(item)">
-                <button type="button" data-testid="result-download" :disabled="busy" @click="download(item)">{{ item.name }}</button>
-              </span>
-              <span v-if="Number(item.copy_index) > 0" data-testid="result-copy-mark" data-field="copy_index" :data-raw="String(item.copy_index)">{{ copyMarker(Number(item.copy_index)) }}</span>
-            </td>
-            <td data-field="snapshot_time" :data-raw="String(item.snapshot_time)">{{ formatSnapshot(String(item.snapshot_time), zone) }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <p>
-        <button type="button" data-testid="page-prev" :disabled="applied.offset === 0" @click="go(prevOffset(applied.offset))">Назад</button>
-        <button type="button" data-testid="page-next" :disabled="!hasNext(applied.offset, total, rows.length)" @click="go(nextOffset(applied.offset))">Вперёд</button>
-      </p>
-    </section>
+    <div class="main-grid">
+      <section data-testid="result-area" class="result-area">
+        <ErrorBanner :banner="banner" />
+        <p data-testid="result-count" data-field="total" :data-raw="String(total)">{{ total }}</p>
+        <p v-if="notIndexed > 0" data-testid="result-index-note">индекс ещё строится: {{ notIndexed }} снимков не учтено</p>
+        <p v-if="result !== null && total === 0" data-testid="result-empty">Ничего не найдено</p>
+        <table data-testid="result-table">
+          <thead>
+            <tr>
+              <th data-testid="col-site">Имя сайта</th>
+              <th data-testid="col-name">Имя файла</th>
+              <th data-testid="col-date">Дата</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(item, index) in rows"
+              :key="index"
+              data-testid="result-row"
+              :class="{ picked: selected === item }"
+              :data-snapshot-id="String(item.snapshot_id)"
+              :data-path="String(item.file_path)"
+              :data-library="String(item.library_name)"
+              :data-size="String(item.size)"
+              :data-copy-index="String(item.copy_index)"
+            >
+              <td data-field="site_name" :data-raw="String(item.site_name)">{{ item.site_name }}</td>
+              <td data-field="name" :data-raw="String(item.name)">
+                <span data-testid="result-where" :title="where(item)" :data-raw="where(item)">
+                  <button type="button" data-testid="result-download" :disabled="busy" @click="download(item)">{{ item.name }}</button>
+                </span>
+                <span v-if="Number(item.copy_index) > 0" data-testid="result-copy-mark" data-field="copy_index" :data-raw="String(item.copy_index)">{{ copyMarker(Number(item.copy_index)) }}</span>
+              </td>
+              <td data-field="snapshot_time" :data-raw="String(item.snapshot_time)">{{ formatSnapshot(String(item.snapshot_time), zone) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          <button type="button" data-testid="page-prev" :disabled="applied.offset === 0" @click="go(prevOffset(applied.offset))">Назад</button>
+          <button type="button" data-testid="page-next" :disabled="!hasNext(applied.offset, total, rows.length)" @click="go(nextOffset(applied.offset))">Вперёд</button>
+        </p>
+      </section>
 
-    <div v-if="exportId !== ''" data-testid="export-panel">
-      <ExportPage :key="exportId" :export-id="exportId" @gone="exportId = ''" />
+      <aside data-testid="detail-panel" class="detail-panel" :class="{ empty: selected === null }">
+        <template v-if="selected !== null">
+          <h2>Свойства файла</h2>
+          <dl data-testid="detail-props">
+            <dt>Имя файла</dt>
+            <dd data-testid="detail-name">{{ selected.name }} <span v-if="Number(selected.copy_index) > 0" data-testid="detail-copy-mark">{{ copyMarker(Number(selected.copy_index)) }}</span></dd>
+            <dt>Сайт</dt>
+            <dd data-testid="detail-site">{{ selected.site_name }}</dd>
+            <dt>Библиотека / папка</dt>
+            <dd data-testid="detail-where">{{ where(selected) }}</dd>
+            <dt>Размер</dt>
+            <dd data-testid="detail-size">{{ formatBytes(String(selected.size)) }}</dd>
+            <dt>Дата и время бэкапа</dt>
+            <dd data-testid="detail-time">{{ formatSnapshot(String(selected.snapshot_time), zone) }}</dd>
+          </dl>
+        </template>
+        <p v-else data-testid="detail-hint">Нажмите на имя файла в списке: здесь появятся его свойства и кнопки скачивания.</p>
+        <div v-if="exportId !== ''" data-testid="export-panel">
+          <ExportPage :key="exportId" :export-id="exportId" @gone="exportId = ''" />
+        </div>
+      </aside>
     </div>
   </section>
 </template>
@@ -384,5 +409,54 @@ onBeforeUnmount(() => {
 }
 .suggest li[aria-selected='true'] {
   background: #cde;
+}
+.main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 28rem);
+  gap: 1rem;
+  align-items: start;
+}
+.result-area table {
+  width: 100%;
+}
+.result-area tr.picked td {
+  background: #ddf4ff;
+}
+.detail-panel {
+  position: sticky;
+  top: 0.5rem;
+  max-height: calc(100vh - 1rem);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  background: #fff;
+  border: 1px solid #d0d7de;
+}
+.detail-panel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+.detail-panel dl {
+  margin: 0 0 0.5rem;
+}
+.detail-panel dt {
+  font-size: 0.8rem;
+  color: #57606a;
+}
+.detail-panel dd {
+  margin: 0 0 0.35rem;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 899px) {
+  .main-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .detail-panel {
+    position: static;
+    max-height: none;
+  }
+  .detail-panel.empty {
+    display: none;
+  }
 }
 </style>
