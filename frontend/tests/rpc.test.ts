@@ -59,8 +59,8 @@ describe('auth', () => {
 })
 
 describe('commands', () => {
-  it('has one table of the thirteen commands the SPA calls and one it does not', () => {
-    expect(Object.keys(COMMANDS)).toHaveLength(13)
+  it('has one table of the sixteen commands the SPA calls and one it does not', () => {
+    expect(Object.keys(COMMANDS)).toHaveLength(16)
     expect(NOT_USED).toEqual(['backup_download_begin'])
   })
 
