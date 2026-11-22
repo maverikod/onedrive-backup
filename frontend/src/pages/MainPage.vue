@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // The single filter page '#/': site and date checkboxes, the file name field with its autocomplete and a two-column area: the result list
-// (exactly three columns: site, file name, date) on the left and the side panel `detail-panel` on the right with the properties of the
+// (exactly three columns: site, file name, date) under its page toolbar on the left and the side panel `detail-panel` on the right with the properties of the
 // clicked row and its export controls. The filter state lives in the hash (pushState, no remount).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { Banner } from '../command'
 import ErrorBanner from '../components/ErrorBanner.vue'
+import ResultPager from '../components/ResultPager.vue'
 import {
   SUGGEST_DELAY_MS,
   SUGGEST_LIMIT,
@@ -13,12 +14,9 @@ import {
   formatBytes,
   formatSnapshot,
   hasFilter,
-  hasNext,
   hrefMain,
   isRecord,
-  nextOffset,
   parseFilter,
-  prevOffset,
   searchValues,
   suggestible,
   type Filter,
@@ -326,6 +324,7 @@ onBeforeUnmount(() => {
         <p data-testid="result-count" data-field="total" :data-raw="String(total)">{{ total }}</p>
         <p v-if="notIndexed > 0" data-testid="result-index-note">индекс ещё строится: {{ notIndexed }} снимков не учтено</p>
         <p v-if="result !== null && total === 0" data-testid="result-empty">Ничего не найдено</p>
+        <ResultPager :offset="applied.offset" :total="total" :count="rows.length" @go="go" />
         <table data-testid="result-table">
           <thead>
             <tr>
@@ -357,10 +356,6 @@ onBeforeUnmount(() => {
             </tr>
           </tbody>
         </table>
-        <p>
-          <button type="button" data-testid="page-prev" :disabled="applied.offset === 0" @click="go(prevOffset(applied.offset))">Назад</button>
-          <button type="button" data-testid="page-next" :disabled="!hasNext(applied.offset, total, rows.length)" @click="go(nextOffset(applied.offset))">Вперёд</button>
-        </p>
       </section>
 
       <aside data-testid="detail-panel" class="detail-panel" :class="{ empty: selected === null }">
