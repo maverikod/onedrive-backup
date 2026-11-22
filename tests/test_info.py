@@ -73,6 +73,9 @@ class ReferenceContractTests(unittest.TestCase):
             "backup_filter_options",
             "backup_search_files",
             "backup_suggest_names",
+            "backup_schedule_get",
+            "backup_schedule_set",
+            "backup_schedule_status",
             "help",
         ):
             category = "backup"
