@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // A4 export card with the plain download link, A5 delete. Polls backup_download_status every 5 s ONLY while the answer is not final.
-// As a page ('#/exports/<id>') it is page-export; inline on the main page (exportId prop) it is the card inside export-panel.
+// As a page ('#/exports/<id>') it is page-export; inline in the side panel of the main page (exportId prop) it is the card inside export-panel,
+// with the download link and the delete button shown first so they stay visible without scrolling the panel.
 import { computed, ref } from 'vue'
 import { useCommand, type Banner } from '../command'
 import DataView from '../components/DataView.vue'
@@ -63,13 +64,24 @@ async function remove(): Promise<void> {
   <section v-if="settled" :data-testid="inline ? undefined : 'page-export'">
     <h1 v-if="!inline">Export {{ exportId }}</h1>
     <ErrorBanner :banner="banner ?? failed" />
-    <div v-if="card" data-testid="export-card">
+    <div v-if="card" data-testid="export-card" :class="{ 'inline-card': inline }">
       <DataView :data="card" />
       <p v-if="expired" data-testid="export-expired">This export has expired.</p>
-      <p>
+      <p class="export-actions">
         <a v-if="link" data-testid="download-link" :href="link" download v-on="auth.hasKey ? { click: saveWithKey } : {}">Download</a>
         <button type="button" data-testid="export-delete" :disabled="busy" @click="remove()">Delete export</button>
       </p>
     </div>
   </section>
 </template>
+
+<style scoped>
+.inline-card {
+  display: flex;
+  flex-direction: column;
+}
+.inline-card .export-actions {
+  order: -1;
+  margin: 0 0 0.5rem;
+}
+</style>
