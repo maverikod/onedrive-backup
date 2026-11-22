@@ -442,10 +442,33 @@ def _u_rf3(case: Case) -> None:
         case.bad('names %s are not rows of backup_search_files, or there is no name' % missing)
 
 
+def _u_case(case: Case) -> None:
+    '''10.19.3: the same text in lower, title, swapped and upper case, Cyrillic and Latin, gives the same names, order and truncation.
+
+    Args:
+        case: the executed case.
+
+    Returns:
+        None.
+    '''
+    typed = case.params['text']
+    texts = list(dict.fromkeys([typed, typed.lower(), typed.capitalize(), typed.swapcase(), 'pdf', 'PDF', 'Pdf']))
+    groups: dict[str, set[str]] = {}
+    for text in texts:
+        data = case.data if text == typed else _call('backup_suggest_names', {'text': text})
+        names = [item.get('name', '') for item in data.get('items', [])]
+        if data.get('text') != text or not names or not all(matcher(text)(name) for name in names):
+            case.bad('text %r: echoed %r, %d names, or a name that does not match it' % (text, data.get('text'), len(names)))
+        groups.setdefault(key(text), set()).add(json.dumps([names, data.get('truncated')], ensure_ascii=False))
+    for same, seen in groups.items():
+        if len(seen) > 1:
+            case.bad('the spellings of %r give %d different results (names, order or truncated), expected one' % (same, len(seen)))
+
+
 VALIDATORS: dict[str, Callable[[Case], None]] = {
     'fo_base': _fo_base, 'fo_site': _fo_site, 'fo_unknown': _fo_unknown, 'nowrite': _nowrite, 's_default': _s_default, 's_dates': _s_dates,
     's_case': _s_case, 's_glob': _s_glob, 's_contains': _s_contains, 's_versions': _s_versions, 's_paging': _s_paging, 's_beyond': _s_beyond,
-    'u_basic': _u_basic, 'u_glob': _u_glob, 'u_rf3': _u_rf3,
+    'u_basic': _u_basic, 'u_glob': _u_glob, 'u_rf3': _u_rf3, 'u_case': _u_case,
 }
 
 
