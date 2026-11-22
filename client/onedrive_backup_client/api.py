@@ -72,6 +72,19 @@ def _digest(path: Path) -> tuple[int, str]:
 
 class BackupClient:
     '''Every command of the server as a method, plus call, raw_call and the verified downloads.'''
+    def schedule_get(self, next_count: Optional[int] = None) -> Any:
+        '''The backup schedule: text, revision, entries and next runs (backup_schedule_get); an omitted option is not sent.'''
+        return self._command('backup_schedule_get', next_count=next_count)
+
+    def schedule_set(self, text: str, expected_revision: Optional[str] = None, dry_run: bool = False,
+                     next_count: Optional[int] = None, actor: str = 'client') -> Any:
+        '''Check (dry_run) or store the whole schedule text (backup_schedule_set); an omitted option is not sent.'''
+        return self._command('backup_schedule_set', text=text, expected_revision=expected_revision, dry_run=dry_run or None,
+                             next_count=next_count, actor=actor)
+
+    def schedule_status(self, history_limit: Optional[int] = None) -> Any:
+        '''The scheduler state, the current and last runs and the next run (backup_schedule_status).'''
+        return self._command('backup_schedule_status', history_limit=history_limit)
 
     def __init__(self, url: str, ca: Optional[str] = None, cert: Optional[str] = None, key: Optional[str] = None,
                  timeout: int = 180, password: Optional[str] = None) -> None:
