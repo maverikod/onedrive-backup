@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pipeline import vue11
+from pipeline import vue12
 
 
 def run() -> None:
-    '''Raise CheckFailure when the check is RED.
+    '''Raise CheckFailure when the check is RED (revision 12: the schedule route sends exactly get and status, rows V4, V11).
 
     Returns:
         None.
     '''
-    vue11.vue_command_calls()
+    vue12.vue_command_calls()
