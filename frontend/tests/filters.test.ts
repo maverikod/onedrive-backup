@@ -71,14 +71,15 @@ describe('datelabel', () => {
 })
 
 describe('service-sections', () => {
-  it('has five sections and every section sends exactly its own command', () => {
-    expect([...SECTIONS]).toEqual(['snapshots', 'sites', 'discovery', 'help', 'info'])
+  it('has six sections and every section sends exactly its own command', () => {
+    expect([...SECTIONS]).toEqual(['snapshots', 'sites', 'discovery', 'help', 'info', 'schedule'])
     expect(SECTION_COMMANDS).toEqual({
       snapshots: 'backup_snapshots',
       sites: 'backup_sites_list',
       discovery: 'backup_discovery_status',
       help: 'help',
       info: 'info',
+      schedule: 'backup_schedule_get',
     })
   })
   it('routes the service page and its sections, and refuses every other section and every old route', () => {
