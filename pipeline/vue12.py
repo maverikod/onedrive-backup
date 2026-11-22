@@ -188,7 +188,7 @@ class Cases12(vue11.Cases):
             if not marks:
                 self.bad('V11 L13 poll: the page received no backup_schedule_status answer, the 15 s poll cannot be timed')
                 return
-            page.clock.pause_at(page.evaluate('Date.now()') + 500)
+            page.clock.pause_at((page.evaluate('Date.now()') + 500) / 1000)
             since = page.evaluate('Date.now()') - marks[-1]
             start = len(sess.calls)
             page.clock.fast_forward(max(POLL_MS - 1000 - since, 1))
