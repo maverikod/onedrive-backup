@@ -1,0 +1,20 @@
+#!/bin/sh
+# Matrix 10.20.8 (rev 12): before an upgrade unpacks the new package, while the old unit files still exist, capture the
+# state of the old systemd backup timer for the postinst and retire it, so that it never starts a backup beside the
+# scheduler thread of the service (the lock would refuse a second start, but the status would show a refusal).
+set -eu
+case "$1" in
+  upgrade)
+    if [ -d /run/systemd/system ] && [ -d /var/lib/onedrive-backup ] && systemctl cat onedrive-backup.timer >/dev/null 2>&1; then
+      umask 077
+      state=/var/lib/onedrive-backup/timer-state.pre
+      {
+        if systemctl is-enabled onedrive-backup.timer >/dev/null 2>&1; then echo enabled=yes; else echo enabled=no; fi
+        if systemctl is-active onedrive-backup.timer >/dev/null 2>&1; then echo active=yes; else echo active=no; fi
+        systemctl show onedrive-backup.timer 2>/dev/null || true
+      } > "$state"
+      systemctl disable --now onedrive-backup.timer >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+exit 0
