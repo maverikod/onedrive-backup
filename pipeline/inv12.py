@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pipeline import b4base
 
-TAG = 'PLANNED(SCHEDULE-REV12)'
+TAG = 'CURRENT'
 BLOCK = 'SCHEDULE-REV12'
 BAD = ('range', 'fields', 'extra', 'step0', 'freq', 'never', 'macro', 'tz', 'jit61', 'jitnounit', 'catch200', 'enabled', 'twotz', 'foo', 'entries21',
        'nul', 'ctl', 'surrogate', 'long257', 'lines201', 'twobad')
