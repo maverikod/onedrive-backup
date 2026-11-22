@@ -214,6 +214,11 @@ class Cases:
             start = len(sess.calls)
             tid(sess.page, 'filter-apply').click()
             sess.page.wait_for_timeout(SETTLE_MS)
+            waited = 0
+            while waited < 30000 and any(c['method'] == 'backup_search_files' and c['status'] is None for c in sess.calls):
+                sess.page.wait_for_timeout(100)
+                waited += 100
+            sess.page.wait_for_timeout(SETTLE_MS)
             sent = [p for m, p in pairs(sess, start) if m == 'backup_search_files' and isinstance(p, dict)]
             shown = sess.page.eval_on_selector_all('[data-testid=result-row]', 'rows => rows.map(r => (r.querySelector("[data-field=name]") || r).getAttribute("data-raw"))')
             kind, _, _, data = live.request('backup_search_files', sent[0]) if sent else ('none', 0, '', {})
