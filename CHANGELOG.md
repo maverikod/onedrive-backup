@@ -1,3 +1,7 @@
+## 0.3.24 — properties and download side panel on the main page (UI correction of matrix revision 11, user request 2026-11-22)
+
+- Web UI only, no command, parameter or result change: the main page `#/` is two columns, the result list on the left and the side panel `detail-panel` on the right. A click on a file name shows its properties (file name with the copy marker, site, library / folder, size, backup date and time) and the export card with the download link and the delete button in that panel, so a long list no longer hides them below the table. The panel stays in the viewport (sticky, own scroll); below a window width of 900 px it stacks under the list. All earlier test ids are unchanged; `detail-panel` is new.
+
 ## 0.3.23 — backup schedule file, scheduler thread and schedule section (matrix revision 12, section 10.20)
 
 - New commands `backup_schedule_get`, `backup_schedule_set` and `backup_schedule_status` (matrix rows M15-M17) read and write the cron-style schedule file `<data>/schedule/schedule.cron` and show the scheduler state; Python client methods `schedule_get`, `schedule_set`, `schedule_status` and the odbcli subcommands `schedule-get`, `schedule-set`, `schedule-status` use the same commands.
