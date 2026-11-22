@@ -68,6 +68,7 @@ def _register_commands() -> None:
     )
     from .commands_base import BackupHelpCommand
     from .commands_filter import BackupFilterOptions, BackupSearchFiles, BackupSuggestNames
+    from .commands_schedule import BackupScheduleGet, BackupScheduleSet, BackupScheduleStatus
     from .commands_sharepoint import (
         BackupDiscoveryStatus,
         BackupLibrariesList,
@@ -91,6 +92,9 @@ def _register_commands() -> None:
         BackupFilterOptions,
         BackupSearchFiles,
         BackupSuggestNames,
+        BackupScheduleGet,
+        BackupScheduleSet,
+        BackupScheduleStatus,
     ):
         registry.register(cls, "custom")
 
@@ -149,6 +153,10 @@ def main() -> None:
     path = str(Path(args.config).resolve())
     config = json.loads(Path(path).read_text(encoding="utf-8"))
     app = make_app(path)
+    # The backup scheduler thread starts with the process, before the listener (matrix 10.20.5).
+    from .scheduler import start_scheduler
+
+    start_scheduler(os.environ["ONEDRIVE_BACKUP_DATA"])
 
     from mcp_proxy_adapter.core.app_factory.ssl_config import build_server_ssl_config
     from mcp_proxy_adapter.core.logging import setup_logging
