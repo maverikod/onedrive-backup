@@ -10,6 +10,7 @@ import os
 import sys
 
 from . import sharepoint_backup
+from .run_records import RunRecorder
 from .catalog import Catalog
 from .file_index import FileIndex
 from .file_index_build import index_pending
@@ -33,7 +34,9 @@ def index_new_snapshots() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the SharePoint backup, then index its snapshots unless it was a dry run or was refused.
+    """Run the SharePoint backup with its run records, then index its snapshots unless it was a dry run.
+
+    Every start writes a start record and, in a finally, an end record to <data>/schedule/runs.jsonl (10.20.5).
 
     Args:
         argv: Optional CLI arguments of the backup.
@@ -41,11 +44,18 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         The exit status of the backup, unchanged.
     """
-    code = sharepoint_backup.main(argv)
     arguments = sys.argv[1:] if argv is None else argv
-    if "--dry-run" not in arguments and code in (0, 1):
-        index_new_snapshots()
-    return code
+    dry_run = "--dry-run" in arguments
+    recorder = RunRecorder(os.environ.get("ONEDRIVE_BACKUP_DATA", "/data"))
+    run_id = recorder.start(dry_run)
+    code = 1
+    try:
+        code = sharepoint_backup.main(argv)
+        if not dry_run and code in (0, 1):
+            index_new_snapshots()
+        return code
+    finally:
+        recorder.end(run_id, code)
 
 
 if __name__ == "__main__":
