@@ -8,10 +8,12 @@ export const auth = reactive({ needKey: false, hasKey: false, epoch: 0 })
 
 export class RpcError extends Error {
   code: number | string
-  constructor(code: number | string, message: string) {
+  data: unknown
+  constructor(code: number | string, message: string, data: unknown = null) {
     super(message)
     this.name = 'RpcError'
     this.code = code
+    this.data = data
   }
 }
 export class AuthRequired extends Error {
@@ -83,6 +85,7 @@ function retryAfter(response: Response): number {
 /**
  * One JSON-RPC command; resolves with the result data or throws RpcError, AuthRequired, RateLimited, NetworkError or Aborted.
  * The optional signal aborts this one request (a newer keystroke of the autocomplete); a logout aborts every request.
+ * A command error keeps its details (error.data) in RpcError.data.
  */
 export async function call(command: string, params: Record<string, unknown> = {}, extra?: AbortSignal): Promise<unknown> {
   const own = new AbortController()
@@ -115,11 +118,11 @@ export async function call(command: string, params: Record<string, unknown> = {}
   } catch (exc) {
     if ((exc as Error).name === 'AbortError') throw new Aborted()
   }
-  if (body && body.error) throw new RpcError(body.error.code ?? response.status, String(body.error.message ?? ''))
+  if (body && body.error) throw new RpcError(body.error.code ?? response.status, String(body.error.message ?? ''), body.error.data ?? null)
   const result = body ? body.result : null
   if (result && result.success === false) {
     const failure = result.error ?? {}
-    throw new RpcError(failure.code ?? response.status, String(failure.message ?? ''))
+    throw new RpcError(failure.code ?? response.status, String(failure.message ?? ''), failure.data ?? null)
   }
   if (!response.ok || !result) throw new RpcError(response.status, `HTTP ${response.status}`)
   return result.data
