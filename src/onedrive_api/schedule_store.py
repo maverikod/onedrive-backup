@@ -86,8 +86,7 @@ class ScheduleStore:
         """Read the live file.
 
         Returns:
-            The text as stored, or None when there is no file.
-        """
+            The text as stored, or None."""
         try:
             return self.path.read_bytes().decode("utf-8", "replace")
         except FileNotFoundError:
