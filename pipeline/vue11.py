@@ -388,9 +388,12 @@ class Cases:
             page.keyboard.press('ArrowDown')
             page.keyboard.press('Enter')
             page.wait_for_timeout(SETTLE_MS)
-            picked = [m for m, _ in pairs(sess, before)]
-            if tid(page, 'name-input').input_value().replace(chr(92) + '*', '*') != first or picked != ['backup_search_files']:
-                self.bad('V9 L7 ArrowDown+Enter: the field is %r and the calls %s, expected the name %r and exactly one backup_search_files' % (tid(page, 'name-input').input_value(), picked, first))
+            picked = list(pairs(sess, before))
+            names = [m for m, _ in picked]
+            roots = [q for m, q in picked if m == 'backup_folder_children' and isinstance(q, dict) and 'site_id' not in q]
+            expansions = [q for m, q in picked if m == 'backup_folder_children' and isinstance(q, dict) and 'site_id' in q]
+            if tid(page, 'name-input').input_value().replace(chr(92) + '*', '*') != first or names.count('backup_search_files') != 1 or len(roots) != 1 or len(expansions) > 1 or set(names) - {'backup_search_files', 'backup_folder_children'}:
+                self.bad('V9 L7 ArrowDown+Enter: the field is %r and the calls %s, expected the name %r, exactly one backup_search_files, one root backup_folder_children, at most the single-site expansion and no other command (rev 13 APPLY rule, matrix 10.21.6)' % (tid(page, 'name-input').input_value(), names, first))
             tid(page, 'name-input').fill('акт')
             page.clock.fast_forward(300)
             page.wait_for_timeout(SETTLE_MS)
