@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 from .catalog import Catalog
 from .file_index import FileIndex
 from .file_index_build import ensure_catchup, sharepoint_snapshots
+from .folder_tree import Scope, build_children, drive_keys, parse_scope, path_chain
 from .name_match import MIN_SUGGEST_CHARS, Pattern, PatternError, key, parse_pattern
 from .sharepoint_base import DiscoveryError
 from .sharepoint_discovery import SharePointInventory
@@ -143,11 +144,11 @@ class FilterService:
         if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1":
             raise DiscoveryError("SCAFFOLD_ONLY", 503)
 
-    def _names(self) -> tuple[dict[str, tuple[str, str]], dict[tuple[str, str], str]]:
+    def _names(self) -> tuple[dict[str, tuple[str, str]], dict[tuple[str, str], tuple[str, str]]]:
         """Read the display names of the discovery inventory, keyed like the snapshot tags.
 
         Returns:
-            Site key to (site id, label) and (site key, library key) to the library name.
+            Site key to (site id, label) and (site key, library key) to (library id, library name).
 
         Raises:
             DiscoveryError: SOURCE_NOT_READY (503) when the inventory is not ready.
@@ -156,9 +157,10 @@ class FilterService:
         sites = {}
         for row in data["sites"]:
             sites[site_key(row["site_id"])] = (row["site_id"], row["display_name"] or row["web_url"] or row["site_id"])
-        libraries = {}
+        libraries: dict[tuple[str, str], tuple[str, str]] = {}
         for row in data["libraries"]:
-            libraries[(site_key(row["site_id"]), site_key(row["drive_id"]))] = str(row.get("display_name", ""))
+            pair = (site_key(row["site_id"]), site_key(row["drive_id"]))
+            libraries[pair] = (str(row["drive_id"]), str(row.get("display_name", "")))
         return sites, libraries
 
     def _state(self) -> dict[str, Any]:
@@ -232,8 +234,11 @@ class FilterService:
         dates = [{"date": day, "snapshot_count": days[day]} for day in sorted(days, reverse=True)]
         return {"sites": sites, "dates": dates, "timezone": self.zone.key, "index": state}
 
-    def search_files(self, site_ids: object, dates: object, name_part: object, limit: int, offset: int) -> dict[str, Any]:
-        """One page of the files of the ticked sites and dates whose name matches.
+    def search_files(
+        self, site_ids: object, dates: object, name_part: object, limit: int, offset: int,
+        site_id: object = None, drive_id: object = None, folder: object = None, recursive: object = None,
+    ) -> dict[str, Any]:
+        """One page of the files of the ticked sites and dates whose name matches, inside the folder scope when given.
 
         Args:
             site_ids: The ticked site ids.
@@ -241,44 +246,120 @@ class FilterService:
             name_part: The name part with the star wildcard.
             limit: Page size, 1..500.
             offset: Rows to skip, 0..1000000.
+            site_id: The scope site, or None.
+            drive_id: The scope library (needs site_id), or None.
+            folder: The scope folder (needs drive_id), or None.
+            recursive: True takes the whole subtree of the folder (needs drive_id), or None.
 
         Returns:
             The result of backup_search_files.
         """
+        scope = parse_scope(site_id, drive_id, folder, recursive)
         ids, days, pattern = check_site_ids(site_ids), check_dates(dates), check_pattern(name_part)
         self._gate()
         names, libraries = self._names()
         state = self._state()
-        chosen = self._chosen(ids, days)
+        chosen = scoped_snapshots(self, ids, days, scope)
         order = sorted({row["site_key"] for row in chosen}, key=lambda k: key(names.get(k, ("", ""))[1]))
-        total, rows = self.index.search([row["snapshot_id"] for row in chosen], pattern, order, limit, offset)
+        snapshots = [row["snapshot_id"] for row in chosen]
+        total, rows = self.index.search(snapshots, pattern, order, limit, offset, scope.rows())
         items = []
         for row in rows:
-            sk, dk, folder = row["site_key"], row["drive_key"], row["dir"]
+            sk, dk, where = row["site_key"], row["drive_key"], row["dir"]
+            drive, library = libraries.get((sk, dk), (dk, ""))
             items.append({
                 "site_id": names.get(sk, (sk, ""))[0], "site_name": names.get(sk, ("", ""))[1],
-                "library_name": libraries.get((sk, dk), ""), "name": row["name"], "dir": folder, "size": row["size"],
+                "library_name": library, "drive_id": drive, "name": row["name"], "dir": where, "size": row["size"],
                 "mtime": row["mtime"], "snapshot_id": row["snapshot_id"], "snapshot_time": row["time_utc"],
-                "file_path": "sharepoint/%s/%s/%s%s" % (sk, dk, folder + "/" if folder else "", row["stored"]),
+                "file_path": "sharepoint/%s/%s/%s%s" % (sk, dk, where + "/" if where else "", row["stored"]),
                 "is_copy": row["copy_index"] > 0, "copy_index": row["copy_index"],
             })
         return {"items": items, "total": total, "offset": offset, "limit": limit, "timezone": self.zone.key, "index": state}
 
-    def suggest_names(self, text: object, site_ids: object, dates: object, limit: int) -> dict[str, Any]:
-        """Distinct file names for the autocomplete list, prefix matches first.
+    def suggest_names(
+        self, text: object, site_ids: object, dates: object, limit: int,
+        site_id: object = None, drive_id: object = None, folder: object = None, recursive: object = None,
+    ) -> dict[str, Any]:
+        """Distinct file names for the autocomplete list, prefix matches first, inside the folder scope when given.
 
         Args:
             text: The typed text, at least two characters that are not stars.
             site_ids: The ticked site ids.
             dates: The ticked dates.
             limit: Maximum names, 1..20.
+            site_id: The scope site, or None.
+            drive_id: The scope library (needs site_id), or None.
+            folder: The scope folder (needs drive_id), or None.
+            recursive: True takes the whole subtree of the folder (needs drive_id), or None.
 
         Returns:
             The result of backup_suggest_names.
         """
+        scope = parse_scope(site_id, drive_id, folder, recursive)
         pattern = check_pattern(text, suggest=True)
         ids, days = check_site_ids(site_ids), check_dates(dates)
         self._gate()
-        chosen = self._chosen(ids, days)
-        names, more = self.index.suggest([row["snapshot_id"] for row in chosen], pattern, limit)
+        chosen = scoped_snapshots(self, ids, days, scope)
+        names, more = self.index.suggest([row["snapshot_id"] for row in chosen], pattern, limit, scope.rows())
         return {"items": [{"name": name} for name in names], "text": pattern.text, "truncated": more}
+
+
+def scoped_snapshots(service: FilterService, ids: list[str], days: list[str], scope: Scope) -> list[dict[str, Any]]:
+    """Select the indexed snapshots of the filters, narrowed to the site and the library of the scope.
+
+    Args:
+        service: The filter service.
+        ids: The ticked site ids.
+        days: The ticked dates.
+        scope: The folder scope.
+
+    Returns:
+        The matching index rows.
+    """
+    rows = service._chosen(ids, days)
+    if scope.site_id is not None:
+        wanted = site_key(scope.site_id)
+        rows = [row for row in rows if row["site_key"] == wanted]
+    if scope.drive_id is not None:
+        keys = drive_keys(scope.drive_id)
+        rows = [row for row in rows if row["drive_key"] in keys]
+    return rows
+
+
+def folder_children(
+    service: FilterService, site_ids: object, dates: object, name_part: object, site_id: object, drive_id: object,
+    folder: object, limit: int, offset: int,
+) -> dict[str, Any]:
+    """One page of the children of a node of the folder tree site -> library -> folders, with their file counts.
+
+    Args:
+        service: The filter service.
+        site_ids: The ticked site ids.
+        dates: The ticked dates.
+        name_part: The name part with the star wildcard.
+        site_id: The site of the parent, or None for the roots.
+        drive_id: The library of the parent (needs site_id), or None.
+        folder: The folder of the parent (needs drive_id), '' for the library root, or None.
+        limit: Page size, 1..500.
+        offset: Children to skip, 0..100000.
+
+    Returns:
+        The result of backup_folder_children.
+    """
+    scope = parse_scope(site_id, drive_id, folder, None)
+    ids, days, pattern = check_site_ids(site_ids), check_dates(dates), check_pattern(name_part)
+    service._gate()
+    names, libraries = service._names()
+    state = service._state()
+    chosen = scoped_snapshots(service, ids, days, scope)
+    nodes = build_children(service.index, chosen, pattern, scope, names, libraries)
+    site_name, library_name = "", ""
+    if scope.site_id is not None:
+        owner = site_key(scope.site_id)
+        site_name = names.get(owner, ("", ""))[1]
+        for wanted in drive_keys(scope.drive_id or ""):
+            library_name = library_name or libraries.get((owner, wanted), ("", ""))[1]
+    return {
+        "nodes": nodes[offset: offset + limit], "total": len(nodes), "offset": offset, "limit": limit,
+        "path": path_chain(scope, site_name, library_name), "timezone": service.zone.key, "index": state,
+    }
