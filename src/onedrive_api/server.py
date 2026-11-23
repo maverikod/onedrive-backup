@@ -67,7 +67,7 @@ def _register_commands() -> None:
         BackupSnapshots,
     )
     from .commands_base import BackupHelpCommand
-    from .commands_filter import BackupFilterOptions, BackupSearchFiles, BackupSuggestNames
+    from .commands_filter import BackupFilterOptions, BackupFolderChildren, BackupSearchFiles, BackupSuggestNames
     from .commands_schedule import BackupScheduleGet, BackupScheduleSet, BackupScheduleStatus
     from .commands_sharepoint import (
         BackupDiscoveryStatus,
@@ -92,6 +92,7 @@ def _register_commands() -> None:
         BackupFilterOptions,
         BackupSearchFiles,
         BackupSuggestNames,
+        BackupFolderChildren,
         BackupScheduleGet,
         BackupScheduleSet,
         BackupScheduleStatus,
@@ -104,7 +105,9 @@ def _start_index_catchup() -> None:
     from .file_index import FileIndex
     from .file_index_build import ensure_catchup
 
-    ensure_catchup(_catalog, FileIndex(os.environ.get("ONEDRIVE_BACKUP_DATA", "/data")))
+    index = FileIndex(os.environ.get("ONEDRIVE_BACKUP_DATA", "/data"))
+    index.connect().close()  # creates the index file_dir of matrix 10.21.2 when the data directory lacks it
+    ensure_catchup(_catalog, index)
 
 
 def make_app(config_path: str | Path):
