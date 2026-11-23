@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pipeline import vue12
+from pipeline import vue13
 
 
 def run() -> None:
-    '''Raise CheckFailure when the check is RED (revision 12: the live help lists 17 commands and the manifest the three schedule commands, rows V3, V11).
+    '''Raise CheckFailure when the check is RED (revision 13: the manifest lists the 18 commands with backup_folder_children and the new cells, rows V3, V12).
 
     Returns:
         None.
     '''
-    vue12.vue_command_contract()
+    vue13.vue_command_contract()
