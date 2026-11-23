@@ -234,6 +234,8 @@ def _nowrite(case: Case) -> None:
 def _page(case: Case, limit: int, offset: int) -> bool:
     '''Judge one search page: fields, echoes, bound, item shape, no identifier fragment, order.
 
+    The field drive_id that revision 13 adds to every item (matrix TODO 10.21.4) is admitted here and asserted by pipeline.rev13scope.
+
     Args:
         case: the executed case.
         limit: the effective limit.
@@ -250,7 +252,7 @@ def _page(case: Case, limit: int, offset: int) -> bool:
         case.bad('limit/offset echo %s/%s or %d items for total %s, expected %s/%s' % (data['limit'], data['offset'], len(data['items']), data['total'], limit, offset))
     for item in data['items']:
         text = json.dumps([item.get('name'), item.get('dir'), item.get('site_name'), item.get('library_name')], ensure_ascii=False)
-        if sorted(item) != sorted(ITEM_KEYS) or '.dup-' in text or 'sharepoint/' in text or KEY_SEGMENT.search(text):
+        if sorted(set(item) - {'drive_id'}) != sorted(ITEM_KEYS) or '.dup-' in text or 'sharepoint/' in text or KEY_SEGMENT.search(text):
             case.bad('item %s has other fields than %s or a key, sharepoint/ or .dup- fragment in a shown value' % (str(item)[:100], ITEM_KEYS))
             break
     order = [(key(i['name']), [-ord(c) for c in i['snapshot_time']]) for i in data['items']]
