@@ -6,6 +6,7 @@ import configparser
 from pathlib import Path
 import re
 import stat
+from typing import Any
 
 
 GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
@@ -29,11 +30,18 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 class DiscoveryError(Exception):
     """Non-sensitive discovery failure for REST and MCP clients."""
 
-    def __init__(self, code: str, status: int = 503) -> None:
-        """Record a stable error code without logging Graph response bodies."""
+    def __init__(self, code: str, status: int = 503, details: dict[str, Any] | None = None) -> None:
+        """Record a stable error code without logging Graph response bodies.
+
+        Args:
+            code: The stable error code.
+            status: The HTTP-like status.
+            details: Non-sensitive fields that explain the refusal, or None.
+        """
         super().__init__(code)
         self.code = code
         self.status = status
+        self.details = details
 
 
 class EntraCredentials:
