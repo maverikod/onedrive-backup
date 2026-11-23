@@ -29,6 +29,7 @@ SCHEMA = (
     " copy_index INTEGER NOT NULL)",
     "CREATE INDEX IF NOT EXISTS file_snapshot ON file (snapshot_id)",
     "CREATE INDEX IF NOT EXISTS file_name ON file (name_key)",
+    "CREATE INDEX IF NOT EXISTS file_dir ON file (snapshot_id, dir)",
 )
 FILE_COLUMNS = "snapshot_id, dir, name, name_key, stored, size, mtime, copy_index"
 INSERT = "INSERT INTO file (%s) VALUES (?,?,?,?,?,?,?,?)" % FILE_COLUMNS
@@ -59,6 +60,25 @@ def utc_time(value: str) -> str:
     shift = 0 if zone == "Z" else (1 if zone[0] == "+" else -1) * (int(zone[1:3]) * 60 + int(zone[4:6]))
     moment = datetime(year, month, day, hour, minute, second, micro, tzinfo=timezone.utc) - timedelta(minutes=shift)
     return moment.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def folder_clause(folder: tuple[str, bool] | None) -> tuple[str, list[Any]]:
+    """Build the folder restriction of a search over the index file_dir; the comparison is byte-exact.
+
+    Args:
+        folder: None for every folder, else (folder, recursive); '' is the library root.
+
+    Returns:
+        The SQL to append to a WHERE clause and its parameters.
+    """
+    if folder is None:
+        return "", []
+    where, recursive = folder
+    if not recursive:
+        return " AND f.dir = ?", [where]
+    if where == "":
+        return "", []
+    return " AND (f.dir = ? OR (f.dir >= ? AND f.dir < ?))", [where, where + "/", where + "0"]
 
 
 class FileIndex:
@@ -190,7 +210,8 @@ class FileIndex:
         return clause, params
 
     def search(
-        self, snapshot_ids: list[str], pattern: Pattern, site_order: list[str], limit: int, offset: int
+        self, snapshot_ids: list[str], pattern: Pattern, site_order: list[str], limit: int, offset: int,
+        folder: tuple[str, bool] | None = None,
     ) -> tuple[int, list[dict[str, Any]]]:
         """Return one page of the files of the chosen snapshots whose name matches.
 
@@ -200,6 +221,7 @@ class FileIndex:
             site_order: Site keys in the order of their labels, the tie-break after the date.
             limit: Page size.
             offset: Rows to skip.
+            folder: None for every folder, else (folder, recursive): the files directly in the folder, or in its subtree.
 
         Returns:
             The total of matching rows and the page, ordered by name key, then snapshot time newest first, the site order,
@@ -208,6 +230,8 @@ class FileIndex:
         if not snapshot_ids:
             return 0, []
         where, params = self._where(snapshot_ids, pattern)
+        extra, values = folder_clause(folder)
+        where, params = where + extra, params + values
         cases = "".join("WHEN ? THEN %d " % number for number in range(len(site_order)))
         rank = "CASE s.site_key " + cases + "ELSE 100000 END" if site_order else "0"
         conn = self.connect()
@@ -220,13 +244,16 @@ class FileIndex:
         finally:
             conn.close()
 
-    def suggest(self, snapshot_ids: list[str], pattern: Pattern, limit: int) -> tuple[list[str], bool]:
+    def suggest(
+        self, snapshot_ids: list[str], pattern: Pattern, limit: int, folder: tuple[str, bool] | None = None,
+    ) -> tuple[list[str], bool]:
         """Return distinct shown names (key-distinct) that match, prefix matches first.
 
         Args:
             snapshot_ids: The chosen snapshots; an empty list gives no name.
             pattern: The parsed name part.
             limit: Maximum number of names.
+            folder: None for every folder, else (folder, recursive) as in search.
 
         Returns:
             The names and whether more distinct names exist than limit.
@@ -234,13 +261,15 @@ class FileIndex:
         if not snapshot_ids:
             return [], False
         where, params = self._where(snapshot_ids, pattern)
+        extra, values = folder_clause(folder)
+        where, params = where + extra, params + values
         first = "CASE WHEN f.name_key LIKE ?" + ESCAPE + " THEN 0 ELSE 1 END, f.name_key" if pattern.prefix else "f.name_key"
         conn = self.connect()
         try:
             query = "SELECT f.name_key, MIN(f.name) FROM file f WHERE " + where
             query += " GROUP BY f.name_key ORDER BY " + first + " LIMIT ?"
-            extra = [pattern.prefix] if pattern.prefix else []
-            rows = conn.execute(query, params + extra + [limit + 1]).fetchall()
+            extra_params = [pattern.prefix] if pattern.prefix else []
+            rows = conn.execute(query, params + extra_params + [limit + 1]).fetchall()
         finally:
             conn.close()
         return [row[1] for row in rows[:limit]], len(rows) > limit
