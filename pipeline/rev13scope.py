@@ -142,7 +142,7 @@ def _s_scope_dup(case: Case) -> None:
     '''
     if not items_ok(case, case.params['drive_id']):
         return
-    pair = [i for i in case.data['items'] if i['name'] == DUP_NAME and i['dir'] == DIR_TG]
+    pair = [i for i in case.data['items'] if rev11.key(i['name']) == rev11.key(DUP_NAME) and i['dir'] == DIR_TG]
     kinds = sorted((i['copy_index'], i['is_copy']) for i in pair)
     if kinds[:1] != [(0, False)] or not any(index >= 1 and copy for index, copy in kinds):
         case.report.state.append('%s: the stored duplicate pair of %r is absent in the live state: rows %s' % (case.desc, DUP_NAME, kinds))
