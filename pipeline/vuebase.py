@@ -40,6 +40,10 @@ KEY_MARKERS = ('BEGIN PRIVATE KEY', 'BEGIN RSA PRIVATE KEY', 'BEGIN EC PRIVATE K
 SECRET_FILES = ('.env', '.key', '.pem', '.crt', '.crl')
 ASSET_LIMIT = 20
 ZERO = base.ZERO_ID
+# The harness list of the test ids added by revision 13 (matrix TODO 10.21.6 TEST IDS, row V12): the folder tree, the breadcrumb and the
+# scroll container of the main page. Every id of 10.19.7 and of the corrections of 2026-11-22/23 stays where its case names it (pipeline.vue11).
+TESTIDS = ('main-grid', 'folder-tree', 'tree-all', 'tree-node', 'tree-toggle', 'tree-label', 'tree-count', 'tree-more', 'tree-loading', 'tree-empty',
+           'folder-path', 'crumb-all', 'crumb', 'folder-recursive', 'result-scroll')
 
 # Removed server HTML routes of the matrix rows U1..U10 (planned_change: removed with ui.py by the Vue SPA, D7, approval 5).
 REMOVED_UI = {
