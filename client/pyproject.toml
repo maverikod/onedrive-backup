@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "onedrive-backup-client"
-version = "0.3.25"
+version = "0.3.26"
 description = "Python client and odbcli console command for the OneDrive Backup service"
 requires-python = ">=3.9"
 readme = "README.md"
