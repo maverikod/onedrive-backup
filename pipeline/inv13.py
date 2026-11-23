@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pipeline import b4base
 
-TAG = 'PLANNED(TREE-REV13)'
+TAG = 'CURRENT'
 UI_TAG = 'PLANNED(UI-TREE)'
 API = 'TREE-REV13'
 UI = 'UI-TREE'
