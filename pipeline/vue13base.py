@@ -385,6 +385,24 @@ class Session13(Session):
         return loc.first.bounding_box() if loc.count() else None
 
 
+def off(func: Callable[..., Any], *args: Any) -> Any:
+    '''Run one call of the reference side in a worker thread and return its result.
+
+    The sync Playwright driver keeps an event loop running in the calling thread, and the project client runs its own (asyncio.run),
+    so every client call of a browser case runs in a thread of its own; the page is never touched there.
+
+    Args:
+        func: the callable.
+        args: its arguments.
+
+    Returns:
+        What func returns (its exception is raised here).
+    '''
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(func, *args).result()
+
+
 class Ref:
     '''The reference side of the cases: the project client of the checkout source, read once per check run.
 
@@ -403,17 +421,17 @@ class Ref:
 
     @property
     def tree(self) -> rev13.Tree:
-        '''Return the revision 13 state (site, libraries, listing of F4), read on first use.
+        '''Return the revision 13 state (site, libraries, listing of F4), read on first use in a worker thread.
 
         Returns:
             The state.
         '''
         if self._tree is None:
-            self._tree = rev13.Tree(self.report)
+            self._tree = off(rev13.Tree, self.report)
         return self._tree
 
     def ask(self, label: str, command: str, params: dict) -> dict | None:
-        '''Send one command through the client and return its data, or None with a PRODUCT finding.
+        '''Send one command through the client (in a worker thread) and return its data, or None with a PRODUCT finding.
 
         Args:
             label: the case label.
@@ -423,7 +441,7 @@ class Ref:
         Returns:
             The data map, or None.
         '''
-        kind, code, message, data = self.tree.send(command, params)
+        kind, code, message, data = off(self.tree.send, command, params)
         if kind != 'success' or not isinstance(data, dict):
             self.report.product.append('%s: the client %s %s answers %s %s %s, expected a result (reference side of the case)' % (label, command, params, kind, code, message[:160]))
             return None
