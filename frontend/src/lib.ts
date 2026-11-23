@@ -122,22 +122,44 @@ export const hrefHelp = (command = ''): string => (command ? `#/service?section=
 export const hrefInfo = (page = 1): string => (page > 1 ? `#/service?section=info&page=${page}` : '#/service?section=info')
 export const hrefSection = (section: Section): string => `#/service?section=${section}`
 
-// ---- the filter state of the main page lives in the hash: #/?site=..&site=..&date=..&q=..&offset=.. ----
+// ---- the filter state of the main page lives in the hash: #/?site=..&date=..&q=..&fs=..&fd=..&fp=..&rec=1&offset=.. ----
 
 export interface Filter {
   sites: string[]
   dates: string[]
   q: string
   offset: number
+  /** The folder scope of the tree: site id (fs), library id (fd), folder address (fp) and the recursive flag (rec). Absent keys mean no scope. */
+  fs?: string
+  fd?: string
+  fp?: string
+  rec?: boolean
 }
 
-const FILTER_KEYS = ['site', 'date', 'q', 'offset']
+/** The scope part of a filter: a folder needs its library, a library its site. */
+export type Scope = Pick<Filter, 'fs' | 'fd' | 'fp'>
+
+const FILTER_KEYS = ['site', 'date', 'q', 'offset', 'fs', 'fd', 'fp', 'rec']
 
 /** True when the hash query carries any filter key; a bare '#/' opens the default (newest date) view. */
 export const hasFilter = (query: URLSearchParams): boolean => FILTER_KEYS.some((name) => query.has(name))
 
+/** The filter of a hash query; scope keys that do not fit together (a folder without library, a library without site, rec without library) are dropped. */
 export function parseFilter(query: URLSearchParams): Filter {
-  return { sites: query.getAll('site'), dates: query.getAll('date'), q: (query.get('q') ?? '').slice(0, 128), offset: intParam(query, 'offset', 0, PAGE_SIZE) }
+  const filter: Filter = {
+    sites: query.getAll('site'),
+    dates: query.getAll('date'),
+    q: (query.get('q') ?? '').slice(0, 128),
+    offset: intParam(query, 'offset', 0, PAGE_SIZE),
+  }
+  const fs = query.get('fs') ?? ''
+  const fd = fs !== '' ? (query.get('fd') ?? '') : ''
+  const fp = fd !== '' ? (query.get('fp') ?? '') : ''
+  if (fs !== '') filter.fs = fs
+  if (fd !== '') filter.fd = fd
+  if (fp !== '') filter.fp = fp
+  if (fd !== '' && query.get('rec') === '1') filter.rec = true
+  return filter
 }
 
 export function hrefMain(filter: Filter): string {
@@ -145,8 +167,30 @@ export function hrefMain(filter: Filter): string {
   for (const site of filter.sites) parts.push(`site=${enc(site)}`)
   for (const date of filter.dates) parts.push(`date=${enc(date)}`)
   if (filter.q !== '') parts.push(`q=${enc(filter.q)}`)
+  if (filter.fs) parts.push(`fs=${enc(filter.fs)}`)
+  if (filter.fs && filter.fd) parts.push(`fd=${enc(filter.fd)}`)
+  if (filter.fs && filter.fd && filter.fp) parts.push(`fp=${enc(filter.fp)}`)
+  if (filter.fs && filter.fd && filter.rec) parts.push('rec=1')
   if (filter.offset > 0) parts.push(`offset=${filter.offset}`)
   return parts.length ? `#/?${parts.join('&')}` : '#/'
+}
+
+/** The scope of a filter (undefined members when there is none). */
+export const scopeOf = (filter: Filter): Scope => ({ fs: filter.fs, fd: filter.fd, fp: filter.fp })
+
+/** The filter with another scope and the first page; the filters stay, the recursive flag stays only with a library. */
+export function withScope(filter: Filter, scope: Scope): Filter {
+  const next: Filter = { sites: filter.sites, dates: filter.dates, q: filter.q, offset: 0 }
+  if (scope.fs) next.fs = scope.fs
+  if (next.fs && scope.fd) next.fd = scope.fd
+  if (next.fd && scope.fp) next.fp = scope.fp
+  if (next.fd && filter.rec) next.rec = true
+  return next
+}
+
+/** The scope parameters of backup_search_files and backup_suggest_names: an absent scope is omitted, rec is sent only when set. */
+export function scopeValues(filter: Filter): Record<string, unknown> {
+  return { site_id: filter.fs, drive_id: filter.fd, dir: filter.fp, recursive: filter.rec ? true : undefined }
 }
 
 /** The parameters of backup_search_files: an empty group or an empty name is omitted, never sent as null or empty. */
@@ -158,6 +202,7 @@ export function searchValues(filter: Filter): Record<string, unknown> {
     name_part: name === '' ? undefined : name,
     limit: PAGE_SIZE,
     offset: filter.offset > 0 ? filter.offset : undefined,
+    ...scopeValues(filter),
   }
 }
 
