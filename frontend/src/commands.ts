@@ -3,6 +3,7 @@
 
 // The live help of the service spells a nullable string parameter (file_path) exactly as the text below (matrix 10.18.7 (3)).
 export const NULLABLE_STRING = "['string', 'null']"
+
 export type ParamType = 'string' | 'integer' | 'boolean' | 'number' | 'object' | 'array' | typeof NULLABLE_STRING
 export interface ParamSpec {
   type: ParamType
@@ -14,6 +15,9 @@ const int = (required: boolean): ParamSpec => ({ type: 'integer', required })
 const bool = (required: boolean): ParamSpec => ({ type: 'boolean', required })
 const list = (required: boolean): ParamSpec => ({ type: 'array', required })
 
+// The folder scope of the tree (matrix 10.21.4): the site, the library, the folder and the recursive flag.
+const scope = { site_id: str(false), drive_id: str(false), dir: str(false), recursive: bool(false) }
+
 export const COMMANDS: Record<string, Record<string, ParamSpec>> = {
   backup_snapshots: { limit: int(false) },
   backup_list_files: { snapshot_id: str(true), prefix: str(false), offset: int(false), limit: int(false) },
@@ -24,8 +28,18 @@ export const COMMANDS: Record<string, Record<string, ParamSpec>> = {
   backup_libraries_list: { site_id: str(true), limit: int(false), offset: int(false) },
   backup_discovery_status: {},
   backup_filter_options: { site_ids: list(false) },
-  backup_search_files: { site_ids: list(false), dates: list(false), name_part: str(false), limit: int(false), offset: int(false) },
-  backup_suggest_names: { text: str(true), site_ids: list(false), dates: list(false), limit: int(false) },
+  backup_search_files: { site_ids: list(false), dates: list(false), name_part: str(false), limit: int(false), offset: int(false), ...scope },
+  backup_suggest_names: { text: str(true), site_ids: list(false), dates: list(false), limit: int(false), ...scope },
+  backup_folder_children: {
+    site_id: str(false),
+    drive_id: str(false),
+    dir: str(false),
+    site_ids: list(false),
+    dates: list(false),
+    name_part: str(false),
+    limit: int(false),
+    offset: int(false),
+  },
   backup_schedule_get: { next_count: int(false) },
   backup_schedule_set: { text: str(true), expected_revision: str(false), dry_run: bool(false), next_count: int(false), actor: str(false) },
   backup_schedule_status: { history_limit: int(false) },
