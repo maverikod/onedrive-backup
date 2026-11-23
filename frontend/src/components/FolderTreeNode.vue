@@ -3,17 +3,17 @@
 // focusable treeitem; the label, the count and the toggle are plain parts of its row.
 import { computed } from 'vue'
 import type { Scope } from '../lib'
-import { TREE_PAGE, formatCount, nodeAddress, nodeKey, scopeOfNode, type TreeNode } from '../tree'
-import { addrKey } from '../tree'
+import { addrKey, formatCount, nodeAddress, nodeKey, scopeOfNode, type TreeNode } from '../tree'
 import type { TreeStore } from '../treeState'
 
+const PAGE = 200
 const props = defineProps<{ node: TreeNode; level: number; tree: TreeStore; scope: Scope; focusKey: string }>()
 const emit = defineEmits<{ select: [scope: Scope] }>()
 
 const key = computed(() => nodeKey(props.node))
-const level = computed(() => props.tree.state.levels[addrKey(nodeAddress(props.node))] ?? [])
+const kids = computed(() => props.tree.state.levels[addrKey(nodeAddress(props.node))] ?? [])
 const isOpen = computed(() => props.node.has_children && props.tree.state.open[key.value] !== undefined)
-const rest = computed(() => (props.tree.state.totals[key.value] ?? 0) - level.value.length)
+const rest = computed(() => (props.tree.state.totals[key.value] ?? 0) - kids.value.length)
 const busy = computed(() => props.tree.state.busy[key.value] === true)
 const selected = computed(() => {
   const now = props.scope
@@ -54,9 +54,9 @@ function toggle(): void {
       <span v-if="busy" data-testid="tree-loading" class="tree-loading">…</span>
     </div>
     <ul v-if="isOpen" role="group" class="tree-children">
-      <FolderTreeNode v-for="child in level" :key="nodeKey(child)" :node="child" :level="props.level + 1" :tree="tree" :scope="scope" :focus-key="focusKey" @select="emit('select', $event)" />
+      <FolderTreeNode v-for="child in kids" :key="nodeKey(child)" :node="child" :level="props.level + 1" :tree="tree" :scope="scope" :focus-key="focusKey" @select="emit('select', $event)" />
       <li v-if="rest > 0" role="none" class="tree-more-row">
-        <button type="button" data-testid="tree-more" class="tree-more" :disabled="busy" @click="tree.more(node)">Ещё {{ Math.min(TREE_PAGE, rest) }}</button>
+        <button type="button" data-testid="tree-more" class="tree-more" :disabled="busy" @click="tree.more(node)">Ещё {{ Math.min(PAGE, rest) }}</button>
       </li>
     </ul>
   </li>
