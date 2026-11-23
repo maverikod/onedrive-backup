@@ -25,6 +25,7 @@ from mcp_proxy_adapter.client.jsonrpc_client.exceptions import (
     ClientRemoteResponseError,
 )
 
+from .commands import CommandMethods
 from .errors import ClientAuthenticationError, ClientError
 
 TOKEN_HEADER = 'X-API-Key'
@@ -33,7 +34,17 @@ PARTIAL_SUFFIX = '.part'
 
 
 def _unpack(result: Any) -> Any:
-    '''Return the data of a command result or raise the command error (success false).'''
+    '''Return the data of a command result or raise the command error (success false).
+
+    Args:
+        result: The result object of the adapter.
+
+    Returns:
+        The data of the result.
+
+    Raises:
+        ClientError: The result is malformed or reports success false.
+    '''
     if not isinstance(result, dict):
         raise ClientError('Malformed command result: ' + type(result).__name__)
     if result.get('success') is False:
@@ -44,13 +55,24 @@ def _unpack(result: Any) -> Any:
 
 
 def _remote(exc: ClientRemoteResponseError) -> ClientError:
-    '''Map an in-band JSON-RPC error of the adapter to a ClientError with code and data.'''
+    '''Map an in-band JSON-RPC error of the adapter to a ClientError with code and data.
+
+    Args:
+        exc: The adapter error.
+
+    Returns:
+        The client error.
+    '''
     details = exc.details if isinstance(exc.details, dict) else {}
     return ClientError(str(exc), code=details.get('code'), data=details.get('data'))
 
 
 def _unlink(path: Path) -> None:
-    '''Remove a temporary file when it exists.'''
+    '''Remove a temporary file when it exists.
+
+    Args:
+        path: The file.
+    '''
     try:
         path.unlink()
     except FileNotFoundError:
@@ -58,7 +80,14 @@ def _unlink(path: Path) -> None:
 
 
 def _digest(path: Path) -> tuple[int, str]:
-    '''Return (size, sha256 hex) of a file read in chunks.'''
+    '''Return (size, sha256 hex) of a file read in chunks.
+
+    Args:
+        path: The file.
+
+    Returns:
+        The size in bytes and the lowercase hex SHA-256.
+    '''
     sha, size = hashlib.sha256(), 0
     with open(path, 'rb') as handle:
         while True:
@@ -70,24 +99,30 @@ def _digest(path: Path) -> tuple[int, str]:
     return size, sha.hexdigest()
 
 
-class BackupClient:
-    '''Every command of the server as a method, plus call, raw_call and the verified downloads.'''
-    def schedule_get(self, next_count: Optional[int] = None) -> Any:
-        '''The backup schedule: text, revision, entries and next runs (backup_schedule_get); an omitted option is not sent.'''
-        return self._command('backup_schedule_get', next_count=next_count)
+class BackupClient(CommandMethods):
+    '''Every command of the server as a method (CommandMethods), plus call, raw_call and the verified downloads.
 
-    def schedule_set(self, text: str, expected_revision: Optional[str] = None, dry_run: bool = False,
-                     next_count: Optional[int] = None, actor: str = 'client') -> Any:
-        '''Check (dry_run) or store the whole schedule text (backup_schedule_set); an omitted option is not sent.'''
-        return self._command('backup_schedule_set', text=text, expected_revision=expected_revision, dry_run=dry_run or None,
-                             next_count=next_count, actor=actor)
-
-    def schedule_status(self, history_limit: Optional[int] = None) -> Any:
-        '''The scheduler state, the current and last runs and the next run (backup_schedule_status).'''
-        return self._command('backup_schedule_status', history_limit=history_limit)
+    Attributes:
+        url: The service URL without a trailing slash.
+        ca: The CA certificate path or None.
+        cert: The client certificate path (mTLS) or None.
+        key: The client key path (mTLS) or None.
+        timeout: The timeout of one operation in seconds.
+        _token: The optional password sent as X-API-Key.
+    '''
 
     def __init__(self, url: str, ca: Optional[str] = None, cert: Optional[str] = None, key: Optional[str] = None,
                  timeout: int = 180, password: Optional[str] = None) -> None:
+        '''Validate the connection settings; nothing is sent.
+
+        Args:
+            url: The https URL of the service.
+            ca: The CA certificate path, or None.
+            cert: The client certificate path (all-or-none with key), or None.
+            key: The client key path (all-or-none with cert), or None.
+            timeout: The timeout of one operation in seconds.
+            password: The optional password sent as the X-API-Key header, or None.
+        '''
         parts = urlsplit(url or '')
         if parts.scheme != 'https' or not parts.hostname:
             raise ClientError('TLS is mandatory: URL must be https://host[:port]')
@@ -102,18 +137,35 @@ class BackupClient:
         self._token: Optional[str] = password or None
 
     def __repr__(self) -> str:
+        '''Describe the client without the password.
+
+        Returns:
+            The text.
+        '''
         return 'BackupClient(url=%r, authenticated=%s)' % (self.url, self._token is not None)
 
     # transport: one JsonRpcClient per operation
 
     def _rpc(self) -> JsonRpcClient:
+        '''Build the adapter client of one operation.
+
+        Returns:
+            The adapter client.
+        '''
         return JsonRpcClient(
             protocol='mtls' if self.cert else 'https', host=self._host, port=self._port,
             token_header=TOKEN_HEADER if self._token else None, token=self._token,
             cert=self.cert, key=self.key, ca=self.ca, timeout=float(self.timeout))
 
     def _run(self, work: Callable[[JsonRpcClient], Awaitable[Any]]) -> Any:
-        '''Run one coroutine with a fresh adapter client; map every adapter failure to a ClientError.'''
+        '''Run one coroutine with a fresh adapter client; map every adapter failure to a ClientError.
+
+        Args:
+            work: The coroutine function that receives the adapter client.
+
+        Returns:
+            Whatever the coroutine returns.
+        '''
         async def runner() -> Any:
             rpc = self._rpc()
             try:
@@ -133,13 +185,31 @@ class BackupClient:
 
     @staticmethod
     async def _execute(rpc: JsonRpcClient, command: str, params: dict) -> Any:
+        '''Run one command through the adapter client.
+
+        Args:
+            rpc: The adapter client.
+            command: The command name.
+            params: The parameter map.
+
+        Returns:
+            The data of the result.
+        '''
         out = await rpc.execute_command_unified(command, params, expect_queue=False)
         return _unpack(out.get('result') if isinstance(out, dict) else None)
 
     # generic access
 
     def call(self, command: str, params: Optional[dict] = None) -> Any:
-        '''Run any registered command; return its data or raise ClientError.'''
+        '''Run any registered command; return its data or raise ClientError.
+
+        Args:
+            command: The command name.
+            params: The parameter map or None.
+
+        Returns:
+            The data of the command result.
+        '''
         if not isinstance(command, str) or not command:
             raise ClientError('command must be a non-empty string', code=-32602, data={'violation': 'type'})
         sent = {} if params is None else params
@@ -148,7 +218,15 @@ class BackupClient:
         return self._run(lambda rpc: self._execute(rpc, command, sent))
 
     def raw_call(self, command: str, params_map: dict) -> Any:
-        '''Send the parameter map unchanged (no client-side check) and report the server verdict.'''
+        '''Send the parameter map unchanged (no client-side check) and report the server verdict.
+
+        Args:
+            command: The command name.
+            params_map: The parameter map sent as it is.
+
+        Returns:
+            The data of the command result.
+        '''
         async def send(rpc: JsonRpcClient) -> Any:
             envelope = await rpc.raw_parameter_call(command, params_map)
             if 'error' in envelope:
@@ -157,65 +235,19 @@ class BackupClient:
             return _unpack(envelope.get('result'))
         return self._run(send)
 
-    def _command(self, command: str, **params: Any) -> Any:
-        return self.call(command, {k: v for k, v in params.items() if v is not None})
-
-    # one method per server command, named like the command
-
-    def help(self, cmdname: Optional[str] = None) -> Any:
-        return self._command('help', cmdname=cmdname)
-
-    def info(self, page: Optional[int] = None) -> Any:
-        return self._command('info', page=page)
-
-    def backup_snapshots(self, limit: Optional[int] = None) -> Any:
-        return self._command('backup_snapshots', limit=limit)
-
-    def backup_list_files(self, snapshot_id: str, prefix: Optional[str] = None, offset: Optional[int] = None,
-                          limit: Optional[int] = None) -> Any:
-        return self._command('backup_list_files', snapshot_id=snapshot_id, prefix=prefix, offset=offset, limit=limit)
-
-    def backup_prepare_download(self, snapshot_id: str, file_path: Optional[str] = None) -> Any:
-        return self._command('backup_prepare_download', snapshot_id=snapshot_id, file_path=file_path)
-
-    def backup_download_status(self, export_id: str) -> Any:
-        return self._command('backup_download_status', export_id=export_id)
-
-    def backup_delete_export(self, export_id: str) -> Any:
-        return self._command('backup_delete_export', export_id=export_id)
-
-    def backup_sites_list(self, limit: Optional[int] = None, offset: Optional[int] = None,
-                          query: Optional[str] = None) -> Any:
-        return self._command('backup_sites_list', limit=limit, offset=offset, query=query)
-
-    def backup_libraries_list(self, site_id: str, limit: Optional[int] = None, offset: Optional[int] = None) -> Any:
-        return self._command('backup_libraries_list', site_id=site_id, limit=limit, offset=offset)
-
-    def backup_discovery_status(self) -> Any:
-        return self._command('backup_discovery_status')
-
-    def backup_download_begin(self, export_id: str) -> Any:
-        return self._command('backup_download_begin', export_id=export_id)
-
-    def filter_options(self, site_ids: Optional[list] = None) -> Any:
-        '''Sites that have indexed snapshots and the backup dates of the ticked sites (backup_filter_options).'''
-        return self._command('backup_filter_options', site_ids=site_ids)
-
-    def search_files(self, site_ids: Optional[list] = None, dates: Optional[list] = None, name_part: str = '',
-                     limit: int = 100, offset: int = 0) -> Any:
-        '''Files of the ticked sites and dates whose name matches, star is a wildcard (backup_search_files).'''
-        return self._command('backup_search_files', site_ids=site_ids or None, dates=dates or None,
-                             name_part=name_part or None, limit=limit, offset=offset)
-
-    def suggest_names(self, text: str, site_ids: Optional[list] = None, dates: Optional[list] = None,
-                      limit: int = 10) -> Any:
-        '''Distinct file names for the autocomplete list (backup_suggest_names).'''
-        return self._command('backup_suggest_names', text=text, site_ids=site_ids or None, dates=dates or None, limit=limit)
-
     # verified downloads
 
     @staticmethod
     def _destination(output: Any, overwrite: bool) -> Path:
+        '''Resolve the output path and refuse an existing file unless overwrite is set.
+
+        Args:
+            output: The destination path.
+            overwrite: True replaces an existing output.
+
+        Returns:
+            The resolved path.
+        '''
         destination = Path(output).expanduser().resolve()
         if destination.exists() and not overwrite:
             raise ClientError('Output exists; use overwrite to replace it')
@@ -223,6 +255,14 @@ class BackupClient:
 
     @staticmethod
     def _temp_path(destination: Path) -> Path:
+        '''Create a temporary file next to the destination.
+
+        Args:
+            destination: The destination path.
+
+        Returns:
+            The temporary file.
+        '''
         destination.parent.mkdir(parents=True, exist_ok=True)
         handle, name = tempfile.mkstemp(prefix='.onedrive-download-', dir=str(destination.parent))
         os.close(handle)
@@ -230,7 +270,14 @@ class BackupClient:
 
     @staticmethod
     def _commit(work: Path, destination: Path, meta: dict, overwrite: bool) -> None:
-        '''Verify size and SHA256 against the export metadata, then replace the output atomically.'''
+        '''Verify size and SHA256 against the export metadata, then replace the output atomically.
+
+        Args:
+            work: The downloaded temporary file.
+            destination: The final path.
+            meta: The export metadata with size_bytes and sha256.
+            overwrite: True replaces an existing output.
+        '''
         size, digest = _digest(work)
         if size != meta.get('size_bytes') or digest != meta.get('sha256'):
             raise ClientError('Download integrity mismatch: SHA256/size')
@@ -239,14 +286,31 @@ class BackupClient:
         os.replace(work, destination)
 
     def download_link(self, export_id: str) -> str:
-        '''Return the absolute temporary uuid4 link of a staged export.'''
+        '''Return the absolute temporary uuid4 link of a staged export.
+
+        Args:
+            export_id: The export.
+
+        Returns:
+            The link.
+        '''
         link = self.backup_download_status(export_id).get('url')
         if not link:
             raise ClientError('The export has no download link (expired?)')
         return self.url + link
 
     def fetch(self, export_id: str, output: Any, *, overwrite: bool = False, delete_after: bool = False) -> Path:
-        '''Download a staged export through the adapter transfer service (backup_download_begin).'''
+        '''Download a staged export through the adapter transfer service (backup_download_begin).
+
+        Args:
+            export_id: The export.
+            output: The destination path.
+            overwrite: True replaces an existing output.
+            delete_after: True deletes the export after a verified download.
+
+        Returns:
+            The saved path.
+        '''
         destination = self._destination(output, overwrite)
         meta = self.backup_download_status(export_id)
         begin = self.backup_download_begin(export_id)
@@ -266,7 +330,17 @@ class BackupClient:
         return destination
 
     def fetch_link(self, export_id: str, output: Any, *, overwrite: bool = False, delete_after: bool = False) -> Path:
-        '''Download a staged export by its temporary link, with the same verification.'''
+        '''Download a staged export by its temporary link, with the same verification.
+
+        Args:
+            export_id: The export.
+            output: The destination path.
+            overwrite: True replaces an existing output.
+            delete_after: True deletes the export after a verified download.
+
+        Returns:
+            The saved path.
+        '''
         destination = self._destination(output, overwrite)
         meta = self.backup_download_status(export_id)
         link = meta.get('url')
@@ -293,7 +367,18 @@ class BackupClient:
 
     def download(self, snapshot_id: str, output: Any, file_path: Optional[str] = None, *,
                  overwrite: bool = False, delete_after: bool = True) -> Path:
-        '''Prepare an export of a snapshot (or one file) and fetch it through the transfer service.'''
+        '''Prepare an export of a snapshot (or one file) and fetch it through the transfer service.
+
+        Args:
+            snapshot_id: The snapshot.
+            output: The destination path.
+            file_path: The file inside the snapshot, or None for the whole snapshot.
+            overwrite: True replaces an existing output.
+            delete_after: True deletes the export after the download.
+
+        Returns:
+            The saved path.
+        '''
         destination = self._destination(output, overwrite)
         export_id = self.backup_prepare_download(snapshot_id, file_path)['export_id']
         try:
