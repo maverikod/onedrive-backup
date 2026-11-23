@@ -11,16 +11,22 @@ from .command_reference_exports import EXPORT_REFERENCE
 from .command_reference_filter import FILTER_REFERENCE
 from .command_reference_schedule import SCHEDULE_REFERENCE
 from .command_reference_sharepoint import SHAREPOINT_REFERENCE
+from .command_reference_tree import ITEMS_13, SCOPE_ERRORS, SCOPE_PARAMETERS, TREE_REFERENCE
 
 REFERENCE: dict[str, dict[str, Any]] = {
     **SHAREPOINT_REFERENCE,
     "help": CORE_REFERENCE["help"],
     **CATALOG_REFERENCE,
     **FILTER_REFERENCE,
+    **TREE_REFERENCE,
     **SCHEDULE_REFERENCE,
     **EXPORT_REFERENCE,
     "info": CORE_REFERENCE["info"],
 }
+for _scoped in ("backup_search_files", "backup_suggest_names"):
+    REFERENCE[_scoped]["parameters"] = {**REFERENCE[_scoped]["parameters"], **SCOPE_PARAMETERS}
+    REFERENCE[_scoped]["error_cases"] = {**REFERENCE[_scoped]["error_cases"], **SCOPE_ERRORS}
+REFERENCE["backup_search_files"]["return_value"]["success"]["data"]["items"] = ITEMS_13
 
 
 def command_metadata_for(cls: Any) -> dict[str, Any]:
