@@ -65,7 +65,7 @@ class CatalogCommand(Command):
         except CatalogError as exc:
             return ErrorResult(message=str(exc), code=exc.status)
         except DiscoveryError as exc:
-            return ErrorResult(message=exc.code, code=exc.status)
+            return ErrorResult(message=exc.code, code=exc.status, details=exc.details)
 
 
 class ExportCommand(CatalogCommand):
