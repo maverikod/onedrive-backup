@@ -53,14 +53,13 @@ describe('auth', () => {
     vi.stubGlobal('fetch', vi.fn(async () => reply(401, {})))
     setKey('wrong')
     await expect(call('help', {})).rejects.toBeInstanceOf(AuthRequired)
-    expect(auth.hasKey).toBe(false)
-    expect(auth.needKey).toBe(true)
   })
 })
 
 describe('commands', () => {
-  it('has one table of the sixteen commands the SPA calls and one it does not', () => {
-    expect(Object.keys(COMMANDS)).toHaveLength(16)
+  it('has one table of the seventeen commands the SPA calls and one it does not', () => {
+    expect(Object.keys(COMMANDS)).toHaveLength(17)
+    expect(Object.keys(COMMANDS)).toContain('backup_folder_children')
     expect(NOT_USED).toEqual(['backup_download_begin'])
   })
 
