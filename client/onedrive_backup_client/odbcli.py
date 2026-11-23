@@ -2,9 +2,11 @@
 
 It never talks to the server on its own: every subcommand calls the Python client, which is a thin wrapper over the
 mcp-proxy-adapter JsonRpcClient. One subcommand per server command (help, info, snapshots, files, prepare, status,
-delete, sites, libraries, discovery-status, download-begin, filter-options, search-files, suggest-names) with all its
-arguments, plus health, fetch, download, call and download-link. stdout is JSON only. Exit codes: 0 success, 1 server
-refusal or authentication failure, 2 usage error, 3 connection or local failure.
+delete, sites, libraries, discovery-status, download-begin, filter-options, search-files, suggest-names,
+folder-children) with all its arguments, plus health, fetch, download, call and download-link. The filters are
+--site-ids and --dates; --site-id, --drive-id, --dir and --recursive are the folder scope of search-files and
+suggest-names and the address of folder-children. stdout is JSON only. Exit codes: 0 success, 1 server refusal or
+authentication failure, 2 usage error, 3 connection or local failure.
 
 Connection options come before the subcommand and can also be given as ODBCLI_URL, ODBCLI_CA, ODBCLI_CERT,
 ODBCLI_KEY, ODBCLI_TIMEOUT and ODBCLI_PASSWORD (or ONEDRIVE_BACKUP_PASSWORD), or in the JSON file of --config
@@ -32,20 +34,63 @@ DEFAULT_CONFIG = Path.home() / '.config' / 'onedrive-backup' / 'client.json'
 
 
 class _RemovedOption(argparse.Action):
-    """A connection option that no longer exists (login, token): refuse it as an unrecognized argument, whatever follows."""
+    '''A connection option that no longer exists (login, token): refuse it as an unrecognized argument, whatever follows.'''
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any,
+                 option_string: Optional[str] = None) -> None:
+        '''Refuse the option.
+
+        Args:
+            parser: The argument parser.
+            namespace: The parsed namespace.
+            values: The values that follow the option.
+            option_string: The option as typed.
+
+        Returns:
+            Nothing; the parser exits with the usage error.
+        '''
         parser.error('unrecognized arguments: %s' % option_string)
 
 
 def _filters(sub: argparse.ArgumentParser, dates: bool = True) -> None:
-    '''Add the site and date filter arguments of the filter commands to a subparser.'''
-    sub.add_argument('--site-id', action='append', dest='site_ids', help='ticked site id; repeat for several sites')
+    '''Add the site and date filter arguments of the filter commands to a subparser.
+
+    Args:
+        sub: The subparser.
+        dates: True adds --dates as well.
+
+    Returns:
+        Nothing; the arguments are added to the subparser.
+    '''
+    sub.add_argument('--site-ids', action='append', dest='site_ids', help='ticked site id; repeat for several sites')
     if dates:
-        sub.add_argument('--date', action='append', dest='dates', help='ticked backup date YYYY-MM-DD; repeatable')
+        sub.add_argument('--dates', action='append', dest='dates', help='ticked backup date YYYY-MM-DD; repeatable')
+
+
+def _scope(sub: argparse.ArgumentParser, recursive: bool = True) -> None:
+    '''Add the folder scope arguments (matrix 10.21.4) to a subparser.
+
+    Args:
+        sub: The subparser.
+        recursive: True adds --recursive as well.
+
+    Returns:
+        Nothing; the arguments are added to the subparser.
+    '''
+    sub.add_argument('--site-id', dest='site_id', help='scope: the site; for folder-children the site of the parent')
+    sub.add_argument('--drive-id', dest='drive_id', help='scope: the library of the site; needs --site-id')
+    sub.add_argument('--dir', dest='dir', help="scope: the folder of the library, '' is the library root; needs --drive-id")
+    if recursive:
+        sub.add_argument('--recursive', action='store_true', default=None,
+                         help='scope: take the whole subtree of the folder; needs --drive-id')
 
 
 def _parser() -> argparse.ArgumentParser:
+    '''Build the argument parser of odbcli with one subcommand per server command.
+
+    Returns:
+        The parser.
+    '''
     parser = argparse.ArgumentParser(prog='odbcli', description='Command line of the OneDrive Backup service; JSON on stdout.')
     parser.add_argument('--config', help='JSON file with url, ca, cert, key, timeout or password')
     parser.add_argument('--url', help='service URL https://host:port')
@@ -80,15 +125,23 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_argument('--offset', type=int)
     cmds.add_parser('discovery-status', help='state of the SharePoint inventory')
     _filters(cmds.add_parser('filter-options', help='sites with backups and backup dates of the ticked sites'), dates=False)
-    sub = cmds.add_parser('search-files', help='search files by site, backup date and name part (a star is a wildcard)')
+    sub = cmds.add_parser('search-files', help='search files by site, date, folder and name part (a star is a wildcard)')
     _filters(sub)
+    _scope(sub)
     sub.add_argument('--name-part', default='', help='name part: no star contains, a star anchors the pattern')
     sub.add_argument('--limit', type=int, default=100, help='page size 1..500')
     sub.add_argument('--offset', type=int, default=0, help='rows to skip')
     sub = cmds.add_parser('suggest-names', help='suggest file names for the typed text (2+ characters besides stars)')
     sub.add_argument('--text', required=True, help='typed text')
     _filters(sub)
+    _scope(sub)
     sub.add_argument('--limit', type=int, default=10, help='maximum names 1..20')
+    sub = cmds.add_parser('folder-children', help='children of a node of the folder tree with file counts')
+    _scope(sub, recursive=False)
+    _filters(sub)
+    sub.add_argument('--name-part', default='', help='name part: no star contains, a star anchors the pattern')
+    sub.add_argument('--limit', type=int, default=200, help='page size 1..500')
+    sub.add_argument('--offset', type=int, default=0, help='children to skip')
     schedule.add_parsers(cmds)
     cmds.add_parser('health', help='probe the service with help')
     sub = cmds.add_parser('fetch', help='download a staged export through the transfer service')
@@ -111,6 +164,15 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _config(parser: argparse.ArgumentParser, path: Optional[str]) -> dict:
+    '''Read the JSON settings file; a missing default file is an empty configuration.
+
+    Args:
+        parser: The argument parser that reports usage errors.
+        path: The --config value or None.
+
+    Returns:
+        The settings.
+    '''
     given = path is not None
     target = Path(path).expanduser() if path is not None else DEFAULT_CONFIG
     if not target.is_file():
@@ -127,6 +189,15 @@ def _config(parser: argparse.ArgumentParser, path: Optional[str]) -> dict:
 
 
 def _client(parser: argparse.ArgumentParser, args: argparse.Namespace) -> BackupClient:
+    '''Build the client from the options, the environment and the settings file.
+
+    Args:
+        parser: The argument parser that reports usage errors.
+        args: The parsed arguments.
+
+    Returns:
+        The client.
+    '''
     config = _config(parser, args.config)
     values: dict = {}
     for name in SETTINGS:
@@ -146,6 +217,15 @@ def _client(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Backup
 
 
 def _params(parser: argparse.ArgumentParser, text: str) -> dict:
+    '''Parse the --params-json value of the call subcommand.
+
+    Args:
+        parser: The argument parser that reports usage errors.
+        text: The JSON text.
+
+    Returns:
+        The parameter map.
+    '''
     try:
         value = json.loads(text)
     except ValueError as exc:
@@ -156,6 +236,16 @@ def _params(parser: argparse.ArgumentParser, text: str) -> dict:
 
 
 def _execute(client: BackupClient, args: argparse.Namespace, params: dict) -> Any:
+    '''Run the subcommand through the client.
+
+    Args:
+        client: The client.
+        args: The parsed arguments.
+        params: The parameter map of the call subcommand.
+
+    Returns:
+        The result to print.
+    '''
     command = args.command
     if command.startswith('schedule-'):
         return schedule.execute(client, args)
@@ -184,9 +274,14 @@ def _execute(client: BackupClient, args: argparse.Namespace, params: dict) -> An
     if command == 'filter-options':
         return client.filter_options(args.site_ids)
     if command == 'search-files':
-        return client.search_files(args.site_ids, args.dates, args.name_part, args.limit, args.offset)
+        return client.search_files(args.site_ids, args.dates, args.name_part, args.limit, args.offset, args.site_id,
+                                   args.drive_id, args.dir, args.recursive)
     if command == 'suggest-names':
-        return client.suggest_names(args.text, args.site_ids, args.dates, args.limit)
+        return client.suggest_names(args.text, args.site_ids, args.dates, args.limit, args.site_id, args.drive_id,
+                                    args.dir, args.recursive)
+    if command == 'folder-children':
+        return client.folder_children(args.site_id, args.drive_id, args.dir, args.site_ids, args.dates, args.name_part,
+                                      args.limit, args.offset)
     if command == 'download-begin':
         return client.backup_download_begin(args.export_id)
     if command == 'download-link':
@@ -202,6 +297,14 @@ def _execute(client: BackupClient, args: argparse.Namespace, params: dict) -> An
 
 
 def _failure(exc: ClientError) -> str:
+    '''Render a client error as the stderr text.
+
+    Args:
+        exc: The error.
+
+    Returns:
+        The text.
+    '''
     text = 'odbcli: ' + str(exc)
     if exc.code is not None and str(exc.code) not in text:
         text += ' (code %s)' % exc.code
@@ -214,6 +317,14 @@ def _failure(exc: ClientError) -> str:
 
 
 def main(argv: Optional[list] = None) -> int:
+    '''Run odbcli.
+
+    Args:
+        argv: The arguments or None for sys.argv.
+
+    Returns:
+        The exit code: 0 success, 1 server refusal, 3 local failure (2 is the usage error of argparse).
+    '''
     parser = _parser()
     args = parser.parse_args(argv)
     params = _params(parser, args.params_json) if args.command == 'call' else {}
