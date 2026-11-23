@@ -102,11 +102,16 @@ def _register_commands() -> None:
 
 def _start_index_catchup() -> None:
     """Index in the background every snapshot that the file name index does not know yet (matrix 10.19.6)."""
+    import logging
+    import sqlite3
     from .file_index import FileIndex
     from .file_index_build import ensure_catchup
 
     index = FileIndex(os.environ.get("ONEDRIVE_BACKUP_DATA", "/data"))
-    index.connect().close()  # creates the index file_dir of matrix 10.21.2 when the data directory lacks it
+    try:
+        index.connect().close()  # creates the index file_dir of matrix 10.21.2 when the data directory lacks it
+    except (OSError, sqlite3.Error):
+        logging.getLogger(__name__).warning("File index: not opened at start (read-only data directory?)")
     ensure_catchup(_catalog, index)
 
 
