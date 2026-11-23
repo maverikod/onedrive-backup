@@ -33,6 +33,7 @@ CHECKS = {
 }
 RELATIONS = ('RF1', 'RF2', 'RF3', 'RF4', 'RF5', 'RF6')
 OPTIONS = tuple('O-%d' % number for number in range(1, 17))
+EXTENDED = ('M13', 'M14')  # revision 13 (matrix TODO 10.21.7) appends cases to M13 and M14 and rows to their client/odbcli checks (pipeline/inv13.py)
 
 
 def problems(data: dict, names: dict[str, dict]) -> list[str]:
@@ -55,11 +56,11 @@ def problems(data: dict, names: dict[str, dict]) -> list[str]:
         if row.get('surface') != surface or row.get('tag') != tag:
             found.append('rev11: row %s is %r/%r, expected %s/%s' % (rid, row.get('surface'), row.get('tag'), surface, tag))
         got = tuple(case.get('id') for case in row.get('cases', []))
-        if got != wanted:
+        if (got[:len(wanted)] if rid in EXTENDED else got) != wanted:
             found.append('rev11: row %s cases %s differ from 10.19.9 %s' % (rid, got, wanted))
     for name, rid in CHECKS.items():
         entry = names.get(name) or {}
-        if entry.get('rows') != [rid] or 'FILTER-REV11' not in entry.get('blocks', []):
+        if entry.get('rows', [])[:1] != [rid] or 'FILTER-REV11' not in entry.get('blocks', []):
             found.append('rev11: check %s is registered as %r, expected block FILTER-REV11 and rows [%s]' % (name, entry, rid))
     mapped = {check for rid in ('V9', 'V10') for check in (rows.get(rid) or {}).get('checks', [])}
     for name in ('vue_command_calls', 'vue_download', 'vue_static_serve', 'vue_auth', 'vue_command_contract', 'vue_build', 'vue_polling'):
