@@ -94,6 +94,6 @@ def problems(data: dict, names: dict[str, dict]) -> list[str]:
         for key in ('approval', 'user_words', 'date', 'interface', 'contract_gaps', 'changed_text'):
             if key not in record:
                 found.append('rev12: identity.reconciliations_10_20 lacks %s' % key)
-    if len(b4base.COMMANDS) != 17 or any(command not in b4base.COMMANDS for command in SCHEDULE_COMMANDS):
-        found.append('rev12: pipeline.b4base.COMMANDS holds %d commands %s, expected the 14 of revision 11 and the three schedule commands (17)' % (len(b4base.COMMANDS), sorted(set(SCHEDULE_COMMANDS) - set(b4base.COMMANDS))))
+    if len(b4base.COMMANDS) != 18 or any(command not in b4base.COMMANDS for command in SCHEDULE_COMMANDS):
+        found.append('rev12: pipeline.b4base.COMMANDS holds %d commands %s, expected the 14 of revision 11, the three schedule commands and backup_folder_children of revision 13 (18)' % (len(b4base.COMMANDS), sorted(set(SCHEDULE_COMMANDS) - set(b4base.COMMANDS))))
     return found
