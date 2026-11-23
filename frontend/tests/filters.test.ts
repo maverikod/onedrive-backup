@@ -109,6 +109,8 @@ describe('autocomplete', () => {
       'fetch',
       vi.fn(async (_url: string, init: RequestInit) => {
         const body = JSON.parse(init.body as string)
+        // The folder tree of the page asks its own command; this group counts the filter, search and suggestion calls only.
+        if (body.method === 'backup_folder_children') return ok({ nodes: [], total: 0, offset: 0, limit: 200, path: [], index })
         calls.push({ method: body.method, params: body.params })
         if (body.method === 'backup_filter_options') {
           return ok({ sites: [{ site_id: 's1', name: 'Site', snapshot_count: 3, last_snapshot_time: '' }], dates: [{ date: '2026-11-21', snapshot_count: 3 }], timezone: 'Europe/Kyiv', index })
