@@ -638,9 +638,9 @@
  },
  "checks": [
   {"name": "cmd_backup_folder_children", "blocks": ["TREE-REV13"], "rows": ["M19"], "status": "implemented"},
-  {"name": "client_folder_children", "blocks": ["TREE-REV13"], "rows": ["CK-TREE1"], "status": "pending"},
-  {"name": "odbcli_folder_children", "blocks": ["TREE-REV13"], "rows": ["OC-TREE1"], "status": "pending"},
-  {"name": "folder_index_live", "blocks": ["TREE-REV13"], "rows": ["PL19"], "status": "pending"},
+  {"name": "client_folder_children", "blocks": ["TREE-REV13"], "rows": ["CK-TREE1"], "status": "implemented"},
+  {"name": "odbcli_folder_children", "blocks": ["TREE-REV13"], "rows": ["OC-TREE1"], "status": "implemented"},
+  {"name": "folder_index_live", "blocks": ["TREE-REV13"], "rows": ["PL19"], "status": "implemented"},
   {"name": "vue_folder_tree", "blocks": ["UI-TREE"], "rows": ["V12"], "status": "pending"},
   {"name": "cmd_backup_schedule_get", "blocks": ["SCHEDULE-REV12"], "rows": ["M15"], "status": "implemented"},
   {"name": "cmd_backup_schedule_set", "blocks": ["SCHEDULE-REV12"], "rows": ["M16"], "status": "implemented"},
