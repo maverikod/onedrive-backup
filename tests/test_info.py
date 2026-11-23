@@ -23,9 +23,14 @@ class ReferenceContractTests(unittest.TestCase):
     """Exercise real info code with a small in-memory MCP adapter."""
 
     def setUp(self) -> None:
-        """Load the production implementation without external dependencies."""
+        """Load the production implementation without external dependencies.
+
+        Returns:
+            Nothing; the loaded module and command are kept on the test case.
+        """
 
         class FakeCommand:
+            """A command class of the in-memory adapter."""
             @classmethod
             def get_schema(cls) -> dict:
                 return {"type": "object", "properties": {}}
@@ -40,11 +45,13 @@ class ReferenceContractTests(unittest.TestCase):
                 return {"parameters": cls._default_parameters_from_schema()}
 
         class FakeResult:
+            """A command result of the in-memory adapter."""
             def __init__(self, success: bool, data=None):
                 self.success = success
                 self.data = data
 
         class FakeError:
+            """An error result of the in-memory adapter."""
             def __init__(self, message: str, code=400, **kwargs):
                 self.success = False
                 self.message = message
@@ -52,6 +59,7 @@ class ReferenceContractTests(unittest.TestCase):
                 self.details = kwargs.get("details")
 
         class FakeRegistry:
+            """The command registry of the in-memory adapter."""
             def __init__(self):
                 self.commands = {}
 
@@ -73,6 +81,7 @@ class ReferenceContractTests(unittest.TestCase):
             "backup_filter_options",
             "backup_search_files",
             "backup_suggest_names",
+            "backup_folder_children",
             "backup_schedule_get",
             "backup_schedule_set",
             "backup_schedule_status",
@@ -140,7 +149,11 @@ class ReferenceContractTests(unittest.TestCase):
         self.command = module.InfoCommand()
 
     def test_every_page_and_registered_command(self) -> None:
-        """Check complete pages, the table of contents and navigation."""
+        """Check complete pages, the table of contents and navigation.
+
+        Returns:
+            Nothing; the assertions fail the test.
+        """
         first = asyncio.run(self.command.execute(page=1))
         self.assertTrue(first.success)
         self.assertEqual(first.data["kind"], "toc")
@@ -180,7 +193,11 @@ class ReferenceContractTests(unittest.TestCase):
         self.assertEqual(found, set(self.module._registered()))
 
     def test_invalid_page_types_and_range(self) -> None:
-        """Reject negative, noninteger and out-of-range page values."""
+        """Reject negative, noninteger and out-of-range page values.
+
+        Returns:
+            Nothing; the assertions fail the test.
+        """
         first = asyncio.run(self.command.execute(page=1))
         last = first.data["total_pages"]
         for invalid in (0, -1, last + 1, True, "1", 1.5):
@@ -190,7 +207,11 @@ class ReferenceContractTests(unittest.TestCase):
                 self.assertEqual(result.code, 400)
 
     def test_missing_manual_fails_closed(self) -> None:
-        """Report a missing production manual without silent fallback."""
+        """Report a missing production manual without silent fallback.
+
+        Returns:
+            Nothing; the assertions fail the test.
+        """
         absent = INFO_PATH.parent / "NONEXISTENT_MANUAL.md"
         with patch.object(self.module, "MANUAL_FILE", absent):
             result = asyncio.run(self.command.execute(page=1))
@@ -198,7 +219,11 @@ class ReferenceContractTests(unittest.TestCase):
         self.assertEqual(result.code, 503)
 
     def test_canonical_metadata_is_complete(self) -> None:
-        """Require a canonical entry for every registered command."""
+        """Require a canonical entry for every registered command.
+
+        Returns:
+            Nothing; the assertions fail the test.
+        """
         self.assertEqual(set(REFERENCE), set(self.module._registered()))
         for name, command in self.module._registered().items():
             with self.subTest(command=name):
