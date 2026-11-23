@@ -12,7 +12,7 @@ from __future__ import annotations
 from pipeline import b4base
 
 TAG = 'CURRENT'
-UI_TAG = 'PLANNED(UI-TREE)'
+UI_TAG = 'CURRENT'
 API = 'TREE-REV13'
 UI = 'UI-TREE'
 COMMAND = 'backup_folder_children'
