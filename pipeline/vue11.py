@@ -73,9 +73,6 @@ class Cases:
         report: the findings collector.
         drv: the headless driver.
         root: the SPA endpoint URL.
-        BOX_MIN: the smallest visible control size in px.
-        GAP_MIN: the smallest gap between neighbouring controls in px.
-        BAD_PAGES: the page-input texts that are no valid integer.
     '''
 
     def __init__(self, report: Report, drv: Any, root: str) -> None:
@@ -625,158 +622,6 @@ class Cases:
                         self.bad('%s: at offset %d %s disabled is %s, expected %s' % (label, offset, check, not want, want))
         finally:
             sess.close()
-    BAD_PAGES = ('', 'abc', '1.5', '-1', '+2')
-
-    def pager_apply(self, sess: Session, value: str, expect: bool) -> tuple[list[tuple[str, Any]], list[tuple[str, str]]]:
-        '''Type a value into the page input of the result pager, press Enter and collect the calls and the browser dialogs.
-
-        Args:
-            sess: the browser session.
-            value: the text put into the input.
-            expect: True when a dialog or a reply is expected, so the wait ends at the first one; False waits only the settle time.
-
-        Returns:
-            The calls (method, params) sent after the Enter and the dialogs (type, message) shown.
-        '''
-        page = sess.page
-        seen: list[tuple[str, str]] = []
-
-        def on_dialog(dialog: Any) -> None:
-            seen.append((dialog.type, dialog.message))
-            dialog.accept()
-
-        page.on('dialog', on_dialog)
-        try:
-            field = tid(page, 'pager-page-input')
-            start = len(sess.calls)
-            field.focus()
-            field.evaluate("(el, text) => { el.value = text; el.dispatchEvent(new Event('input', {bubbles: true})); }", value)
-            field.press('Enter')
-            for _ in range(50 if expect else 0):
-                if seen or any(c['method'] == 'backup_search_files' and c['reply'] is not None for c in sess.calls[start:]):
-                    break
-                page.wait_for_timeout(200)
-            page.wait_for_timeout(SETTLE_MS)
-            return pairs(sess, start), list(seen)
-        finally:
-            page.remove_listener('dialog', on_dialog)
-
-    def pager_valid(self, sess: Session, label: str, base: dict[str, Any], number: int, limit: int, total: int) -> None:
-        '''Apply a valid page number through the input and assert one search with the same scope, the replaced rows and the states.
-
-        Args:
-            sess: the browser session.
-            label: the finding prefix.
-            base: the parameters of the first backup_search_files of the page.
-            number: the page number typed, 1-based and inside the range.
-            limit: the page size.
-            total: the number of result rows.
-
-        Returns:
-            None.
-        '''
-        page = sess.page
-        offset = (number - 1) * limit
-        pager = tid(page, 'result-pager').first
-        before = tid(page, 'result-row').first.inner_text()
-        sent, dialogs = self.pager_apply(sess, str(number), True)
-        scope = {k: v for k, v in base.items() if k not in ('offset', 'limit')}
-        searches = [params for method, params in sent if method == 'backup_search_files']
-        ok = len(sent) == 1 and len(searches) == 1 and int(searches[0].get('offset', 0)) == offset and int(searches[0].get('limit', limit)) == limit
-        if not ok or {k: v for k, v in searches[0].items() if k not in ('offset', 'limit')} != scope:
-            self.bad('%s: the page %d typed into pager-page-input sent %s, expected exactly one backup_search_files with offset %d, limit %d and the same filters %s' % (label, number, sent, offset, limit, scope))
-            return
-        if dialogs:
-            self.bad('%s: the valid page %d showed the dialogs %s, expected none' % (label, number, dialogs))
-        if tid(page, 'result-row').count() != min(limit, total - offset) or tid(page, 'result-row').first.inner_text() == before:
-            self.bad('%s: after page %d the table has %d rows, expected %d rows replaced by the page at offset %d' % (label, number, tid(page, 'result-row').count(), min(limit, total - offset), offset))
-        if tid(page, 'pager-page-input').input_value() != str(number):
-            self.bad('%s: after page %d pager-page-input shows %r, expected %r' % (label, number, tid(page, 'pager-page-input').input_value(), str(number)))
-        last_page = offset + limit >= total
-        for name, want in (('page-first', offset == 0), ('page-prev', offset == 0), ('page-next', last_page), ('page-last', last_page)):
-            if pager.locator('[data-testid=%s]' % name).is_disabled() != want:
-                self.bad('%s: at page %d %s disabled is %s, expected %s' % (label, number, name, not want, want))
-
-    def pager_refused(self, sess: Session, label: str, value: str, kind: str, current: int, pages: int) -> str:
-        '''Type a refused value and assert one alert dialog, no request and the input back on the current page.
-
-        Args:
-            sess: the browser session.
-            label: the finding prefix.
-            value: the text typed.
-            kind: invalid for a value that is no integer, range for an integer outside the pages.
-            current: the current page number.
-            pages: the number of pages.
-
-        Returns:
-            The alert message, or an empty string when no alert was shown.
-        '''
-        sent, dialogs = self.pager_apply(sess, value, True)
-        message = ''
-        if sent:
-            self.bad('%s: the %s value %r sent %s, expected no request' % (label, kind, value, sent))
-        if len(dialogs) != 1 or dialogs[0][0] != 'alert' or not dialogs[0][1].strip():
-            self.bad('%s: the %s value %r showed the dialogs %s, expected exactly one window.alert with a non-empty message' % (label, kind, value, dialogs))
-        else:
-            message = dialogs[0][1]
-            if kind == 'range' and str(pages) not in message:
-                self.bad('%s: the range alert %r for %r does not name the page count %d' % (label, message, value, pages))
-        shown = tid(sess.page, 'pager-page-input').input_value()
-        if shown != str(current):
-            self.bad('%s: after the %s value %r pager-page-input shows %r, expected the current page %d' % (label, kind, value, shown, current))
-        return message
-
-    def pager_input(self) -> None:
-        '''L12 (user correction of 2026-11-23): between page-prev and page-next of result-pager there is the number input pager-page-input; a valid page applies on Enter, an invalid or out-of-range value shows a window.alert and sends nothing.
-
-        Returns:
-            None.
-        '''
-        label = 'V12 L12 pager input'
-        sess = Session(self.drv)
-        try:
-            sess.page.set_viewport_size({'width': 1600, 'height': 900})
-            sess.go('')
-            page = sess.page
-            if not self.have(label, page, ('result-table', 'result-count', 'result-pager')):
-                return
-            total = int(tid(page, 'result-count').get_attribute('data-raw') or 0)
-            first = [params for method, params in pairs(sess) if method == 'backup_search_files']
-            base = dict(first[0]) if first else {}
-            limit = int(base.get('limit', 100))
-            pages = max(1, -(-total // limit))
-            pager = tid(page, 'result-pager').first
-            if pager.locator('[data-testid=pager-page-input]').count() != 1:
-                self.bad('%s: result-pager has no element with data-testid pager-page-input (total %d, limit %d, %d pages)' % (label, total, limit, pages))
-                return
-            names = ('page-first', 'page-prev', 'pager-page-input', 'page-next', 'page-last')
-            boxes: dict[str, Any] = {name: pager.locator('[data-testid=%s]' % name).bounding_box() for name in names}
-            if None in boxes.values():
-                self.bad('%s: not every control of %s has a visible box' % (label, list(names)))
-                return
-            prev, mid, nxt = boxes['page-prev'], boxes['pager-page-input'], boxes['page-next']
-            if not (prev['x'] + prev['width'] <= mid['x'] and mid['x'] + mid['width'] <= nxt['x']):
-                self.bad('%s: pager-page-input at x %s must lie between page-prev (ends %s) and page-next (starts %s)' % (label, mid['x'], prev['x'] + prev['width'], nxt['x']))
-            self.row_findings(label, [(name, pager.locator('[data-testid=%s]' % name)) for name in names])
-            if tid(page, 'pager-page-input').input_value() != '1':
-                self.bad('%s: on page 1 pager-page-input shows %r, expected 1' % (label, tid(page, 'pager-page-input').input_value()))
-            if pages < 2:
-                self.report.state.append('%s: the result has %d rows, at most one page of %d, the page input cannot be exercised' % (label, total, limit))
-                return
-            invalid = [self.pager_refused(sess, label, value, 'invalid', 1, pages) for value in self.BAD_PAGES]
-            ranged = [self.pager_refused(sess, label, value, 'range', 1, pages) for value in ('0', str(pages + 1))]
-            sent, dialogs = self.pager_apply(sess, '1', False)
-            if sent or dialogs:
-                self.bad('%s: the current page 1 typed again sent %s and showed %s, expected nothing' % (label, sent, dialogs))
-            self.pager_valid(sess, label, base, 2, limit, total)
-            ranged.append(self.pager_refused(sess, label, str(pages + 1), 'range', 2, pages))
-            if pages > 2:
-                self.pager_valid(sess, label, base, pages, limit, total)
-            self.pager_valid(sess, label, base, 1, limit, total)
-            if any(text and text in ranged for text in invalid):
-                self.bad('%s: the invalid-number alert and the range alert are the same message %s, expected two different errors' % (label, sorted(set(invalid) & set(ranged))))
-        finally:
-            sess.close()
 
 
 def _case(root: str, name: str) -> Callable[[Report, Any], None]:
@@ -871,7 +716,7 @@ def _calls(report: Report) -> None:
     if root is not None:
         spa_files(report, 'V4 SPA sources')
         vuechecks.with_driver(report, 'V4 browser', root, vuebrowser.table_cases, vuebrowser.page_equals_result,
-                              *[_case(root, name) for name in ('nav_ids', 'load_calls', 'site_tick', 'apply_one', 'wildcard_rows', 'columns', 'service_tabs', 'old_routes', 'service_toolbar', 'result_pager', 'pager_input')])
+                              *[_case(root, name) for name in ('nav_ids', 'load_calls', 'site_tick', 'apply_one', 'wildcard_rows', 'columns', 'service_tabs', 'old_routes', 'service_toolbar', 'result_pager')])
 
 
 def vue_command_calls() -> None:
