@@ -22,7 +22,7 @@ from pipeline.vue13base import M13, M14, M19, SCOPE_KEYS, TREE_KEYS, Ref
 from pipeline.vue13cases import Cases13
 from pipeline.vuebase import lan_try, spa_files, tracked_files
 
-COMMANDS13 = 18
+COMMANDS13 = 20  # the shared list b4base.COMMANDS: 18 of revision 13 plus backup_download_chunk and backup_run_log of revision 14 group A
 CASES = ('l16_three_regions', 'l17_toggle_site', 'l18_expand_library', 'l19_select_folder', 'l20_reload_restores', 'l21_and_name_filter',
          'l22_recursive_library', 'l23_keyboard', 'l24_tree_all_clears', 'l25_tree_more', 'l26_narrow_stack', 'l27_logout_zero_calls',
          'stub_tree_error_banner', 'stub_stale_tree_answer', 'stub_scope_kept_empty', 'stub_copy_marker_scoped')
