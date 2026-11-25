@@ -6,7 +6,6 @@ Only opaque export identifiers, never filesystem paths, cross the public API.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -14,7 +13,7 @@ import re
 import subprocess
 import tarfile
 import tempfile
-from uuid import uuid4
+from typing import Any
 
 from onedrive_backup import load_config, BackupError
 
@@ -22,14 +21,31 @@ from onedrive_backup import load_config, BackupError
 SNAPSHOT_RE = re.compile(r"^[0-9a-fA-F]{8,64}$")
 EXPORT_RE = re.compile(r"^[0-9a-f]{32}$")
 SOURCE_TAGS = ("onedrive", "sharepoint")
+NOT_FOUND_HINT = (
+    "Find the file with backup_search_files and take its file_id, or its snapshot_id and file_path; a file_path "
+    "starts with 'sharepoint/<site key>/<library key>/'."
+)
 
 
 class CatalogError(Exception):
-    """Error with an appropriate HTTP status code."""
+    """Error with an appropriate HTTP status code and optional error.data fields.
 
-    def __init__(self, message: str, status: int = 400):
+    Attributes:
+        status: The HTTP-like status.
+        details: Fields of error.data, or None.
+    """
+
+    def __init__(self, message: str, status: int = 400, details: dict[str, Any] | None = None):
+        """Record the message, the status and the optional error.data fields.
+
+        Args:
+            message: The error message.
+            status: The HTTP-like status.
+            details: Fields of error.data, or None.
+        """
         super().__init__(message)
         self.status = status
+        self.details = details
 
 
 class Catalog:
@@ -189,7 +205,7 @@ class Catalog:
                         raise CatalogError("Restic listing failed: " + detail.decode("utf-8", "replace"), 503)
                     if b"no matching ID found" in detail:
                         # restic 0.14 ignores an unknown snapshot id: exit 0, empty listing
-                        raise CatalogError("Snapshot not found", 404)
+                        raise CatalogError("Snapshot not found", 404, {"hint": NOT_FOUND_HINT})
                 except BaseException:
                     if proc.poll() is None:
                         proc.kill()
@@ -201,27 +217,39 @@ class Catalog:
 
     def files(self, snapshot_id: str, prefix: str = "", limit: int = 1000,
               offset: int = 0) -> dict:
+        from .file_address import full_snapshot_id, make_file_id  # type: ignore[import-not-found]
+        from .file_index import FileIndex
+
         if type(limit) is not int or not 1 <= limit <= 5000:
             raise CatalogError("limit must be 1..5000")
         if type(offset) is not int or not 0 <= offset <= 500000:
             raise CatalogError("offset must be 0..500000")
         if prefix:
             prefix = self._check_path(prefix)
+        supplied = snapshot_id
         snapshot_id = self._check_snapshot(snapshot_id)
+        warnings: list[dict] = []
         try:
             found = self._all_nodes(snapshot_id)
         except CatalogError as exc:
             if exc.status != 404:
                 raise
-            # A well-formed snapshot id that no snapshot carries lists no files.
+            # A well-formed snapshot id that no snapshot carries lists no files, with a warning.
             found = []
+            warnings.append({"code": "UNKNOWN_SNAPSHOT_ID", "field": "snapshot_id", "value": supplied,
+                             "hint": "Take a snapshot_id from backup_snapshots."})
         nodes = [n for n in found
                  if not prefix or n["path"] == prefix or n["path"].startswith(prefix + "/")]
+        full = full_snapshot_id(FileIndex(self.data_dir), snapshot_id) if nodes else None
+        items = []
+        for n in nodes[offset:offset + limit]:
+            item = {k: v for k, v in n.items() if k != "restic_path"}
+            if full and n["type"] == "file":
+                item["file_id"] = make_file_id(full, n["path"])
+            items.append(item)
         return {
-            "snapshot_id": snapshot_id, "items": [
-                {k: v for k, v in n.items() if k != "restic_path"}
-                for n in nodes[offset:offset + limit]
-            ], "total": len(nodes), "offset": offset, "limit": limit,
+            "snapshot_id": snapshot_id, "items": items, "total": len(nodes), "offset": offset,
+            "limit": limit, "warnings": warnings,
         }
 
     def _output_path(self, export_id: str, *, archive: bool = False) -> Path:
@@ -278,54 +306,18 @@ class Catalog:
                 raise CatalogError("Snapshot archive failed or timed out", 503) from exc
 
     def prepare(self, snapshot_id: str, file_path: str | None = None) -> dict:
-        # Validate every input before any side effect, also while storage is gated.
-        snapshot_id = self._check_snapshot(snapshot_id)
-        relative = self._check_path(file_path) if file_path is not None else None
-        self._config()
-        self.exports.mkdir(mode=0o700, parents=True, exist_ok=True)
-        self._sweep_expired()
-        nodes = self._all_nodes(snapshot_id)
-        selected: dict | None = None
-        total_size = 0
-        if relative is not None:
-            selected = next((n for n in nodes
-                             if n["path"] == relative and n["type"] == "file"), None)
-            if selected is None:
-                raise CatalogError("File not found in snapshot", 404)
-            self._validate_size(selected["size"])
-        else:
-            total_size = sum(n["size"] for n in nodes
-                             if n["type"] == "file" and isinstance(n["size"], int))
-            self._validate_size(total_size)
-        export_id = uuid4().hex
-        archive = selected is None
-        output = self._output_path(export_id, archive=archive)
-        filename = "onedrive-" + snapshot_id[:12] + ".tar.gz" if selected is None else Path(selected["path"]).name
-        try:
-            if selected is None:
-                self._archive_snapshot(snapshot_id, output)
-            else:
-                self._dump_file(snapshot_id, selected["restic_path"], output)
-            digest = hashlib.sha256()
-            with output.open("rb") as inp:
-                for block in iter(lambda: inp.read(1024 * 1024), b""):
-                    digest.update(block)
-            meta = {
-                "export_id": export_id, "snapshot_id": snapshot_id,
-                "path": file_path, "filename": filename,
-                "size_bytes": output.stat().st_size, "sha256": digest.hexdigest(),
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "expires_at": (datetime.now(timezone.utc) + self.ttl).isoformat(),
-            }
-            metadata = self._metadata_path(export_id)
-            with metadata.open("x", encoding="utf-8") as fp:
-                json.dump(meta, fp)
-            metadata.chmod(0o600)
-            return self._with_url(meta)
-        except BaseException:
-            output.unlink(missing_ok=True)
-            self._metadata_path(export_id).unlink(missing_ok=True)
-            raise
+        """Stage one file by snapshot id and path, or a whole snapshot archive (the 0.3.27 call).
+
+        Args:
+            snapshot_id: The snapshot id.
+            file_path: The file_path of one file, or None for the whole snapshot archive.
+
+        Returns:
+            The export metadata.
+        """
+        from .catalog_bytes import stage  # type: ignore[import-not-found]
+
+        return stage(self, snapshot_id, file_path)
 
     def _remove_export(self, export_id: str) -> None:
         """Delete the data and the metadata of one export; absent files are not an error."""
@@ -373,8 +365,10 @@ class Catalog:
 
     @staticmethod
     def _with_url(meta: dict) -> dict:
-        """Add the temporary download link /downloads/<export_id>/<filename> (never stored)."""
-        return {**meta, "url": "/downloads/%s/%s" % (meta["export_id"], meta["filename"])}
+        """Add the temporary download link /downloads/<export_id>/<filename> (never stored), the kind and the file_id."""
+        kind = "snapshot" if meta["path"] is None else "file"
+        return {**meta, "url": "/downloads/%s/%s" % (meta["export_id"], meta["filename"]),
+                "kind": kind, "file_id": meta.get("file_id")}
 
     def export_status(self, export_id: str) -> dict:
         return self._with_url(self.get_export(export_id)[0])
