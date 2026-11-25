@@ -164,6 +164,23 @@ def _nowrite(case: rev11.Case) -> None:
 M24_VALIDATORS: dict[str, Callable[[rev11.Case], None]] = {'runlog': _tail, 'runlog_all': _reassemble, 'runlog_tail': _tail, 'nowrite': _nowrite}
 
 
+def _request(params: dict) -> tuple:
+    '''Send one backup_run_log call; a command error carries its error.data (live.classify keeps {} for it).
+
+    Args:
+        params: the parameter map to send.
+
+    Returns:
+        (kind, code, message, data) with the error.data of a command error as data.
+    '''
+    raw = live.call('backup_run_log', params)
+    kind, code, message, data = live.classify(raw)
+    if kind == 'command_error':
+        detail = (raw.get('result') or {}).get('error') or {}
+        data = detail.get('data') if isinstance(detail.get('data'), dict) else {}
+    return kind, code, message, data
+
+
 def _judge(report: Report, desc: str, cid: str, params: dict, expect: str, ctx: RunContext) -> None:
     '''Send one M24 case and judge it; the cases that need a log are STATE RED while no run has one and the command exists.
 
@@ -180,7 +197,7 @@ def _judge(report: Report, desc: str, cid: str, params: dict, expect: str, ctx: 
     '''
     mode, _, rest = expect.partition(':')
     missing = ctx.run_id is None and cid in NEEDS_LOG or ctx.bare_id is None and cid == 'tr5_run_without_log'
-    reply = live.request('backup_run_log', params)
+    reply = _request(params)
     kind, code, message, data = reply
     if code == -32601:
         report.product.append('%s: %s' % (desc, cmdcases._brief(*reply)))
@@ -195,7 +212,8 @@ def _judge(report: Report, desc: str, cid: str, params: dict, expect: str, ctx: 
         elif key and (value is None or wanted is not None and (sorted(value) if isinstance(value, list) else value) != wanted and (not isinstance(wanted, str) or wanted not in str(value))):
             report.product.append('%s: error.data.%s is %s, expected %s' % (desc, key, str(value)[:100], wanted if wanted is not None else 'an integer'))
     elif mode == 'rpc':
-        cmdcases._judge_rpc(report, desc, reply, rest, rest in ('type', 'value'), 'text')
+        extra = [name for name in params if name not in ('run_id', 'offset', 'limit', 'tail')]
+        cmdcases._judge_rpc(report, desc, reply, rest, rest in ('type', 'value'), 'run_id', unknown=extra[0] if extra else 'no_such_param')
     elif kind != 'success' or not isinstance(data, dict):
         report.product.append('%s: expected success, got %s' % (desc, cmdcases._brief(*reply)))
     else:

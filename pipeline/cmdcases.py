@@ -103,7 +103,8 @@ def _brief(kind: Any, code: Any, message: Any, data: Any) -> str:
     return '%s code=%s%s message=%r' % (kind, code, detail, message[:120])
 
 
-def _judge_rpc(report: Report, desc: str, reply: Any, violation: str, needs_detail: bool, name: str | None) -> None:
+def _judge_rpc(report: Report, desc: str, reply: Any, violation: str, needs_detail: bool, name: str | None,
+               unknown: str = 'no_such_param') -> None:
     '''Judge a reply against the adapter validation error contract.
 
     Args:
@@ -113,6 +114,7 @@ def _judge_rpc(report: Report, desc: str, reply: Any, violation: str, needs_deta
         violation: the expected violation.
         needs_detail: whether expected and got must be present.
         name: the parameter the violation names, or None.
+        unknown: the parameter an `unknown` violation must list in invalid_parameters.
 
     Returns:
         None.
@@ -124,7 +126,7 @@ def _judge_rpc(report: Report, desc: str, reply: Any, violation: str, needs_deta
     if ok and violation == 'missing':
         ok = name in data.get('missing_parameters', [])
     if ok and violation == 'unknown':
-        ok = 'no_such_param' in data.get('invalid_parameters', [])
+        ok = unknown in data.get('invalid_parameters', [])
     if not ok:
         report.product.append('%s: expected adapter error -32602 violation=%s%s, got %s'
                               % (desc, violation, ' with expected and got' if needs_detail else '', _brief(*reply)))

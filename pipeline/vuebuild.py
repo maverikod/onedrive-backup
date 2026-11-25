@@ -83,8 +83,9 @@ def manifest_cases(report: Report, root: str) -> None:
     if set(used) | set(unused) != set(names) or set(used) & set(unused):
         report.product.append('V3 used %s and not_used %s do not partition the live help commands %s (missing %s, unexpected %s, in both %s)'
                               % (sorted(used), sorted(unused), names, sorted(set(names) - set(used) - set(unused)), sorted((set(used) | set(unused)) - set(names)), sorted(set(used) & set(unused))))
-    if not set(unused) <= {'backup_download_begin'}:
-        report.product.append('V3 not_used holds %s, only backup_download_begin may be unused' % sorted(set(unused) - {'backup_download_begin'}))
+    allowed = {'backup_download_begin', 'backup_download_chunk', 'backup_run_log'}  # the plain download link; the model slice command and the operator run log of revision 14 (10.22, 10.23.R: no SPA control)
+    if not set(unused) <= allowed:
+        report.product.append('V3 not_used holds %s, only %s may be unused' % (sorted(set(unused) - allowed), sorted(allowed)))
     for command, params in sorted(used.items()):
         schema = live_schema(command)
         for name, spec in (params if isinstance(params, dict) else {}).items():
