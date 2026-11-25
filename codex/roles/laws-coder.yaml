@@ -172,7 +172,8 @@ laws:
     the user, never left for a human to start and never asked about. Run it from the
     authoritative working checkout and branch:
     `local` under file_access local, `cas` under file_access cas — the production pass
-    (`build.sh --dev no`) from that same checkout switched to `main` — under file_access cas from a
+    (`build.sh --dev no`) ONLY from the branch `main`, after the working branch was merged into `main` and `main`
+    pushed, from that same checkout switched to `main` — under file_access cas from a
     separate production clone of `main` outside the CAS watch directory (`cas_index_is_dev`) —
     (`dev_prod_instances`); never
     from a linked git worktree or detached HEAD. Every build pass that uploads anything takes a NEW version — the
@@ -258,7 +259,15 @@ laws:
     whose full DEV pipeline has just gone GREEN — is merged into `main` with
     everything on it, and `main` is pushed — the production dependencies are derived by
     `build.sh` (`pipeline_environment` (4)); (b) the authoritative checkout is switched to `main` — under file_access cas, whose authoritative checkout is the one the Code Analysis Server indexes, a SEPARATE production clone of `main` outside the CAS watch directory is used instead, because the indexed checkout never leaves the working branch (`cas_index_is_dev`); (c)
-    `build.sh --dev no` runs there and REBUILDS everything WITHOUT `-dev` under that same version number: the image `<image>:<version>`
+    `build.sh --dev no` runs there — PRODUCTION IS BUILT ONLY FROM THE BRANCH `main` (user,
+    2026-11-25: "сборка прод только с ветки main. Т.е. сначала нужно слить локал или cas в main. И
+    только после этого запускать build"): steps (a) and (b) come FIRST, done by the model itself,
+    and `build.sh --dev no` starts only after them; `build.sh` never merges, switches or pushes a
+    branch, and before anything is built it REFUSES with an exact error and builds nothing when the
+    current branch is not `main` (a detached HEAD, `local`, `cas` or any other branch), the tree is
+    dirty, local `main` differs from `origin/main`, or `main` does not contain the DEV-proven
+    commit of the working branch (the merge was not done); a production build from any branch
+    other than `main` is a DEFECT. There it REBUILDS everything WITHOUT `-dev` under that same version number: the image `<image>:<version>`
     pushed to Docker Hub, the production Debian package `<svc>-docker`, the client `<client>`
     `<version>` published to PyPI — the Docker Hub push and the client publication UNCONDITIONALLY
     and MANDATORILY, as in every build pass — every fleet client the project depends on declared
