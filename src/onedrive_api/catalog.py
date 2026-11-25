@@ -25,6 +25,11 @@ NOT_FOUND_HINT = (
     "Find the file with backup_search_files and take its file_id, or its snapshot_id and file_path; a file_path "
     "starts with 'sharepoint/<site key>/<library key>/'."
 )
+FETCH_STAGED = (
+    "Read the bytes with backup_download_chunk (export_id, offset, limit: up to 262144 bytes per call, base64) while "
+    "size_bytes is at most 4194304; for a larger export open the url or use backup_download_begin. Verify size_bytes "
+    "and sha256, then delete the export with backup_delete_export."
+)
 
 
 class CatalogError(Exception):
@@ -217,7 +222,7 @@ class Catalog:
 
     def files(self, snapshot_id: str, prefix: str = "", limit: int = 1000,
               offset: int = 0) -> dict:
-        from .file_address import full_snapshot_id, make_file_id  # type: ignore[import-not-found]
+        from .file_address import full_snapshot_id, make_file_id
         from .file_index import FileIndex
 
         if type(limit) is not int or not 1 <= limit <= 5000:
@@ -315,7 +320,7 @@ class Catalog:
         Returns:
             The export metadata.
         """
-        from .catalog_bytes import stage  # type: ignore[import-not-found]
+        from .catalog_bytes import stage
 
         return stage(self, snapshot_id, file_path)
 
@@ -365,10 +370,18 @@ class Catalog:
 
     @staticmethod
     def _with_url(meta: dict) -> dict:
-        """Add the temporary download link /downloads/<export_id>/<filename> (never stored), the kind and the file_id."""
+        """Add the temporary download link, the kind, the file_id and the staged-read fields to export metadata.
+
+        Args:
+            meta: The stored metadata of one export.
+
+        Returns:
+            The metadata with url (never stored), kind, file_id, staged, content_b64 and how_to_fetch.
+        """
         kind = "snapshot" if meta["path"] is None else "file"
         return {**meta, "url": "/downloads/%s/%s" % (meta["export_id"], meta["filename"]),
-                "kind": kind, "file_id": meta.get("file_id")}
+                "kind": kind, "file_id": meta.get("file_id"), "staged": True, "content_b64": None,
+                "how_to_fetch": FETCH_STAGED}
 
     def export_status(self, export_id: str) -> dict:
         return self._with_url(self.get_export(export_id)[0])
