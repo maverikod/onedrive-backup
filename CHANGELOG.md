@@ -1,3 +1,9 @@
+## 0.3.28 — persistent run log and failure reason of every backup run (matrix row PL20, block SCHEDULE-REV12, task 122 after the refused run of 2026-11-24)
+
+- Internal only, no command, parameter, result field or exit code changes. Every run of `python -m onedrive_api.backup_run` writes its log lines to `<data>/schedule/logs/<run_id>.log` (mode 0600, the directory 0700, rotated at 10 MiB with one rotated sibling `.log.1`, secret-looking `key=value` pairs and bearer credentials scrubbed); the newest 500 run ids are kept and the files of older run ids are removed when a run starts. The directory is created when the service starts, so it exists before the first run and survives the recreation of the container (the log lives on the data volume).
+- The end record of `runs.jsonl` of a run with a non-zero exit code carries `reason`: the last ERROR line of the backup (the exception class and message, for example `BackupError: SharePoint backup refused: STORAGE_NOT_MOUNTED`), scrubbed, on one line, at most 500 characters. A run that ends without a logged error gets `exit code N without a logged error`. A run with exit code 0 has no `reason`. `backup_schedule_status` and its history are unchanged.
+- New module `onedrive_api/run_log.py`; unit tests `tests/test_run_log.py`.
+
 ## 0.3.27 — folder tree page (matrix revision 13, block UI-TREE, user decision 2026-11-23 "Делать по реком.")
 
 - Web UI only, no command, parameter or result change (the backend is 0.3.26). The main page `#/` shows three regions in one row, each with its own scroll: the folder tree (`folder-tree`: all files, sites, libraries, folders with file counts, lazy by node, 200 children at a time with a `Ещё` button), the list of the selected folder (`result-area`, exactly three columns, with the breadcrumb `folder-path`, the switch `С вложенными`, the page toolbar and `result-scroll`) and the side panel `detail-panel`. Below 900 px the regions stack.
