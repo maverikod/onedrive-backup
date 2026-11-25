@@ -50,7 +50,7 @@ def sharepoint_snapshots(catalog: Catalog) -> list[dict[str, Any]]:
         catalog: The restic catalogue.
 
     Returns:
-        Dicts with id, time (UTC, normalised), site_key and drive_key.
+        Dicts with id, time (UTC, normalised), site_key, drive_key and tags.
 
     Raises:
         CatalogError: Restic is not available or answered something that is not a snapshot list.
@@ -61,14 +61,17 @@ def sharepoint_snapshots(catalog: Catalog) -> list[dict[str, Any]]:
         raise CatalogError("Invalid restic snapshot JSON", 503) from exc
     if not isinstance(items, list):
         raise CatalogError("Invalid restic snapshot format", 503)
-    found = []
+    found: list[dict[str, Any]] = []
     for item in items:
         if not isinstance(item, dict):
             continue
         site, drive = _tag(item.get("tags"), "site-"), _tag(item.get("tags"), "drive-")
         if site and drive and isinstance(item.get("id"), str):
             when = utc_time(str(item.get("time", "")))
-            found.append({"id": str(item["id"]).lower(), "time": when, "site_key": site, "drive_key": drive})
+            found.append({
+                "id": str(item["id"]).lower(), "time": when, "site_key": site, "drive_key": drive,
+                "tags": item.get("tags"),
+            })
     found.sort(key=lambda entry: entry["time"])
     return found
 
@@ -146,10 +149,13 @@ def index_snapshot(catalog: Catalog, index: FileIndex, entry: dict[str, Any]) ->
     Returns:
         The number of files indexed, 0 when it was already indexed.
     """
+    from .snapshot_attrs import from_tags
+
     base, env, cfg = catalog._base()
     library = cfg["mirror_dir"].as_posix().rstrip("/") + "/sharepoint/%s/%s/" % (entry["site_key"], entry["drive_key"])
     rows = _rows(base, env, entry["id"], library)
-    return index.add_snapshot(entry["id"], entry["time"], entry["site_key"], entry["drive_key"], rows)
+    attrs = from_tags(entry.get("tags"))
+    return index.add_snapshot(entry["id"], entry["time"], entry["site_key"], entry["drive_key"], rows, attrs)
 
 
 def index_pending(catalog: Catalog, index: FileIndex) -> tuple[int, int]:
