@@ -262,7 +262,7 @@ def folder_counts(index: FileIndex, snapshot_ids: list[str], pattern: Pattern, p
 
 def build_children(
     index: FileIndex, chosen: list[dict[str, Any]], pattern: Pattern, scope: Scope,
-    names: dict[str, tuple[str, str]], libraries: dict[tuple[str, str], tuple[str, str]],
+    names: dict[str, tuple[str, str]], libraries: dict[tuple[str, str], tuple[str, str]], collapse: str = "none",
 ) -> list[dict[str, Any]]:
     """Compute the children of the addressed parent over the chosen snapshots, pruned to file_count >= 1, sorted.
 
@@ -273,25 +273,35 @@ def build_children(
         scope: The address of the parent.
         names: Site key to (site id, label).
         libraries: (site key, library key) to (drive id, label); the key itself stands in for a library the inventory lacks.
+        collapse: none counts every file row; version and file count the collapsed rows of that collapse (RD2, RD5).
 
     Returns:
         The nodes ordered by key(name), then name.
     """
+    from . import file_collapse
+
     ids = [row["snapshot_id"] for row in chosen]
     nodes: list[dict[str, Any]] = []
     if scope.drive_id is not None:
         parent = scope.folder or ""
-        for child, rows, direct in folder_counts(index, ids, pattern, parent):
+        if collapse == "none":
+            found = folder_counts(index, ids, pattern, parent)
+        else:
+            found = file_collapse.folder_counts(index, ids, pattern, parent, collapse)
+        for child, rows, direct in found:
             where = parent + "/" + child if parent else child
             nodes.append(_node("folder", scope.site_id or "", scope.drive_id, where, child, rows, direct))
     else:
-        counts = snapshot_counts(index, ids, pattern)
         per: dict[tuple[str, str], list[int]] = {}
-        for row in chosen:
-            rows, root = counts.get(row["snapshot_id"], (0, 0))
-            sums = per.setdefault((row["site_key"], row["drive_key"]), [0, 0])
-            sums[0] += rows
-            sums[1] += root
+        if collapse == "none":
+            counts = snapshot_counts(index, ids, pattern)
+            for row in chosen:
+                rows, root = counts.get(row["snapshot_id"], (0, 0))
+                sums = per.setdefault((row["site_key"], row["drive_key"]), [0, 0])
+                sums[0] += rows
+                sums[1] += root
+        else:
+            per = {pair: list(sums) for pair, sums in file_collapse.library_counts(index, ids, pattern, collapse).items()}
         if scope.site_id is None:
             totals: dict[str, int] = {}
             for (site_key, _drive), sums in per.items():
