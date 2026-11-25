@@ -23,11 +23,6 @@ from .sharepoint_base import DiscoveryError
 
 CHUNK_ENV = "ONEDRIVE_CHUNK_MAX_EXPORT_BYTES"
 CHUNK_MAX_EXPORT = 4 * 1024 * 1024
-FETCH_STAGED = (
-    "Read the bytes with backup_download_chunk (export_id, offset, limit: up to 262144 bytes per call, base64) while "
-    "size_bytes is at most 4194304; for a larger export open the url or use backup_download_begin. Verify size_bytes "
-    "and sha256, then delete the export with backup_delete_export."
-)
 FETCH_INLINE = (
     "content_b64 holds the whole file (base64); no export was staged. Verify size_bytes and sha256 after decoding."
 )
@@ -137,7 +132,7 @@ def stage(
         with metadata.open("x", encoding="utf-8") as fp:
             json.dump(meta, fp)
         metadata.chmod(0o600)
-        return {**cat._with_url(meta), "staged": True, "content_b64": None, "how_to_fetch": FETCH_STAGED}
+        return cat._with_url(meta)
     except BaseException:
         output.unlink(missing_ok=True)
         cat._metadata_path(export_id).unlink(missing_ok=True)
