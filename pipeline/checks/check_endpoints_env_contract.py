@@ -17,9 +17,9 @@ from pipeline import environment
 from pipeline.checks import CheckFailure
 
 ROOT = Path(__file__).resolve().parents[2]
-URL = re.compile(r'[A-Za-z][A-Za-z0-9+.-]*://')
+URL = re.compile(r'[A-Za-z][A-Za-z0-9+.-]*://(?![^/?#\s]*[\[\]()\\^$*+?|])')
 IPV4 = re.compile(r'(?<![0-9.])[0-9]{1,3}([.][0-9]{1,3}){3}(?![0-9.])')
-HOSTPORT = re.compile(r'(?<![A-Za-z0-9_.-])[A-Za-z][A-Za-z0-9-]*([.][A-Za-z0-9-]+)*:[0-9]{2,5}(?![0-9])')
+HOSTPORT = re.compile(r'(?<![A-Za-z0-9_.-])[A-Za-z][A-Za-z0-9-]*([.][A-Za-z0-9-]+)*:[0-9]{2,5}(?![0-9:])')
 SECRET_KEY = re.compile(r'PASSWORD|SECRET|TOKEN|PRIVATE|CREDENTIAL|API_KEY', re.I)
 FORBIDDEN_VALUE = re.compile(r'-dev|_dev|lmrs', re.I)
 KEY_SPLIT = re.compile(r'^(.+)_(DEV|PROD)$')
