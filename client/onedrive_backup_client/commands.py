@@ -119,17 +119,33 @@ class CommandMethods:
         '''
         return self._command('backup_list_files', snapshot_id=snapshot_id, prefix=prefix, offset=offset, limit=limit)
 
-    def backup_prepare_download(self, snapshot_id: str, file_path: Optional[str] = None) -> Any:
-        '''Stage an export of a snapshot or of one file (backup_prepare_download).
+    def backup_prepare_download(self, snapshot_id: Optional[str] = None, file_path: Optional[str] = None,
+                                file_id: Optional[str] = None, site_id: Optional[str] = None,
+                                drive_id: Optional[str] = None, dir: Optional[str] = None,
+                                name: Optional[str] = None, copy_index: Optional[int] = None,
+                                inline_max_bytes: Optional[int] = None) -> Any:
+        '''Stage an export of a snapshot or of one file, or read a small file inline (backup_prepare_download).
+
+        Give exactly one address: file_id alone; snapshot_id and file_path; snapshot_id with site_id, drive_id, dir and
+        name (copy_index optional); or snapshot_id alone for the whole snapshot.
 
         Args:
             snapshot_id: The snapshot.
             file_path: The file inside the snapshot, or None for the whole snapshot.
+            file_id: The file id of a search row or a list node, or None.
+            site_id: The site of the file (names form), or None.
+            drive_id: The library of the file (names form), or None.
+            dir: The folder of the file, '' is the library root (names form), or None.
+            name: The shown name of the file (names form), or None.
+            copy_index: The stored-copy index (names form), or None.
+            inline_max_bytes: Files up to this many bytes come back inline in content_b64, or None.
 
         Returns:
             The export metadata.
         '''
-        return self._command('backup_prepare_download', snapshot_id=snapshot_id, file_path=file_path)
+        return self._command('backup_prepare_download', snapshot_id=snapshot_id, file_path=file_path,
+                             file_id=file_id, site_id=site_id, drive_id=drive_id, dir=dir, name=name,
+                             copy_index=copy_index, inline_max_bytes=inline_max_bytes)
 
     def backup_download_status(self, export_id: str) -> Any:
         '''The metadata of a staged export (backup_download_status).
@@ -141,6 +157,19 @@ class CommandMethods:
             The metadata.
         '''
         return self._command('backup_download_status', export_id=export_id)
+
+    def download_chunk(self, export_id: str, offset: int = 0, limit: int = 65536) -> Any:
+        '''One base64 slice of a staged export (backup_download_chunk).
+
+        Args:
+            export_id: The export.
+            offset: The first byte of the slice.
+            limit: The most bytes of the slice, 1..262144.
+
+        Returns:
+            The slice with its total size, sha256 and eof.
+        '''
+        return self._command('backup_download_chunk', export_id=export_id, offset=offset, limit=limit)
 
     def backup_delete_export(self, export_id: str) -> Any:
         '''Delete a staged export (backup_delete_export).
