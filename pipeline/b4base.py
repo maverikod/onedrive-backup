@@ -36,7 +36,8 @@ URL_PATTERN = '/downloads/<32 lowercase hex>/<filename>'
 COMMANDS = ('help', 'info', 'backup_snapshots', 'backup_list_files', 'backup_prepare_download', 'backup_download_status',
             'backup_delete_export', 'backup_sites_list', 'backup_libraries_list', 'backup_discovery_status',
             'backup_download_begin', 'backup_filter_options', 'backup_search_files', 'backup_suggest_names',
-            'backup_schedule_get', 'backup_schedule_set', 'backup_schedule_status', 'backup_folder_children')
+            'backup_schedule_get', 'backup_schedule_set', 'backup_schedule_status', 'backup_folder_children',
+            'backup_download_chunk', 'backup_run_log')
 FRAMEWORK_404 = b'{"detail":"Not Found"}'
 
 
