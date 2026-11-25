@@ -355,6 +355,8 @@ def main(argv: Optional[list] = None) -> int:
     '''
     parser = _parser()
     args = parser.parse_args(argv)
+    if args.command == 'prepare' and not (args.snapshot_id or args.snapshot_flag or args.file_id):
+        parser.error('prepare needs a snapshot_id (argument or --snapshot-id) or --file-id')
     params = _params(parser, args.params_json) if args.command == 'call' else {}
     client = _client(parser, args)
     try:
