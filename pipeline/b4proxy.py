@@ -137,7 +137,7 @@ def proxy_peer_auth() -> None:
             if version != base.version():
                 report.product.append('AU4 help through the proxy: tool_info.version %r, expected VERSION %r' % (version, base.version()))
             if names != sorted(base.COMMANDS):
-                report.product.append('AU4 help through the proxy lists %s, expected exactly the 11 commands of rows M1..M11' % names)
+                report.product.append('AU4 help through the proxy lists %s, expected exactly the %d commands of the inventory' % (names, len(base.COMMANDS)))
     reply = call('info', {'page': 1})
     if reply is not None:
         ok, data = _unwrap(reply)
