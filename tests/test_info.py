@@ -85,7 +85,7 @@ class ReferenceContractTests(unittest.TestCase):
             "backup_folder_children",
             "backup_schedule_get",
             "backup_schedule_set",
-            "backup_schedule_status",
+            "backup_schedule_status", "backup_run_log",
             "help",
         ):
             category = "backup"
