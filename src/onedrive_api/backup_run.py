@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
             index_new_snapshots()
         return code
     except Exception as exc:
-        LOG.error("Backup run failed: %s", exc, exc_info=True)
+        LOG.error("unexpected: %s: %s", type(exc).__name__, exc, exc_info=True)
         raise
     finally:
         recorder.end(run_id, code, end_reason(handler, code))
