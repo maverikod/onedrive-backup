@@ -60,7 +60,7 @@ describe('commands', () => {
   it('has one table of the seventeen commands the SPA calls and one it does not', () => {
     expect(Object.keys(COMMANDS)).toHaveLength(17)
     expect(Object.keys(COMMANDS)).toContain('backup_folder_children')
-    expect(NOT_USED).toEqual(['backup_download_begin'])
+    expect(NOT_USED).toEqual(['backup_download_begin', 'backup_download_chunk', 'backup_run_log'])
   })
 
   it('sends exactly the keys of the table and never a null for an omitted optional', async () => {

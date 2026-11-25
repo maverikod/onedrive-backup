@@ -48,7 +48,7 @@ export const COMMANDS: Record<string, Record<string, ParamSpec>> = {
 }
 
 // Commands the SPA deliberately does not call: the download goes through the temporary link, not the adapter transfer path.
-export const NOT_USED: string[] = ['backup_download_begin']
+export const NOT_USED: string[] = ['backup_download_begin', 'backup_download_chunk', 'backup_run_log']
 
 /** Build the parameter object of one command: an unset (undefined or null) optional is omitted, never sent as null. */
 export function buildParams(command: string, values: Record<string, unknown>): Record<string, unknown> {
