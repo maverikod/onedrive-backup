@@ -286,8 +286,13 @@ def backup_libraries(
                 LOG.info("Library site_id=%s drive_id=%s is empty and was "
                          "never backed up; skipped", site_id, drive_id)
         if row["outcome"] == "ok":
-            row.update(sync_library(cfg, site_id, drive_id, target,
-                                    dry_run=dry_run))
+            try:
+                row.update(sync_library(cfg, site_id, drive_id, target, dry_run=dry_run))
+            except (BackupError, OSError) as exc:
+                row["outcome"] = "failed"
+                row["error"] = "LIBRARY_COMMAND_FAILED"
+                row["detail"] = str(exc)
+                LOG.error("library site_id=%s drive_id=%s failed: %s", site_id, drive_id, exc)
         results.append(row)
     failed = sum(1 for row in results if row["error"])
     status = "ok" if not failed else (
@@ -295,7 +300,18 @@ def backup_libraries(
     LOG.info("SharePoint libraries handled: %d/%d, errors=%d, status=%s; "
              "dry_run=%s", len(results) - failed, len(results), failed,
              status, dry_run)
-    return {"status": status, "libraries": results}
+    names = {
+        str(item.get("drive_id")): str(item.get("display_name") or item.get("name") or "") for item in report["libraries"]
+    }
+    failures = [
+        "%s (%s): %s" % (names.get(row["drive_id"]) or row["drive_id"], row["drive_id"], row.get("detail") or row["error"])
+        for row in results
+        if row["error"]
+    ]
+    record: dict[str, Any] = {"status": status, "libraries": results}
+    if failures:
+        record["failures"] = failures
+    return record
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -318,6 +334,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     configure_logging(None)
+    phase = "guard"
     try:
         if os.environ.get("ONEDRIVE_SCAFFOLD_MODE") == "1":
             raise BackupError("SCAFFOLD_ONLY")
@@ -329,16 +346,18 @@ def main(argv: list[str] | None = None) -> int:
             raise BackupError("STORAGE_MOUNT_MISMATCH")
         with exclusive_lock(cfg["lock_file"]):
             assert_repository(cfg)
+            phase = "discovery"
             report = discover(args.config, args.data, dry_run=args.dry_run)
             record = backup_libraries(cfg, report, dry_run=args.dry_run)
             if record["status"] != "ok":
-                LOG.error("SharePoint backup finished with errors: %s",
-                          record["status"])
+                detail = "; ".join(record.get("failures") or []) or "a library recorded an error"
+                LOG.error("library: SharePoint backup finished with errors (%s): %s", record["status"], detail)
                 return 1
     except (BackupError, DiscoveryError, OSError) as exc:
         code = exc.code if isinstance(exc, DiscoveryError) else str(exc)
-        LOG.error("SharePoint backup refused: %s", code)
-        return 2
+        refused = phase == "guard"
+        LOG.error("%s: SharePoint backup %s: %s", phase, "refused" if refused else "stopped", code)
+        return 2 if refused else 1
     except KeyboardInterrupt:
         LOG.error("SharePoint backup interrupted")
         return 130
