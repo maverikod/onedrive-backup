@@ -1,7 +1,7 @@
 '''odbcli: the console command of the OneDrive Backup client, built on onedrive_backup_client.BackupClient.
 
 It never talks to the server on its own: every subcommand calls the Python client, which is a thin wrapper over the
-mcp-proxy-adapter JsonRpcClient. One subcommand per server command (help, info, snapshots, files, prepare, status,
+mcp-proxy-adapter JsonRpcClient. One subcommand per server command (help, info, snapshots, files, prepare, chunk, status,
 delete, sites, libraries, discovery-status, download-begin, filter-options, search-files, suggest-names,
 folder-children) with all its arguments, plus health, fetch, download, call and download-link. The filters are
 --site-ids and --dates; --site-id, --drive-id, --dir and --recursive are the folder scope of search-files and
@@ -85,6 +85,33 @@ def _scope(sub: argparse.ArgumentParser, recursive: bool = True) -> None:
                          help='scope: take the whole subtree of the folder; needs --drive-id')
 
 
+def _prepare(cmds: Any) -> None:
+    '''Add the prepare and chunk subcommands (matrix 10.22.6.11) to the subparsers.
+
+    Args:
+        cmds: The subparser collection.
+
+    Returns:
+        Nothing; the subcommands are added.
+    '''
+    sub = cmds.add_parser('prepare', help='stage an export of a snapshot or one file, or read a small file inline')
+    sub.add_argument('snapshot_id', nargs='?', help='snapshot_id of the file or of the whole snapshot; not with --file-id')
+    sub.add_argument('--snapshot-id', dest='snapshot_flag', help='snapshot_id as a flag, the same as the positional one')
+    sub.add_argument('--path', '--file-path', dest='path', help='file_path inside the snapshot; whole snapshot without it')
+    sub.add_argument('--file-id', dest='file_id', help='file_id of a search row or a list node, given alone')
+    sub.add_argument('--site-id', dest='site_id', help='names form: the site of the file; with --drive-id, --dir and --name')
+    sub.add_argument('--drive-id', dest='drive_id', help='names form: the library of the file')
+    sub.add_argument('--dir', dest='dir', help="names form: the folder of the file, '' is the library root")
+    sub.add_argument('--name', dest='name', help='names form: the shown name of the file')
+    sub.add_argument('--copy-index', dest='copy_index', type=int, help='names form: the stored-copy index, 0..99')
+    sub.add_argument('--inline-max-bytes', dest='inline_max_bytes', type=int,
+                     help='a file of at most this many bytes (0..65536) comes back in content_b64 and stages no export')
+    sub = cmds.add_parser('chunk', help='read one base64 slice of a staged export')
+    sub.add_argument('--export-id', dest='export_id', required=True, help='the staged export')
+    sub.add_argument('--offset', type=int, default=0, help='first byte of the slice')
+    sub.add_argument('--limit', type=int, default=65536, help='most bytes of the slice, 1..262144')
+
+
 def _parser() -> argparse.ArgumentParser:
     '''Build the argument parser of odbcli with one subcommand per server command.
 
@@ -110,9 +137,7 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_argument('--prefix', help='path prefix')
     sub.add_argument('--offset', type=int)
     sub.add_argument('--limit', type=int)
-    sub = cmds.add_parser('prepare', help='stage an export of a snapshot or one file')
-    sub.add_argument('snapshot_id')
-    sub.add_argument('--path', help='file path inside the snapshot (file_path); the whole snapshot without it')
+    _prepare(cmds)
     cmds.add_parser('status', help='metadata of a staged export').add_argument('export_id')
     cmds.add_parser('delete', help='delete a staged export').add_argument('export_id')
     sub = cmds.add_parser('sites', help='list SharePoint sites')
@@ -260,7 +285,10 @@ def _execute(client: BackupClient, args: argparse.Namespace, params: dict) -> An
     if command == 'files':
         return client.backup_list_files(args.snapshot_id, args.prefix, args.offset, args.limit)
     if command == 'prepare':
-        return client.backup_prepare_download(args.snapshot_id, args.path)
+        return client.backup_prepare_download(args.snapshot_id or args.snapshot_flag, args.path, args.file_id, args.site_id,
+                                              args.drive_id, args.dir, args.name, args.copy_index, args.inline_max_bytes)
+    if command == 'chunk':
+        return client.download_chunk(args.export_id, args.offset, args.limit)
     if command == 'status':
         return client.backup_download_status(args.export_id)
     if command == 'delete':
@@ -323,7 +351,7 @@ def main(argv: Optional[list] = None) -> int:
         argv: The arguments or None for sys.argv.
 
     Returns:
-        The exit code: 0 success, 1 server refusal, 3 local failure (2 is the usage error of argparse).
+        The exit code: 0 success, 1 server refusal or authentication failure, 3 local failure (2: usage error).
     '''
     parser = _parser()
     args = parser.parse_args(argv)
