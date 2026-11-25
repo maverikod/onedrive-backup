@@ -61,6 +61,7 @@ def _register_commands() -> None:
     from .commands_backup import (
         BackupDeleteExport,
         BackupDownloadBegin,
+        BackupDownloadChunk,
         BackupDownloadStatus,
         BackupListFiles,
         BackupPrepareDownload,
@@ -84,6 +85,7 @@ def _register_commands() -> None:
         BackupListFiles,
         BackupPrepareDownload,
         BackupDownloadStatus,
+        BackupDownloadChunk,
         BackupDownloadBegin,
         BackupDeleteExport,
         BackupSitesList,
