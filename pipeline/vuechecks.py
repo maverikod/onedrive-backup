@@ -193,7 +193,7 @@ def vue_command_contract() -> None:
         names = None
     if names is not None:
         if names != sorted(base.COMMANDS):
-            report.product.append('V3 live help lists %s, expected exactly the 11 commands %s (missing %s, unexpected %s)'
+            report.product.append(('V3 live help lists %s, expected exactly the ' + str(len(base.COMMANDS)) + ' commands %s (missing %s, unexpected %s)')
                                   % (len(names), sorted(base.COMMANDS), sorted(set(base.COMMANDS) - set(names)), sorted(set(names) - set(base.COMMANDS))))
         report.info.append('V3 reference side: %d live commands, parameters %s' % (len(names), {name: base.command_params(name) for name in names}))
     root = deployed(report, 'V3 SPA endpoint')
