@@ -17,15 +17,15 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from pipeline import checks, inv11, inv12, inv13, matrix
+from pipeline import checks, inv11, inv12, inv13, inv14, matrix
 from pipeline.checks import CheckFailure
 
 ROOT = Path(__file__).resolve().parents[2]
 SURFACES = ('mcp', 'rest', 'framework', 'client', 'cli', 'odbcli', 'ui', 'vue', 'auth', 'platform',
             'version', 'pipeline')
 BLOCKS = ('B1', 'B2', 'B3', 'B4', 'UI-VUE', 'B-SPLIT', 'FIRST-RUN', 'BACKUP-EMPTY', 'RCLONE-ACCESS', 'DATA-ARCHIVE-REV9', 'TRANSPORT-REV8', 'TIMER-PRESERVE', 'UI-ROUTES',
-          'DUP-KEEP-REV10', 'FILTER-REV11', 'UI-FILTER', 'SCHEDULE-REV12', 'TREE-REV13', 'UI-TREE')
-TAG = re.compile(r'^(CURRENT|(PLANNED|RETIRED)[(](B1|B2|B3|B4|UI-VUE|FIRST-RUN|BACKUP-EMPTY|RCLONE-ACCESS|DATA-ARCHIVE-REV9|TRANSPORT-REV8|TIMER-PRESERVE|UI-ROUTES|DUP-KEEP-REV10|FILTER-REV11|UI-FILTER|SCHEDULE-REV12|TREE-REV13|UI-TREE)[)])$')
+          'DUP-KEEP-REV10', 'FILTER-REV11', 'UI-FILTER', 'SCHEDULE-REV12', 'TREE-REV13', 'UI-TREE', 'MODEL-REV14', 'DATES-REV14', 'RUN-REASON', 'RUN-CLASS')
+TAG = re.compile(r'^(CURRENT|(PLANNED|RETIRED)[(](B1|B2|B3|B4|UI-VUE|FIRST-RUN|BACKUP-EMPTY|RCLONE-ACCESS|DATA-ARCHIVE-REV9|TRANSPORT-REV8|TIMER-PRESERVE|UI-ROUTES|DUP-KEEP-REV10|FILTER-REV11|UI-FILTER|SCHEDULE-REV12|TREE-REV13|UI-TREE|MODEL-REV14|DATES-REV14|RUN-REASON|RUN-CLASS)[)])$')
 STATUSES = ('legacy', 'implemented', 'pending', 'deprecated')
 ROW_KEYS = ('id', 'surface', 'name', 'tag', 'source', 'checks')
 PARAM_KEYS = ('types', 'required', 'default', 'constraints', 'valid', 'invalid')
@@ -279,7 +279,7 @@ def run() -> None:
                         % (dict(sorted(counts.items())), data['expected_counts']))
     _source_problems(data, problems)
     _rev10_problems(data, names, problems)
-    problems += inv11.problems(data, names) + inv12.problems(data, names) + inv13.problems(data, names)
+    problems += inv11.problems(data, names) + inv12.problems(data, names) + inv13.problems(data, names) + inv14.problems(data, names)
     if problems:
         raise CheckFailure('%d violation(s):\n  - %s' % (len(problems), '\n  - '.join(problems)))
     print('[INFO] rows %d, checks %d (%s)' % (len(data['rows']), len(names),
