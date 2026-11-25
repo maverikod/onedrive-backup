@@ -155,7 +155,7 @@ def reason_of(record: logging.LogRecord) -> str:
     error = record.exc_info[1] if record.exc_info else None
     error = error or sys.exc_info()[1]
     text = record.getMessage()
-    if error is not None:
+    if error is not None and not text.startswith(("guard", "discovery", "library", "unexpected")):
         text = "%s: %s" % (type(error).__name__, text)
     return bounded(scrub(text))
 
