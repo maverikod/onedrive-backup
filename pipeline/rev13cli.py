@@ -7,7 +7,9 @@ thin wrapper, decision 1): nothing reaches the service while recording. The resu
 deployed service answers it. odbcli gains the subcommand folder-children and the arguments --site-id, --drive-id, --dir and --recursive
 of search-files and suggest-names (flag spelling of 10.21.4, a tester assumption as in 10.19); the subcommand help documents every
 argument, the info manual and the command reference list backup_folder_children. The revision 11 assertions of C-K17, C-K18, O18 and
-O19 stay: the baseline result equals the command result.
+O19 stay: the baseline result equals the command result. Revision 14 (matrix TODO 10.22.6.11, rows CK-DATE1..3 and OC-DATE1..3)
+appends dates_mode, collapse, order_by and fields (search_files), dates_mode and collapse (folder_children), dates_mode
+(suggest_names) and the odbcli flags --dates-mode --collapse --order-by --fields a,b,c after the existing ones.
 '''
 
 from __future__ import annotations
@@ -36,8 +38,8 @@ SIGNATURES: dict[str, list[tuple[str, Any]]] = {
 }
 COMMANDS = {'folder_children': FOLDER, 'search_files': 'backup_search_files', 'suggest_names': 'backup_suggest_names'}
 METHODS = {command: method for method, command in COMMANDS.items()}
-CK_ROWS = {FOLDER: 'CK-TREE1', 'backup_search_files': 'CK-TREE2', 'backup_suggest_names': 'CK-TREE3'}
-OC_ROWS = {FOLDER: 'OC-TREE1', 'backup_search_files': 'OC-TREE2', 'backup_suggest_names': 'OC-TREE3'}
+CK_ROWS = {FOLDER: 'CK-TREE1/CK-DATE3', 'backup_search_files': 'CK-TREE2/CK-DATE1', 'backup_suggest_names': 'CK-TREE3/CK-DATE2'}
+OC_ROWS = {FOLDER: 'OC-TREE1/OC-DATE3', 'backup_search_files': 'OC-TREE2/OC-DATE1', 'backup_suggest_names': 'OC-TREE3/OC-DATE2'}
 OLD_ROWS = {FOLDER: 'CK-TREE1', 'backup_search_files': 'C-K17', 'backup_suggest_names': 'C-K18'}
 OLD_OC_ROWS = {'backup_search_files': 'O18', 'backup_suggest_names': 'O19'}
 BASELINE: dict[str, dict[str, Any]] = {FOLDER: {}, 'backup_search_files': rev11.BASELINE['backup_search_files'],
@@ -61,6 +63,28 @@ ARGV_GIVEN = {
     'backup_search_files': ['--name-part', 'акт*', '--limit', '5', '--site-id', 'site-1', '--drive-id', 'drive-1', '--dir', 'a/b',
                             '--recursive'],
     'backup_suggest_names': ['--text', 'акт', '--site-id', 'site-1', '--drive-id', 'drive-1', '--dir', 'a/b', '--recursive'],
+}
+REV14_ARGS: dict[str, list[tuple[str, Any]]] = {
+    'folder_children': [('dates_mode', None), ('collapse', None)],
+    'search_files': [('dates_mode', None), ('collapse', None), ('order_by', None), ('fields', None)],
+    'suggest_names': [('dates_mode', None)],
+}
+REV14_FLAGS = {FOLDER: ['--dates-mode', '--collapse'], 'backup_search_files': ['--dates-mode', '--collapse', '--order-by', '--fields'],
+               'backup_suggest_names': ['--dates-mode']}
+for _method, _extra in REV14_ARGS.items():
+    SIGNATURES[_method] = SIGNATURES[_method] + _extra
+    FLAGS[COMMANDS[_method]] = FLAGS[COMMANDS[_method]] + REV14_FLAGS[COMMANDS[_method]]
+GIVEN14: dict[str, dict[str, Any]] = {
+    FOLDER: {'dates_mode': 'all', 'collapse': 'version'},
+    'backup_search_files': {'name_part': 'акт*', 'limit': 5, 'dates_mode': 'all', 'collapse': 'file', 'order_by': 'mtime',
+                            'fields': ['name', 'file_id']},
+    'backup_suggest_names': {'text': 'акт', 'dates_mode': 'all'},
+}
+ARGV14 = {
+    FOLDER: ['--dates-mode', 'all', '--collapse', 'version'],
+    'backup_search_files': ['--name-part', 'акт*', '--limit', '5', '--dates-mode', 'all', '--collapse', 'file', '--order-by', 'mtime',
+                            '--fields', 'name,file_id'],
+    'backup_suggest_names': ['--text', 'акт', '--dates-mode', 'all'],
 }
 
 
@@ -201,7 +225,7 @@ def _client_live(report: Report, client: Any, command: str, cases: list[dict[str
 
 
 def client_scope(method: str, name: str) -> None:
-    '''CK-TREE1..3 (with C-K17/C-K18): the signature of 10.21.4, the wire map and the result of the command.
+    '''CK-TREE1..3 (with C-K17/C-K18) and CK-DATE1..3: the signature of 10.21.4 and 10.22.6.11, the wire map and the result of the command.
 
     Args:
         method: folder_children, search_files or suggest_names.
@@ -221,11 +245,11 @@ def client_scope(method: str, name: str) -> None:
         got = [(p.name, p.default) for p in list(inspect.signature(func).parameters.values())[1:]]
         conformant = got == SIGNATURES[method]
         if not conformant:
-            report.product.append('%s BackupClient.%s(%s), expected (%s) (10.21.4 CLIENT; the existing positional order unchanged)'
+            report.product.append('%s BackupClient.%s(%s), expected (%s) (10.21.4 and 10.22.6.11 CLIENT; the existing positional order unchanged)'
                                   % (row, method, _text(got), _text(SIGNATURES[method])))
         client = b4client.make_client(module, report)
         if client is not None:
-            for params, omitted in ((BASELINE[command], OMITTED[command]), (GIVEN[command], ())):
+            for params, omitted in ((BASELINE[command], OMITTED[command]), (GIVEN[command], ()), (GIVEN14[command], ())):
                 with recorder() as calls:
                     _, error = b4client.drive(getattr(client, method), **params)
                 problem = wire_problem(calls, command, params, omitted)
@@ -289,7 +313,8 @@ def _cli_wire(report: Report, main: Any, command: str) -> None:
         None.
     '''
     sub = SUBCOMMANDS[command]
-    for argv, wanted, omitted in ((ARGV_BASE[command], BASELINE[command], OMITTED[command]), (ARGV_GIVEN[command], GIVEN[command], ())):
+    for argv, wanted, omitted in ((ARGV_BASE[command], BASELINE[command], OMITTED[command]), (ARGV_GIVEN[command], GIVEN[command], ()),
+                                  (ARGV14[command], GIVEN14[command], ())):
         with recorder() as calls:
             code, out, err = b4cli.run_cli(main, b4cli.global_args() + [sub] + argv)
         problem = wire_problem(calls, command, wanted, omitted)
