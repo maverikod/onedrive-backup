@@ -33,6 +33,12 @@ def add_parsers(cmds: Any) -> None:
     sub = cmds.add_parser("schedule-status", help="read the scheduler state, the runs and the next run")
     sub.add_argument("--history", type=int, dest="history_limit", help="finished runs in the history 0..50")
     sub.add_argument("--json", action="store_true", help="print the raw JSON result")
+    sub = cmds.add_parser("run-log", help="read the log of one backup run (the cause of a failed run)")
+    sub.add_argument("--run-id", required=True, dest="run_id", help="run id from schedule-status")
+    sub.add_argument("--offset", type=int, help="first byte of the slice")
+    sub.add_argument("--limit", type=int, help="largest number of bytes 1..65536")
+    sub.add_argument("--tail", action="store_true", help="read the last bytes of the log")
+    sub.add_argument("--json", action="store_true", help="print the raw JSON result")
 
 
 def _text(args: Any) -> str:
@@ -58,7 +64,7 @@ def _text(args: Any) -> str:
 
 
 def execute(client: BackupClient, args: Any) -> Any:
-    """Run one schedule subcommand through the client; the actor of a write is odbcli.
+    """Run one schedule or run-log subcommand through the client; the actor of a write is odbcli.
 
     Args:
         client: The client.
@@ -71,6 +77,8 @@ def execute(client: BackupClient, args: Any) -> Any:
         return client.schedule_get(args.next_count)
     if args.command == "schedule-set":
         return client.schedule_set(_text(args), args.expected_revision, args.dry_run, args.next_count, "odbcli")
+    if args.command == "run-log":
+        return client.run_log(args.run_id, args.offset, args.limit, True if args.tail else None)
     return client.schedule_status(args.history_limit)
 
 
@@ -86,8 +94,30 @@ def _plans(items: list) -> list[str]:
     return ["  %s (slot %s)" % (item["start_local"], item["slot_local"]) for item in items]
 
 
+def _run_line(label: str, run: Any) -> str:
+    """Format one run on one line; a run that is not ok also shows its reason and the name of its log.
+
+    Args:
+        label: The text before the colon.
+        run: A run object of the status, or None.
+
+    Returns:
+        The line.
+    """
+    if not isinstance(run, dict):
+        return "%s: none" % label
+    line = "%s: %s %s (exit %s) finished %s" % (
+        label, str(run.get("run_id"))[:8], run.get("status"), run.get("exit_code"), run.get("finished_at")
+    )
+    if run.get("status") != "ok":
+        log = run.get("log")
+        name = log["name"] if isinstance(log, dict) and log.get("available") else "none"
+        line += "; reason: %s; log: %s" % (run.get("reason") or "none recorded", name)
+    return line
+
+
 def render(args: Any, result: Any) -> str:
-    """Format the result: JSON, or readable text for schedule-get and schedule-status without --json.
+    """Format the result: JSON, the text of a run log, or readable text for schedule-get and schedule-status.
 
     Args:
         args: The parsed arguments.
@@ -98,6 +128,8 @@ def render(args: Any, result: Any) -> str:
     """
     if args.command == "schedule-set" or getattr(args, "json", False) or not isinstance(result, dict):
         return json.dumps(result, indent=2, ensure_ascii=False)
+    if args.command == "run-log":
+        return str(result.get("text", "")).rstrip("\n")
     if args.command == "schedule-get":
         head = "revision %s, source %s, valid %s" % (result["revision"], result["source"], result["valid"])
         lines = [result["text"].rstrip("\n"), "", head]
@@ -106,7 +138,10 @@ def render(args: Any, result: Any) -> str:
     state = result["scheduler"]
     lines = ["state %s, thread alive %s, leader %s" % (state["state"], state["thread_alive"], state["leader"])]
     lines.append("current run: %s" % (result["current_run"] or "none"))
-    lines.append("last run: %s" % (result["last_run"] or "none"))
+    last = result["last_run"]
+    lines.append(_run_line("last run", last))
+    others = [item for item in result.get("history") or [] if isinstance(item, dict) and item.get("status") != "ok"]
+    lines += [_run_line("failed run", item) for item in others if item.get("run_id") != (last or {}).get("run_id")]
     return "\n".join(lines + ["next run:"] + _plans([result["next_run"]] if result["next_run"] else []))
 
 
