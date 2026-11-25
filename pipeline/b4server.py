@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from typing import Any
 
 from pipeline import b4base as base, cmdcases, live
 from pipeline.b4base import JSON_HEADERS, ZERO_ID, Q
@@ -32,13 +33,32 @@ URL_RE = re.compile('^/downloads/[0-9a-f]{32}/[^/]+$')
 
 
 def _fill(path: str) -> str:
+    '''Replace the placeholders of a REST path template by fixed values.
+
+    Args:
+        path: the path template.
+
+    Returns:
+        The filled path.
+    '''
     for key, value in FILL.items():
         path = path.replace('{%s}' % key, value)
     return path
 
 
-def _try(report: Report, label: str, func, *args, **kwargs):
-    '''Run one live step; an unreachable service becomes an ENVIRONMENT finding and None is returned.'''
+def _try(report: Report, label: str, func: Any, *args: Any, **kwargs: Any) -> Any:
+    '''Run one live step; an unreachable service becomes an ENVIRONMENT finding and None is returned.
+
+    Args:
+        report: the report to extend.
+        label: the label of the step.
+        func: the live function to call.
+        *args: the positional arguments of the function.
+        **kwargs: the keyword arguments of the function.
+
+    Returns:
+        The function result, or None when the service is unreachable.
+    '''
     try:
         return func(*args, **kwargs)
     except live.LiveUnreachable as exc:
@@ -47,12 +67,26 @@ def _try(report: Report, label: str, func, *args, **kwargs):
 
 
 def _gated(report: Report, label: str, status: int, auth: bool) -> bool:
-    '''Revision 8 (AU1): the service is open, there is no token gate; a 401 is a PRODUCT finding of the caller, never a STATE.'''
+    '''Revision 8 (AU1): the service is open, there is no token gate; a 401 is a PRODUCT finding of the caller, never a STATE.
+
+    Args:
+        report: the report, unused.
+        label: the label of the step, unused.
+        status: the HTTP status, unused.
+        auth: whether a credential was sent, unused.
+
+    Returns:
+        Always False.
+    '''
     return False
 
 
 def rest_removed() -> None:
-    '''H1..H10: every /api/v1/* route answers 404 (decision 4, D2); downloads are /downloads and the adapter transfer.'''
+    '''H1..H10: every /api/v1/* route answers 404 (decision 4, D2); downloads are /downloads and the adapter transfer.
+
+    Returns:
+        None.
+    '''
     report = Report()
     for row, method, template, body in REST:
         path = _fill(template)
@@ -68,7 +102,15 @@ def rest_removed() -> None:
     report.finish('rest_removed')
 
 
-def _openapi(report: Report):
+def _openapi(report: Report) -> list[str] | None:
+    '''Read the route paths of the live /openapi.json.
+
+    Args:
+        report: the report to extend.
+
+    Returns:
+        The sorted paths, or None when they cannot be read.
+    '''
     got = _try(report, 'F5 GET /openapi.json', base.probe, 'GET', '/openapi.json')
     if got is None:
         return None
@@ -94,7 +136,11 @@ NATIVE_PATHS = (
 
 
 def adapter_native_surface() -> None:
-    '''F1..F11 (revision 8, 10.15.9.3 PP-D1c): the live route set equals the adapter-native set plus the SPA mount; any other route is RED.'''
+    '''F1..F11 (revision 8, 10.15.9.3 PP-D1c): the live route set equals the adapter-native set plus the SPA mount; any other route is RED.
+
+    Returns:
+        None.
+    '''
     report = Report()
 
     def expect(label, method, path, statuses, body=None, headers=None):
@@ -115,7 +161,7 @@ def adapter_native_surface() -> None:
     if got is not None:
         names = sorted(json.loads(got[2]).get('commands', {}))
         if names != sorted(COMMANDS):
-            report.product.append('F4 GET /commands: lists %s, expected exactly the 11 commands of rows M1..M11, missing %s, unexpected %s'
+            report.product.append(('F4 GET /commands: lists %s, expected exactly the ' + str(len(COMMANDS)) + ' commands of the inventory, missing %s, unexpected %s')
                                   % (len(names), sorted(set(COMMANDS) - set(names)), sorted(set(names) - set(COMMANDS))))
     expect('F6 GET /docs', 'GET', '/docs', (200,))
     expect('F7 GET /redoc', 'GET', '/redoc', (200,))
@@ -134,13 +180,24 @@ def adapter_native_surface() -> None:
     report.finish('adapter_native_surface')
 
 
-def _ok(decoded) -> bool:
-    '''True for a JSON-RPC success reply of the adapter.'''
+def _ok(decoded: Any) -> bool:
+    '''True for a JSON-RPC success reply of the adapter.
+
+    Args:
+        decoded: the decoded JSON-RPC reply.
+
+    Returns:
+        True when the reply carries a successful result.
+    '''
     return isinstance(decoded, dict) and isinstance(decoded.get('result'), dict) and decoded['result'].get('success') is True
 
 
 def auth_token() -> None:
-    '''AU1, AU2 (revision 8, 10.15.9.2): auth is off, an anonymous caller executes and a credential header of any value is not interpreted; AU3 is retired.'''
+    '''AU1, AU2 (revision 8, 10.15.9.2): auth is off, an anonymous caller executes and a credential header of any value is not interpreted; AU3 is retired.
+
+    Returns:
+        None.
+    '''
     report = Report()
     cfg = base.src_line('config/server.json', 'use_token')
     cases = [('AU1 no credential', None, None), ('AU2 an empty X-API-Key value', '', None), ('AU2 an X-API-Key value of any kind', 'any-value-at-all', None),
@@ -156,7 +213,7 @@ def auth_token() -> None:
             continue
         names = sorted((decoded['result'].get('data') or {}).get('commands', {}))
         if names != sorted(COMMANDS):
-            report.product.append('%s: help lists %d commands %s, expected exactly the 11 of rows M1..M11' % (label, len(names), names))
+            report.product.append('%s: help lists %d commands %s, expected exactly the %d of the inventory' % (label, len(names), names, len(COMMANDS)))
     one = json.dumps({'jsonrpc': '2.0', 'method': 'help', 'params': {}, 'id': 1}).encode('utf-8')
     transfer = json.dumps({'source_path': '/x', 'filename': 'x.bin', 'compression': 'identity'}).encode('utf-8')
     for label, method, path, body, wanted in (('AU1 POST /api/jsonrpc/batch without a credential', 'POST', '/api/jsonrpc/batch', b'[' + one + b']', (200,)),
@@ -169,6 +226,14 @@ def auth_token() -> None:
 
 
 def _config_transfer(report: Report) -> None:
+    '''Check the transfer section of config/server.json.
+
+    Args:
+        report: the report to extend.
+
+    Returns:
+        None.
+    '''
     path = base.ROOT / 'config' / 'server.json'
     transfer = json.loads(path.read_text(encoding='utf-8')).get('transfer')
     where = base.src_line('config/server.json', 'transfer')
@@ -185,7 +250,11 @@ def _config_transfer(report: Report) -> None:
 
 
 def transfer_confinement() -> None:
-    '''M11/F9: a transfer download of a file outside the exports directory is refused; the service is configured for exports only.'''
+    '''M11/F9: a transfer download of a file outside the exports directory is refused; the service is configured for exports only.
+
+    Returns:
+        None.
+    '''
     report = Report()
     _config_transfer(report)
     for label, source in (('absolute path outside exports', '/etc/passwd'), ('traversal out of exports', '/data/exports/../secrets/restic-password')):
@@ -211,6 +280,14 @@ def transfer_confinement() -> None:
 
 
 def _s1_download(report: Report) -> None:
+    '''Prepare one small export, fetch its link and delete it, asserting the url, size and sha256.
+
+    Args:
+        report: the report to extend.
+
+    Returns:
+        None.
+    '''
     made = cmdcases._prepare_small(report, 'download_link')
     if not made:
         return
@@ -221,7 +298,8 @@ def _s1_download(report: Report) -> None:
         if not (isinstance(url, str) and URL_RE.fullmatch(url) and url == '/downloads/%s/%s' % (export_id, meta.get('filename'))):
             report.product.append('M5 backup_prepare_download: url %r, expected %s equal to /downloads/<export_id>/<filename>' % (url, base.URL_PATTERN))
             return
-        kind, code, message, status_data = live.request('backup_download_status', {'export_id': export_id})
+        reply: Any = live.request('backup_download_status', {'export_id': export_id})
+        kind, code, message, status_data = reply
         if kind != 'success' or status_data.get('url') != url:
             report.product.append('M6 backup_download_status: url %r differs from the prepare url %r' % (status_data.get('url') if isinstance(status_data, dict) else status_data, url))
         got = base.probe('GET', url)
@@ -241,7 +319,11 @@ def _s1_download(report: Report) -> None:
 
 
 def download_link() -> None:
-    '''Method 1 of decision 3: the temporary uuid4 link /downloads/<export_id>/<filename> of a staged export.'''
+    '''Method 1 of decision 3: the temporary uuid4 link /downloads/<export_id>/<filename> of a staged export.
+
+    Returns:
+        None.
+    '''
     report = Report()
     probes = (('F8 GET a link without a credential', 'GET', '/downloads/%s/x.bin' % ZERO_ID, False, (404,)),
               ('F8 HEAD a link without a credential', 'HEAD', '/downloads/%s/x.bin' % ZERO_ID, False, (404,)))
