@@ -63,7 +63,7 @@ class CatalogCommand(Command):
             data = await asyncio.to_thread(call, **kwargs)
             return CommandResult(success=True, data=data)
         except CatalogError as exc:
-            return ErrorResult(message=str(exc), code=exc.status)
+            return ErrorResult(message=str(exc), code=exc.status, details=exc.details)
         except DiscoveryError as exc:
             return ErrorResult(message=exc.code, code=exc.status, details=exc.details)
 
