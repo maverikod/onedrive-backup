@@ -76,6 +76,7 @@ def _register_commands() -> None:
         BackupSitesList,
     )
     from .info_command import InfoCommand
+    from .commands_runlog import BackupRunLog
 
     registry.clear()
     for cls in (
@@ -100,6 +101,7 @@ def _register_commands() -> None:
         BackupScheduleStatus,
     ):
         registry.register(cls, "custom")
+    registry.register(BackupRunLog, "custom")
 
 
 def _start_index_catchup() -> None:
