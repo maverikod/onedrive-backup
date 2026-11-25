@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pipeline import sched12_live
+from pipeline import rev14runcli
 
 
 def run() -> None:
-    '''Raise CheckFailure when the client method is missing or differs from the command.
+    '''Raise CheckFailure when the client method is missing, differs from the command or the run keys reason, log, retried are absent.
 
     Returns:
         None.
     '''
-    sched12_live.client_check('schedule_status', 'client_cmd_backup_schedule_status')
+    rev14runcli.client_status('client_cmd_backup_schedule_status')
