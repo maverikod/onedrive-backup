@@ -33,7 +33,7 @@ CHECKS = {
 }
 RELATIONS = ('RF1', 'RF2', 'RF3', 'RF4', 'RF5', 'RF6')
 OPTIONS = tuple('O-%d' % number for number in range(1, 17))
-EXTENDED = ('M13', 'M14')  # revision 13 (matrix TODO 10.21.7) appends cases to M13 and M14 and rows to their client/odbcli checks (pipeline/inv13.py)
+EXTENDED = ('M12', 'M13', 'M14')  # revisions 13 (10.21.7) and 14 (10.22.9 group A) append cases to these rows (pipeline/inv13.py, pipeline/inv14.py)
 
 
 def problems(data: dict, names: dict[str, dict]) -> list[str]:
