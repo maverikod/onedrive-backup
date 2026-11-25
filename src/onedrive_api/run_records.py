@@ -15,6 +15,7 @@ from .schedule_cron import iso_utc
 LOG = logging.getLogger("onedrive_backup")
 KEEP_RUNS = 500
 TRIM_LINES = 2000
+MAX_REASON = 500
 STATUS_OF_CODE = {0: "ok", 1: "errors", 2: "refused"}
 
 
@@ -108,18 +109,22 @@ class RunRecorder:
         append_line(self.path, record)
         return run_id
 
-    def end(self, run_id: str, exit_code: int) -> None:
-        """Write the end line of a run.
+    def end(self, run_id: str, exit_code: int, reason: str | None = None) -> None:
+        """Write the end line of a run; a non-zero exit code carries the bounded, already scrubbed reason.
 
         Args:
             run_id: The id returned by start().
             exit_code: The exit code of the run.
+            reason: The text of the failure (at most 500 characters), used only when the exit code is not zero.
 
         Returns:
             None.
         """
         stamp = iso_utc(datetime.now(UTC))
-        append_line(self.path, {"event": "end", "run_id": run_id, "finished_at": stamp, "exit_code": exit_code})
+        record: dict[str, Any] = {"event": "end", "run_id": run_id, "finished_at": stamp, "exit_code": exit_code}
+        if exit_code != 0 and reason:
+            record["reason"] = reason[:MAX_REASON]
+        append_line(self.path, record)
 
 
 def append_complete(
