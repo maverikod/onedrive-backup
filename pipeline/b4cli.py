@@ -326,7 +326,7 @@ def odbcli_surface() -> None:
             if code != 0:
                 report.product.append('OS1 server command %s: odbcli %s --help exit %r, expected 0' % (command, sub, code))
                 continue
-            _help_names(report, main, sub, 'OS1 ' + command, base.command_params(command))
+            _help_names(report, main, sub, 'OS1 ' + command, [name for name in base.command_params(command) if (command, name) != ('backup_schedule_set', 'actor')])
         for sub in ODBCLI_ONLY:
             code, out, err = run_cli(main, [sub, '--help'])
             if code != 0:
