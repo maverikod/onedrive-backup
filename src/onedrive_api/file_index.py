@@ -17,6 +17,7 @@ import sqlite3
 from typing import Any, Iterator
 
 from .name_match import Pattern
+from .snapshot_attrs import backfill, migrate
 
 INDEX_DIR = "file-index"
 INDEX_FILE = "index.sqlite3"
@@ -99,7 +100,7 @@ class FileIndex:
         self.path = self.directory / INDEX_FILE
 
     def connect(self) -> sqlite3.Connection:
-        """Open the index, creating the folder (mode 0700) and the schema when absent.
+        """Open the index, creating the folder (mode 0700) and the schema when absent, and migrate the attributes.
 
         Returns:
             A connection with WAL, a 60 s busy timeout and case-sensitive LIKE.
@@ -111,6 +112,7 @@ class FileIndex:
         conn.execute("PRAGMA case_sensitive_like=ON")
         for statement in SCHEMA:
             conn.execute(statement)
+        migrate(conn, self.directory.parent)
         return conn
 
     @contextlib.contextmanager
@@ -137,11 +139,15 @@ class FileIndex:
         """Return every indexed snapshot.
 
         Returns:
-            Rows with snapshot_id, time_utc, site_key, drive_key and files.
+            Rows with snapshot_id, time_utc, site_key, drive_key, files and the attributes backup_type, trigger, run_id
+            and type_source.
         """
         conn = self.connect()
         try:
-            sql = "SELECT snapshot_id, time_utc, site_key, drive_key, files FROM snapshot ORDER BY time_utc"
+            sql = (
+                'SELECT snapshot_id, time_utc, site_key, drive_key, files, backup_type, "trigger", run_id, type_source '
+                "FROM snapshot ORDER BY time_utc"
+            )
             cursor = conn.execute(sql)
             names = [item[0] for item in cursor.description]
             return [dict(zip(names, row)) for row in cursor.fetchall()]
@@ -149,7 +155,8 @@ class FileIndex:
             conn.close()
 
     def add_snapshot(
-        self, snapshot_id: str, time_utc: str, site_key: str, drive_key: str, rows: Iterable[tuple[Any, ...]]
+        self, snapshot_id: str, time_utc: str, site_key: str, drive_key: str, rows: Iterable[tuple[Any, ...]],
+        attrs: dict[str, str] | None = None,
     ) -> int:
         """Index one snapshot in one transaction; a snapshot that is already indexed is left alone.
 
@@ -159,6 +166,7 @@ class FileIndex:
             site_key: The site key of the snapshot tags.
             drive_key: The library key of the snapshot tags.
             rows: Tuples (dir, name, name_key, stored, size, mtime, copy_index) of the files; consumed once.
+            attrs: backup_type, trigger, run_id and type_source of the tags; None takes them from the run records.
 
         Returns:
             The number of files indexed, 0 when the snapshot was already there. A failure rolls everything back.
@@ -181,8 +189,16 @@ class FileIndex:
                 conn.executemany(INSERT, batch)
                 count += len(batch)
                 now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                values = (snapshot_id, time_utc, site_key, drive_key, count, now)
-                conn.execute("INSERT INTO snapshot VALUES (?,?,?,?,?,?)", values)
+                found = attrs or {}
+                values = (snapshot_id, time_utc, site_key, drive_key, count, now) + tuple(
+                    found.get(name) for name in ("backup_type", "trigger", "run_id", "type_source")
+                )
+                conn.execute(
+                    "INSERT INTO snapshot (snapshot_id, time_utc, site_key, drive_key, files, indexed_at, "
+                    'backup_type, "trigger", run_id, type_source) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                    values,
+                )
+                backfill(conn, self.directory.parent)
                 conn.execute("COMMIT")
             except BaseException:
                 conn.execute("ROLLBACK")
