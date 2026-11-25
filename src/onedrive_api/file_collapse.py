@@ -97,7 +97,7 @@ def search_rows(
     head = collapsed(where + extra, collapse)
     params = params + values
     cases = "".join("WHEN ? THEN %d " % number for number in range(len(site_order)))
-    rank = "CASE site_key " + cases + "ELSE 100000 END" if site_order else "0"
+    rank = "CASE site_key " + cases + "ELSE 100000 END" if site_order else "site_key"
     tail = list(site_order) if order_by == "name" and site_order else []
     conn = index.connect()
     try:
