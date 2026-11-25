@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pipeline import sched12_rows
+from pipeline import rev14run
 
 
 def run() -> None:
-    '''Raise CheckFailure when a case of row M17 is RED.
+    '''Raise CheckFailure when a case of row M17 is RED (revision 12 cases and the revision 14 keys reason, log, retried).
 
     Returns:
         None.
     '''
-    sched12_rows.run_row('M17', 'cmd_backup_schedule_status')
+    rev14run.status_row('cmd_backup_schedule_status')
