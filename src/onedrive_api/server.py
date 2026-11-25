@@ -163,8 +163,12 @@ def main() -> None:
     app = make_app(path)
     # The backup scheduler thread starts with the process, before the listener (matrix 10.20.5).
     from .scheduler import start_scheduler
+    from .run_log import ensure_logs_dir
 
-    start_scheduler(os.environ["ONEDRIVE_BACKUP_DATA"])
+    scheduler = start_scheduler(os.environ["ONEDRIVE_BACKUP_DATA"])
+    if scheduler.storage_guard():
+        # The run log directory exists before the first run, so that RL5 holds right after a deploy (matrix PL20).
+        ensure_logs_dir(os.environ["ONEDRIVE_BACKUP_DATA"])
 
     from mcp_proxy_adapter.core.app_factory.ssl_config import build_server_ssl_config
     from mcp_proxy_adapter.core.logging import setup_logging
