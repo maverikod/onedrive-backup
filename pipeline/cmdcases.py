@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Any
 
 from pipeline import b4base, fixtures, live, matrix
 from pipeline.report import Report
@@ -35,21 +36,42 @@ S1_NEEDS = ('the case needs an S1 service (host data directory, container /data 
 
 
 def _total_pages() -> int:
+    '''Read the number of pages of the live info manual.
+
+    Returns:
+        The total number of pages, 1 when it cannot be read.
+    '''
     kind, code, message, data = live.request('info', {})
     return data.get('total_pages', 1) if kind == 'success' and isinstance(data, dict) else 1
 
 
-def resolve(value):
-    '''Turn a matrix placeholder such as 7 hex digits into a concrete value.'''
+def resolve(value: Any) -> Any:
+    '''Turn a matrix placeholder such as 7 hex digits into a concrete value.
+
+    Args:
+        value: the matrix value or placeholder.
+
+    Returns:
+        The concrete value to send.
+    '''
     if value in ('total_pages', 'total_pages+1'):
         return _total_pages() + (1 if value.endswith('+1') else 0)
     return CONCRETE.get(value, value) if isinstance(value, str) else value
 
 
 def params_for(row: dict, case: dict) -> dict:
-    '''Build the parameter map one case sends.'''
+    '''Build the parameter map one case sends.
+
+    Args:
+        row: the matrix row of the command.
+        case: the focused case.
+
+    Returns:
+        The parameter map to send.
+    '''
     cid = case['id']
-    sent = {name: BASE[name] for name, spec in row['params'].items() if spec['required']}
+    sent: dict[str, Any] = {name: BASE[name] for name, spec in row['params'].items() if spec['required']}
+    match = PARAM_CASE.fullmatch(cid)
     if cid.startswith('omit_'):
         sent.pop(cid[len('omit_'):], None)
     elif cid == 'unknown_param':
@@ -58,19 +80,43 @@ def params_for(row: dict, case: dict) -> dict:
         sent['limit'] = 0
     elif cid == 'S0_invalid_file_path_order':
         sent['file_path'] = '../x'
-    elif PARAM_CASE.fullmatch(cid):
-        sent[PARAM_CASE.fullmatch(cid).group(1)] = resolve(case['value'])
+    elif match:
+        sent[match.group(1)] = resolve(case['value'])
     return sent
 
 
-def _brief(kind, code, message, data) -> str:
+def _brief(kind: Any, code: Any, message: Any, data: Any) -> str:
+    '''Describe one live reply in a finding.
+
+    Args:
+        kind: the reply kind.
+        code: the reply code.
+        message: the reply message.
+        data: the reply data.
+
+    Returns:
+        The short description.
+    '''
     detail = ''
     if isinstance(data, dict) and kind == 'rpc_error':
         detail = ' violation=%s' % data.get('violation')
     return '%s code=%s%s message=%r' % (kind, code, detail, message[:120])
 
 
-def _judge_rpc(report: Report, desc: str, reply, violation: str, needs_detail: bool, name: str | None) -> None:
+def _judge_rpc(report: Report, desc: str, reply: Any, violation: str, needs_detail: bool, name: str | None) -> None:
+    '''Judge a reply against the adapter validation error contract.
+
+    Args:
+        report: the report to extend.
+        desc: the case description.
+        reply: the live reply tuple.
+        violation: the expected violation.
+        needs_detail: whether expected and got must be present.
+        name: the parameter the violation names, or None.
+
+    Returns:
+        None.
+    '''
     kind, code, message, data = reply
     ok = kind == 'rpc_error' and code == -32602 and isinstance(data, dict) and data.get('violation') == violation
     if ok and needs_detail and not ('expected' in data and 'got' in data):
@@ -84,7 +130,19 @@ def _judge_rpc(report: Report, desc: str, reply, violation: str, needs_detail: b
                               % (desc, violation, ' with expected and got' if needs_detail else '', _brief(*reply)))
 
 
-def _judge_invalid(report: Report, desc: str, reply, expect: str, name: str) -> None:
+def _judge_invalid(report: Report, desc: str, reply: Any, expect: str, name: str) -> None:
+    '''Judge a reply to an invalid value against the expected error class.
+
+    Args:
+        report: the report to extend.
+        desc: the case description.
+        reply: the live reply tuple.
+        expect: the expected error class of the matrix.
+        name: the parameter under test.
+
+    Returns:
+        None.
+    '''
     kind, code, message, data = reply
     if expect == 'T':
         _judge_rpc(report, desc, reply, 'type', True, name)
@@ -105,20 +163,43 @@ def _judge_invalid(report: Report, desc: str, reply, expect: str, name: str) -> 
                                   % (desc, _brief(*reply)))
 
 
-def _first_snapshot():
+def _first_snapshot() -> Any:
+    '''Return the newest snapshot of the live catalog.
+
+    Returns:
+        The first snapshot item, or None when the catalog lists none.
+    '''
     kind, code, message, data = live.request('backup_snapshots', {})
     items = data.get('items', []) if kind == 'success' and isinstance(data, dict) else []
     return items[0] if items else None
 
 
-def _smallest_file(snapshot_id: str):
+def _smallest_file(snapshot_id: str) -> Any:
+    '''Return the smallest file of a snapshot.
+
+    Args:
+        snapshot_id: the snapshot id.
+
+    Returns:
+        The smallest file entry, or None when the snapshot lists no file.
+    '''
     kind, code, message, data = live.request('backup_list_files', {'snapshot_id': snapshot_id, 'limit': 5000})
     files = [i for i in (data.get('items', []) if kind == 'success' and isinstance(data, dict) else [])
              if i.get('type') == 'file']
     return min(files, key=lambda i: i.get('size', 0)) if files else None
 
 
-def _meta_problems(meta, snapshot_id: str, path) -> list[str]:
+def _meta_problems(meta: Any, snapshot_id: str, path: Any) -> list[str]:
+    '''Check the metadata returned by backup_prepare_download.
+
+    Args:
+        meta: the returned metadata.
+        snapshot_id: the requested snapshot id.
+        path: the requested file path, or None for a whole snapshot.
+
+    Returns:
+        The list of problems, empty when the metadata is correct.
+    '''
     problems = ['missing field ' + key for key in META_KEYS if key not in meta]
     if problems:
         return problems
@@ -138,8 +219,16 @@ def _meta_problems(meta, snapshot_id: str, path) -> list[str]:
     return problems
 
 
-def _prepare_small(report: Report, desc: str):
-    '''Prepare the smallest file of the newest snapshot; return (snapshot, path, meta) or None after a finding.'''
+def _prepare_small(report: Report, desc: str) -> Any:
+    '''Prepare the smallest file of the newest snapshot; return (snapshot, path, meta) or None after a finding.
+
+    Args:
+        report: the report to extend.
+        desc: the case description.
+
+    Returns:
+        The tuple (snapshot id, path, metadata), or None after a finding.
+    '''
     snapshot = _first_snapshot()
     if snapshot is None:
         report.state.append('%s: the catalog lists no snapshot to export' % desc)
@@ -156,7 +245,18 @@ def _prepare_small(report: Report, desc: str):
 
 
 def _s1(report: Report, row_id: str, cid: str, desc: str) -> None:
-    '''Execute one S1 case against a provisioned service.'''
+    '''Execute one S1 case against a provisioned service.
+
+    Args:
+        report: the report to extend.
+        row_id: the matrix row id.
+        cid: the case id.
+        desc: the case description.
+
+    Returns:
+        None.
+    '''
+    data: Any = None
     if cid == 'snapshot_id_unknown' or row_id in ('M8', 'M9', 'M10', 'M11'):
         from pipeline import cmds1
         cmds1.execute(report, row_id, cid, desc)
@@ -181,9 +281,10 @@ def _s1(report: Report, row_id: str, cid: str, desc: str) -> None:
         if snapshot is None:
             report.state.append('%s: the catalog lists no snapshot' % desc)
             return
-        sent = {'snapshot_id': snapshot['id']}
-        sent.update({'prefix_valid_1': {'prefix': 'dir/sub'}, 'offset_valid_1': {'offset': 500000},
-                     'limit_valid_1': {'limit': 1}, 'limit_valid_2': {'limit': 5000}}.get(cid, {}))
+        sent: dict[str, Any] = {'snapshot_id': snapshot['id']}
+        extra: dict[str, dict[str, Any]] = {'prefix_valid_1': {'prefix': 'dir/sub'}, 'offset_valid_1': {'offset': 500000},
+                                            'limit_valid_1': {'limit': 1}, 'limit_valid_2': {'limit': 5000}}
+        sent.update(extra.get(cid, {}))
         kind, code, message, data = live.request('backup_list_files', sent)
         ok = kind == 'success' and isinstance(data, dict) and all(k in data for k in ('snapshot_id', 'items', 'total', 'offset', 'limit'))
         if not ok or any('restic_path' in i for i in data['items']):
@@ -239,14 +340,25 @@ def _s1(report: Report, row_id: str, cid: str, desc: str) -> None:
 
 
 def _meta_case(report: Report, row_id: str, cid: str, desc: str, sent: dict) -> None:
-    '''Cases of help (M1) and info (M2): both commands answer in every state, so they run on an S0 service too.'''
+    '''Cases of help (M1) and info (M2): both commands answer in every state, so they run on an S0 service too.
+
+    Args:
+        report: the report to extend.
+        row_id: the matrix row id.
+        cid: the case id.
+        desc: the case description.
+        sent: the parameter map of the case.
+
+    Returns:
+        None.
+    '''
     kind, code, message, data = live.request(row_id == 'M1' and 'help' or 'info', sent)
     if kind != 'success' or not isinstance(data, dict):
         report.product.append('%s: expected success data, got %s' % (desc, _brief(kind, code, message, data)))
     elif row_id == 'M1' and cid == 'baseline':
         names = sorted(data.get('commands', {})) if isinstance(data.get('commands'), dict) else None
         if names != sorted(b4base.COMMANDS):
-            report.product.append('%s: help lists %s, expected the 11 commands of rows M1..M11' % (desc, names))
+            report.product.append('%s: help lists %s, expected the %d commands of the inventory' % (desc, names, len(b4base.COMMANDS)))
         if (data.get('tool_info') or {}).get('version') != b4base.version():
             report.product.append('%s: help reports version %r, expected VERSION %r (decision 7)' % (desc, (data.get('tool_info') or {}).get('version'), b4base.version()))
     elif row_id == 'M1':
@@ -272,7 +384,16 @@ def _meta_case(report: Report, row_id: str, cid: str, desc: str, sent: dict) -> 
 
 
 def _fixture_case(report: Report, row_id: str, cid: str) -> None:
-    '''Run the cases the live API cannot construct on the real Catalog over a fake restic.'''
+    '''Run the cases the live API cannot construct on the real Catalog over a fake restic.
+
+    Args:
+        report: the report to extend.
+        row_id: the matrix row id.
+        cid: the case id.
+
+    Returns:
+        None.
+    '''
     if cid == 'over_limit_413':
         with fixtures.catalog_fixture(max_export_bytes=3) as fx:
             status, value = fx.call(fx.catalog.prepare, fixtures.SNAPSHOT_ID, 'dir/file.txt')
@@ -292,7 +413,19 @@ def _fixture_case(report: Report, row_id: str, cid: str) -> None:
         report.product.append('%s %s (fixture): the expired export still has %s after it was answered with 410 (finding F3, export_ttl_cleanup)' % (row_id, cid, left))
 
 
-def _execute(report: Report, row: dict, case: dict, contract: dict, state) -> None:
+def _execute(report: Report, row: dict, case: dict, contract: dict, state: Any) -> None:
+    '''Execute one focused case of a matrix row.
+
+    Args:
+        report: the report to extend.
+        row: the matrix row of the command.
+        case: the focused case.
+        contract: the result contract of the case.
+        state: the production service state, or None when it is unreachable.
+
+    Returns:
+        None.
+    '''
     cid, row_id = case['id'], row['id']
     if cid in ('over_limit_413', 'expired_410', 'expired_not_deletable_410'):
         _fixture_case(report, row_id, cid)
@@ -301,6 +434,7 @@ def _execute(report: Report, row: dict, case: dict, contract: dict, state) -> No
         report.env.append('%s %s: not executed, production service unreachable' % (row_id, cid))
         return
     sent = params_for(row, case)
+    match = PARAM_CASE.fullmatch(cid)
     desc = '%s %s %s(%s)' % (row_id, cid, row['command'], json.dumps(sent))
     if case['state'] == 'S0' and state != 'S0':
         report.info.append('%s: an S0 case cannot run on a service that is %s; covered by prepare_order and scaffold_gate_states' % (desc, state))
@@ -311,8 +445,8 @@ def _execute(report: Report, row: dict, case: dict, contract: dict, state) -> No
         _judge_rpc(report, desc, live.request(row['command'], sent), 'missing', False, cid[len('omit_'):])
     elif cid == 'unknown_param':
         _judge_rpc(report, desc, live.request(row['command'], sent), 'unknown', False, None)
-    elif PARAM_CASE.fullmatch(cid) and PARAM_CASE.fullmatch(cid).group(2) == 'invalid':
-        name, index = PARAM_CASE.fullmatch(cid).group(1), PARAM_CASE.fullmatch(cid).group(3)
+    elif match is not None and match.group(2) == 'invalid':
+        name, index = match.group(1), match.group(3)
         expect = row['params'][name]['invalid'][int(index)]['expect']
         if expect in ('C404', 'C404S') and state != 'S1':
             report.state.append('%s: %s' % (desc, S1_NEEDS % state))
@@ -356,7 +490,14 @@ def _execute(report: Report, row: dict, case: dict, contract: dict, state) -> No
 
 
 def _tag_fixture(report: Report) -> None:
-    '''Tag visibility of the catalog (decision Q2) on the real Catalog over a fake restic; its findings count for M3.'''
+    '''Tag visibility of the catalog (decision Q2) on the real Catalog over a fake restic; its findings count for M3.
+
+    Args:
+        report: the report to extend.
+
+    Returns:
+        None.
+    '''
     from pipeline.checks import CheckFailure, check_snapshot_tag_visibility
     try:
         check_snapshot_tag_visibility.run()
@@ -366,8 +507,16 @@ def _tag_fixture(report: Report) -> None:
 
 
 def run_row(row_id: str, name: str) -> None:
-    '''Execute every case of matrix row row_id and raise CheckFailure when any finding exists.'''
-    data = matrix.load()
+    '''Execute every case of matrix row row_id and raise CheckFailure when any finding exists.
+
+    Args:
+        row_id: the matrix row id.
+        name: the name of the named check.
+
+    Returns:
+        None.
+    '''
+    data: Any = matrix.load()
     row = next(item for item in data['rows'] if item['id'] == row_id)
     contracts = data['result_contracts'][row_id]['cases']
     report = Report()
