@@ -257,12 +257,14 @@ class CommandMethods:
     def search_files(self, site_ids: Optional[list] = None, dates: Optional[list] = None, name_part: str = '',
                      limit: int = 100, offset: int = 0, site_id: Optional[str] = None,
                      drive_id: Optional[str] = None, dir: Optional[str] = None,
-                     recursive: Optional[bool] = None) -> Any:
-        '''Files of the ticked sites and dates whose name matches, inside the folder scope (backup_search_files).
+                     recursive: Optional[bool] = None, dates_mode: Optional[str] = None,
+                     collapse: Optional[str] = None, order_by: Optional[str] = None,
+                     fields: Optional[list] = None) -> Any:
+        '''Files of the chosen snapshots whose name matches, inside the folder scope (backup_search_files).
 
         Args:
             site_ids: The ticked sites, or None.
-            dates: The ticked backup dates, or None.
+            dates: The ticked local backup dates, or None; not with dates_mode.
             name_part: The name part, a star is a wildcard.
             limit: The page size.
             offset: Rows to skip.
@@ -270,38 +272,47 @@ class CommandMethods:
             drive_id: The scope library of the site, or None.
             dir: The scope folder of the library, '' is the library root, or None.
             recursive: True takes the whole subtree of the folder, or None.
+            dates_mode: latest (the server default) or all, or None.
+            collapse: none (the server default), version or file, or None.
+            order_by: name (the server default), snapshot_time, mtime or size, or None.
+            fields: The item keys to return, or None for every key.
 
         Returns:
-            The page.
+            The page with date_scope and warnings.
         '''
         return self._command('backup_search_files', site_ids=site_ids or None, dates=dates or None,
                              name_part=name_part or None, limit=limit, offset=offset, site_id=site_id,
-                             drive_id=drive_id, dir=dir, recursive=recursive)
+                             drive_id=drive_id, dir=dir, recursive=recursive, dates_mode=dates_mode,
+                             collapse=collapse, order_by=order_by, fields=fields or None)
 
     def suggest_names(self, text: str, site_ids: Optional[list] = None, dates: Optional[list] = None,
                       limit: int = 10, site_id: Optional[str] = None, drive_id: Optional[str] = None,
-                      dir: Optional[str] = None, recursive: Optional[bool] = None) -> Any:
+                      dir: Optional[str] = None, recursive: Optional[bool] = None,
+                      dates_mode: Optional[str] = None) -> Any:
         '''Distinct file names for the autocomplete list, inside the folder scope (backup_suggest_names).
 
         Args:
             text: The typed text.
             site_ids: The ticked sites, or None.
-            dates: The ticked backup dates, or None.
+            dates: The ticked local backup dates, or None; not with dates_mode.
             limit: The maximum number of names.
             site_id: The scope site, or None.
             drive_id: The scope library of the site, or None.
             dir: The scope folder of the library, '' is the library root, or None.
             recursive: True takes the whole subtree of the folder, or None.
+            dates_mode: latest (the server default) or all, or None.
 
         Returns:
-            The names.
+            The names with the warnings.
         '''
         return self._command('backup_suggest_names', text=text, site_ids=site_ids or None, dates=dates or None,
-                             limit=limit, site_id=site_id, drive_id=drive_id, dir=dir, recursive=recursive)
+                             limit=limit, site_id=site_id, drive_id=drive_id, dir=dir, recursive=recursive,
+                             dates_mode=dates_mode)
 
     def folder_children(self, site_id: Optional[str] = None, drive_id: Optional[str] = None,
                         dir: Optional[str] = None, site_ids: Optional[list] = None, dates: Optional[list] = None,
-                        name_part: str = '', limit: int = 200, offset: int = 0) -> Any:
+                        name_part: str = '', limit: int = 200, offset: int = 0, dates_mode: Optional[str] = None,
+                        collapse: Optional[str] = None) -> Any:
         '''Children of one node of the folder tree site -> library -> folders with file counts (backup_folder_children).
 
         Args:
@@ -309,14 +320,16 @@ class CommandMethods:
             drive_id: The library of the parent, or None.
             dir: The folder of the parent, '' is the library root, or None.
             site_ids: The ticked sites, or None.
-            dates: The ticked backup dates, or None.
+            dates: The ticked local backup dates, or None; not with dates_mode.
             name_part: The name part, a star is a wildcard.
             limit: The page size.
             offset: Children to skip.
+            dates_mode: latest (the server default) or all, or None.
+            collapse: none (the server default), version or file, or None; the counts follow it.
 
         Returns:
-            The page of nodes with the path to the parent.
+            The page of nodes with the path to the parent, date_scope and warnings.
         '''
         return self._command('backup_folder_children', site_id=site_id, drive_id=drive_id, dir=dir,
                              site_ids=site_ids or None, dates=dates or None, name_part=name_part or None,
-                             limit=limit, offset=offset)
+                             limit=limit, offset=offset, dates_mode=dates_mode, collapse=collapse)
