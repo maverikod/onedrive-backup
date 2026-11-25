@@ -10,6 +10,7 @@ from .command_reference_catalog import CATALOG_REFERENCE
 from .command_reference_core import CORE_REFERENCE
 from .command_reference_exports import EXPORT_REFERENCE
 from .command_reference_filter import FILTER_REFERENCE
+from .command_reference_runlog import RUNLOG_REFERENCE
 from .command_reference_schedule import SCHEDULE_REFERENCE
 from .command_reference_sharepoint import SHAREPOINT_REFERENCE
 from .command_reference_tree import ITEMS_13, SCOPE_ERRORS, SCOPE_PARAMETERS, TREE_REFERENCE
@@ -25,6 +26,7 @@ REFERENCE: dict[str, dict[str, Any]] = {
     **BYTES_REFERENCE,
     "info": CORE_REFERENCE["info"],
 }
+REFERENCE.update(RUNLOG_REFERENCE)
 for _scoped in ("backup_search_files", "backup_suggest_names"):
     REFERENCE[_scoped]["parameters"] = {**REFERENCE[_scoped]["parameters"], **SCOPE_PARAMETERS}
     REFERENCE[_scoped]["error_cases"] = {**REFERENCE[_scoped]["error_cases"], **SCOPE_ERRORS}
