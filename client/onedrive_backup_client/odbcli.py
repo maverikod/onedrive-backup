@@ -156,17 +156,25 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_argument('--name-part', default='', help='name part: no star contains, a star anchors the pattern')
     sub.add_argument('--limit', type=int, default=100, help='page size 1..500')
     sub.add_argument('--offset', type=int, default=0, help='rows to skip')
+    sub.add_argument('--dates-mode', dest='dates_mode', choices=['latest', 'all'], help='latest (default) or all')
+    sub.add_argument('--collapse', choices=['none', 'version', 'file'], help='none (default), version or file')
+    sub.add_argument('--order-by', dest='order_by', choices=['name', 'snapshot_time', 'mtime', 'size'],
+                     help='name (default), snapshot_time, mtime or size')
+    sub.add_argument('--fields', help='comma-separated item keys to return')
     sub = cmds.add_parser('suggest-names', help='suggest file names for the typed text (2+ characters besides stars)')
     sub.add_argument('--text', required=True, help='typed text')
     _filters(sub)
     _scope(sub)
     sub.add_argument('--limit', type=int, default=10, help='maximum names 1..20')
+    sub.add_argument('--dates-mode', dest='dates_mode', choices=['latest', 'all'], help='latest (default) or all')
     sub = cmds.add_parser('folder-children', help='children of a node of the folder tree with file counts')
     _scope(sub, recursive=False)
     _filters(sub)
     sub.add_argument('--name-part', default='', help='name part: no star contains, a star anchors the pattern')
     sub.add_argument('--limit', type=int, default=200, help='page size 1..500')
     sub.add_argument('--offset', type=int, default=0, help='children to skip')
+    sub.add_argument('--dates-mode', dest='dates_mode', choices=['latest', 'all'], help='latest (default) or all')
+    sub.add_argument('--collapse', choices=['none', 'version', 'file'], help='none (default), version or file')
     schedule.add_parsers(cmds)
     cmds.add_parser('health', help='probe the service with help')
     sub = cmds.add_parser('fetch', help='download a staged export through the transfer service')
@@ -302,14 +310,16 @@ def _execute(client: BackupClient, args: argparse.Namespace, params: dict) -> An
     if command == 'filter-options':
         return client.filter_options(args.site_ids)
     if command == 'search-files':
+        fields = args.fields.split(',') if args.fields else None
         return client.search_files(args.site_ids, args.dates, args.name_part, args.limit, args.offset, args.site_id,
-                                   args.drive_id, args.dir, args.recursive)
+                                   args.drive_id, args.dir, args.recursive, args.dates_mode, args.collapse,
+                                   args.order_by, fields)
     if command == 'suggest-names':
         return client.suggest_names(args.text, args.site_ids, args.dates, args.limit, args.site_id, args.drive_id,
-                                    args.dir, args.recursive)
+                                    args.dir, args.recursive, args.dates_mode)
     if command == 'folder-children':
         return client.folder_children(args.site_id, args.drive_id, args.dir, args.site_ids, args.dates, args.name_part,
-                                      args.limit, args.offset)
+                                      args.limit, args.offset, args.dates_mode, args.collapse)
     if command == 'download-begin':
         return client.backup_download_begin(args.export_id)
     if command == 'download-link':
