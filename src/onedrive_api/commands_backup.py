@@ -21,7 +21,8 @@ class BackupSnapshots(CatalogCommand):
         limit: int = 100,
         **kwargs: Any,
     ) -> CommandResult:
-        return await self.apply(_catalog().snapshots, limit=limit)
+        from .snapshot_view import list_snapshots
+        return await self.apply(list_snapshots, catalog=_catalog(), limit=limit)
 
     @classmethod
     def get_schema(cls) -> dict:
