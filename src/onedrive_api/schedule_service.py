@@ -11,6 +11,7 @@ from typing import Any
 
 from . import scheduler
 from .run_records import load_runs, runs_path
+from . import run_diag
 from .schedule_cron import iso_utc, parse_iso
 from .schedule_parse import MAX_BYTES, ScheduleError, entry_views, next_runs, parse
 from .schedule_store import ScheduleStore
@@ -143,16 +144,20 @@ def schedule_set(
     return result
 
 
-def _shape(run: dict[str, Any]) -> dict[str, Any]:
+def _shape(run: dict[str, Any], reasons: dict[str, str] | None = None) -> dict[str, Any]:
     """Project a run record to the keys of the status contract.
 
     Args:
         run: The record of load_runs().
+        reasons: The reasons of the end records (run_diag.end_reasons()), read when omitted.
 
     Returns:
-        run_id, started_at, finished_at, exit_code, status, trigger and slot_utc.
+        run_id, started_at, finished_at, exit_code, status, trigger and slot_utc, then reason, log and retried (10.23.R).
     """
-    return {key: run.get(key) for key in RUN_KEYS}
+    shaped = {key: run.get(key) for key in RUN_KEYS}
+    known = run_diag.end_reasons(data_dir()) if reasons is None else reasons
+    shaped.update(run_diag.extra(data_dir(), run, known))
+    return shaped
 
 
 def _current(runs: list[dict[str, Any]], now: datetime) -> dict[str, Any] | None:
@@ -163,7 +168,7 @@ def _current(runs: list[dict[str, Any]], now: datetime) -> dict[str, Any] | None
         now: The instant of the call.
 
     Returns:
-        The current run, or None when nobody holds the lock.
+        The current run with its log reference (reason is null while it runs), or None when nobody holds the lock.
     """
     if not probe_lock(data_dir()):
         return None
@@ -171,7 +176,7 @@ def _current(runs: list[dict[str, Any]], now: datetime) -> dict[str, Any] | None
     unknown = {"run_id": "unknown", "started_at": iso_utc(now), "trigger": "manual", "slot_utc": None, "pid": None}
     found = live[-1] if live else unknown
     began = parse_iso(found["started_at"]) or now
-    return {
+    result = {
         "run_id": found["run_id"],
         "started_at": found["started_at"],
         "trigger": found["trigger"],
@@ -179,6 +184,8 @@ def _current(runs: list[dict[str, Any]], now: datetime) -> dict[str, Any] | None
         "pid": found.get("pid"),
         "elapsed_seconds": max(0, int((now - began).total_seconds())),
     }
+    result.update(run_diag.extra(data_dir(), found, {}, current=True))
+    return result
 
 
 def _missed(running: scheduler.Scheduler | None) -> dict[str, Any]:
@@ -222,7 +229,8 @@ def schedule_status(history_limit: int = 10) -> dict[str, Any]:
     if is_scaffold():
         thread["state"] = "scaffold"
     records = [item for item in load_runs(runs_path(data_dir())) if not item["dry_run"]]
-    finished = [_shape(item) for item in reversed(records) if item["status"] != "running"]
+    reasons = run_diag.end_reasons(data_dir())
+    finished = [_shape(item, reasons) for item in reversed(records) if item["status"] != "running"]
     plans = next_runs(parsed, now, 1)
     baseline = (running.state or {}).get("baseline_utc") if running is not None else None
     schedule = {
