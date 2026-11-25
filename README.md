@@ -1,4 +1,4 @@
-# onedrive-backup 0.3.28 — OneDrive Business backups for Ubuntu
+# onedrive-backup 0.3.29 — OneDrive Business backups for Ubuntu
 
 Production-only Docker service. Microsoft 365 OneDrive is read via rclone,
 mirrored on backup storage, then saved as versioned, encrypted restic snapshots.
@@ -6,14 +6,15 @@ No writes are sent to OneDrive.
 
 ## Deliverables
 
-- Docker image: vasilyvz/onedrive-backup:0.3.28, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
+- Docker image: vasilyvz/onedrive-backup:0.3.29, Python 3.12, rclone 1.76.0 (official release, SHA256-verified),
   mcp-proxy-adapter 8.11.20, server-auth HTTPS (mcp-proxy-adapter configuration), container port 8050 published on the LAN as 8443.
-- Debian host package: dist/onedrive-backup_0.3.28_all.deb.
-- Python client: dist/client/onedrive_backup_client-0.3.28-py3-none-any.whl.
+- Debian host package: dist/onedrive-backup_0.3.29_all.deb.
+- Python client: dist/client/onedrive_backup_client-0.3.29-py3-none-any.whl.
 - File filter (0.3.22): the commands `backup_filter_options`, `backup_search_files` and `backup_suggest_names` search the files of every backup by site, backup date (calendar day in Europe/Kyiv, setting `ONEDRIVE_UI_TIMEZONE`) and name part (no star: contains; a star is a wildcard and anchors the pattern; backslash-star is a literal star; case and Unicode normalisation are ignored). They read a persistent per-snapshot name index (SQLite, `<data>/file-index/index.sqlite3`, derived from restic, rebuilt in the background for every snapshot that is not indexed yet and filled after every backup run). Client methods `filter_options`, `search_files`, `suggest_names`; odbcli subcommands `filter-options`, `search-files`, `suggest-names`. The web UI is one filter page `#/` (site and date checkboxes, name field with autocomplete, result table site / file name / date, download of a row) and one service page `#/service` (snapshots, sites, discovery, help, info).
 - Folder tree (0.3.26): the command `backup_folder_children` lists the children of a node of the tree site -> library -> folders with their file counts, computed from the folder path of the name index (the added index `file_dir`, no data migration); `backup_search_files` and `backup_suggest_names` take the optional scope `site_id`, `drive_id`, `dir`, `recursive`, and every search item carries `drive_id`. Client method `folder_children`; odbcli subcommand `folder-children`; in odbcli the filters are `--site-ids` and `--dates` and `--site-id` is the scope site.
 - Folder tree page (0.3.27): the main page `#/` shows three regions in one row, each with its own scroll: the folder tree on the left (all files, sites, libraries, folders with file counts, opened node by node, 200 children at a time), the list of the selected folder in the middle (exactly three columns, breadcrumb, switch «С вложенными», page toolbar) and the properties and download panel on the right; below 900 px they stack. The folder and the filters combine by AND; the folder is kept in the hash (`fs`, `fd`, `fp`, `rec=1`). No command changes.
 - Run log (0.3.28): every backup run writes `<data>/schedule/logs/<run_id>.log` on the data volume (mode 0600, the newest 500 runs kept) and the end record of `runs.jsonl` carries a scrubbed `reason` (at most 500 characters) when the exit code is not zero. No command, result or exit code changes.
+- Bytes (0.3.29): `backup_prepare_download` takes one file address (`file_id`; `snapshot_id` with `file_path`; or `snapshot_id` with `site_id`, `drive_id`, `dir`, `name` and `copy_index`; `snapshot_id` alone is the whole-snapshot archive) and `inline_max_bytes` (a file up to 64 KiB comes back in `content_b64` and stages no export); its result carries `file_id`, `kind`, `staged`, `content_b64` and `how_to_fetch`. The new command `backup_download_chunk` reads a staged export of at most 4 MiB as base64 slices of up to 256 KiB. `backup_list_files` file nodes carry `file_id` and the result `warnings`; `backup_download_status` carries `kind` and `file_id`; a not-found answer carries `error.data.hint`. Client method `download_chunk`; odbcli `prepare --file-id ...` and `chunk`. A file addressed by `file_id` or by names is dumped from restic through the name index, without listing the whole snapshot.
 - Verification: python -m pipeline; after image build: python -m pipeline smoke_https.
 - Web UI: a Vue 3 single page application built into the service image (Node 22 stage of docker/Dockerfile, no nginx, no second
   image) and served by the service itself at https://192.168.254.26:8443/ (the same origin as /api/jsonrpc and /downloads, server-auth
@@ -112,7 +113,7 @@ changes nothing; `restic` must be installed on the host.
 
 On a separate Ubuntu host (after copying the .deb and configuring volumes):
 
-    sudo apt install ./onedrive-backup_0.3.28_all.deb
+    sudo apt install ./onedrive-backup_0.3.29_all.deb
     sudo systemctl enable --now onedrive-backup-api.service
     sudo onedrive-backup-docker info
     sudo onedrive-backup-docker status
@@ -153,13 +154,14 @@ authentication code. The later password mode is the adapter static key, switched
 the Python client and odbcli then send their optional `password` as that header.
 
 To prepare a single-file export call `backup_prepare_download` with snapshot_id and a relative
-file_path such as Documents/file.pdf. Without file_path the server stages a TAR.GZ export of the
+file_path such as Documents/file.pdf, or with the file_id of a search row. Without file_path the server stages a TAR.GZ export of the
 entire snapshot. The returned opaque export_id grants access only to that staged export, never to
 an arbitrary server-local path, and the field `url` is the temporary download link
 `/downloads/<export_id>/<filename>` (GET; with the key header once the password mode is on). The same export can be read through
 the adapter transfer service: `backup_download_begin` registers the session and
 `GET /api/transfer/downloads/{transfer_id}/chunks` serves it; the transfer is confined to the
-exports directory (`transfer.allowed_directories`). Temporary exports are plaintext, so treat
+exports directory (`transfer.allowed_directories`). Small exports can also be read through the command API alone with
+`backup_download_chunk`. Temporary exports are plaintext, so treat
 /data/exports as sensitive and remove them with `backup_delete_export` after the download. Default
 maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
@@ -167,7 +169,7 @@ maximum export size is 10 GiB (ONEDRIVE_MAX_EXPORT_BYTES).
 
 Install the bundled wheel (or use PyPI if published):
 
-    python3 -m pip install dist/client/onedrive_backup_client-0.3.28-py3-none-any.whl
+    python3 -m pip install dist/client/onedrive_backup_client-0.3.29-py3-none-any.whl
     mkdir -p ~/.config/onedrive-backup
     cp client/config.example.json ~/.config/onedrive-backup/client.json
 
@@ -177,6 +179,8 @@ Set the HTTPS URL and the trusted CA in client.json; the client certificate and 
     odbcli snapshots
     odbcli files SNAPSHOT --prefix Documents
     odbcli prepare SNAPSHOT --path Documents/file.pdf
+    odbcli prepare --file-id FILE_ID --inline-max-bytes 65536
+    odbcli chunk --export-id EXPORT_ID --offset 0 --limit 65536
     odbcli status EXPORT_ID
     odbcli download-link EXPORT_ID
     odbcli download-begin EXPORT_ID
