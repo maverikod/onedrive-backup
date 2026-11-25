@@ -64,6 +64,11 @@ def _source_problems(data: dict, problems: list[str]) -> None:
             names = [item.id for item in node.iter.elts if isinstance(item, ast.Name)]
             if names and len(names) == len(node.iter.elts):
                 registered |= set(names)
+    loop_vars = {node.target.id for node in ast.walk(tree) if isinstance(node, ast.For) and isinstance(node.target, ast.Name)}
+    for node in ast.walk(tree):  # a class registered by its own `registry.register(Name, ...)` call, outside a loop tuple
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'register' and node.args:
+            if isinstance(node.args[0], ast.Name) and node.args[0].id not in loop_vars:
+                registered.add(node.args[0].id)
     rows = [row for row in data['rows'] if row['tag'] == 'CURRENT']
     for row in rows:
         if row['surface'] == 'mcp' and not row.get('class'):

@@ -38,6 +38,7 @@ ROWS = {
     'OC-BYTE1': ('odbcli', MODEL, ()), 'OC-BYTE2': ('odbcli', MODEL, ()), 'OC-DATE1': ('odbcli', DATES, ()), 'OC-DATE2': ('odbcli', DATES, ()),
     'OC-DATE3': ('odbcli', DATES, ()), 'OC-RUN1': ('odbcli', REASON, ()), 'OC-RUN2': ('odbcli', REASON, ()),
 }
+DELIVERED = ('M21', 'M24')  # registered on the deployed service (0.3.29 backup_download_chunk, 0.3.30 backup_run_log): CURRENT, not PLANNED
 APPENDED = {
     'M1': (MODEL, ('tm9_help_lists_20', 'tm9_start_here', 'tm9_prepare_examples', 'tm9_dates_text', 'tm9_schedule_set_dry_run',
                    'tm10_sites_list_display_name', 'tm10_documented_keys')),
@@ -130,8 +131,9 @@ def _row_problems(rows: dict[str, dict]) -> list[str]:
         if row is None:
             found.append('rev14: row %s of matrix TODO 10.22/10.23.R is absent' % rid)
             continue
-        if row.get('surface') != surface or row.get('tag') != 'PLANNED(%s)' % block:
-            found.append('rev14: row %s is %r/%r, expected %s/PLANNED(%s)' % (rid, row.get('surface'), row.get('tag'), surface, block))
+        tag = 'CURRENT' if rid in DELIVERED else 'PLANNED(%s)' % block
+        if row.get('surface') != surface or row.get('tag') != tag:
+            found.append('rev14: row %s is %r/%r, expected %s/%s' % (rid, row.get('surface'), row.get('tag'), surface, tag))
         if _cases(row) != wanted:
             found.append('rev14: row %s cases %s differ from 10.22.9/10.23.R.6 %s' % (rid, _cases(row), wanted))
     for rid, command in zip(('M21', 'M24'), NEW_COMMANDS):
