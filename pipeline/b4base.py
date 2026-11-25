@@ -126,7 +126,7 @@ def command_params(command: str) -> list[str]:
 
 UNKNOWN_SNAPSHOT_CANDIDATES = ('abcdef12', 'fedcba98', '0badc0de', '1badb002')
 UNKNOWN_SITE_CANDIDATES = ('site-1', 'site-2', 'site-3')
-UNKNOWN_FILES_KEYS = ('snapshot_id', 'items', 'total', 'offset', 'limit')
+UNKNOWN_FILES_KEYS = ('snapshot_id', 'items', 'total', 'offset', 'limit', 'warnings')
 
 
 def baseline_snapshot(report: Report, label: str) -> str | None:
@@ -168,6 +168,10 @@ def unknown_files_problems(data: object, snapshot_id: str) -> list[str]:
     for key, wanted in (('total', 0), ('offset', 0), ('limit', 1000)):
         if type(data[key]) is not int or data[key] != wanted:
             problems.append('%s %r is not the integer %d' % (key, data[key], wanted))
+    warnings = data['warnings']
+    first = warnings[0] if isinstance(warnings, list) and len(warnings) == 1 and isinstance(warnings[0], dict) else {}
+    if first.get('code') != 'UNKNOWN_SNAPSHOT_ID' or first.get('field') != 'snapshot_id' or first.get('value') not in (snapshot_id, snapshot_id.lower()) or not first.get('hint'):
+        problems.append('warnings %s is not [{code UNKNOWN_SNAPSHOT_ID, field snapshot_id, value %r, hint}] (revision 14, 10.22.6.3, TD14)' % (str(warnings)[:160], snapshot_id))
     return problems
 
 

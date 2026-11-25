@@ -77,7 +77,7 @@ def unknown_snapshot(report: Report, row_id: str, desc: str) -> None:
         kind, code, message, data = live.request('backup_list_files', {'snapshot_id': snapshot_id})
         problems = ['expected success, got ' + _cc()._brief(kind, code, message, data)] if kind != 'success' else b4base.unknown_files_problems(data, snapshot_id)
         for problem in problems:
-            report.product.append('%s with the unknown snapshot %s: %s (revision 6: success {snapshot_id, items: [], total: 0, offset: 0, limit: 1000})' % (desc, snapshot_id, problem))
+            report.product.append('%s with the unknown snapshot %s: %s (revision 6, 14: success {snapshot_id, items: [], total: 0, offset: 0, limit: 1000, warnings: [{code UNKNOWN_SNAPSHOT_ID, field snapshot_id, value, hint}]})' % (desc, snapshot_id, problem))
         if not problems:
             report.info.append('M4 snapshot_id_unknown conformant: the unknown snapshot %s answers the empty list' % snapshot_id)
         return
