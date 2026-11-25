@@ -5,6 +5,7 @@ The same records drive help(cmdname=...) metadata and info command pages.
 from __future__ import annotations
 
 from typing import Any
+from .command_reference_bytes import BYTES_REFERENCE
 from .command_reference_catalog import CATALOG_REFERENCE
 from .command_reference_core import CORE_REFERENCE
 from .command_reference_exports import EXPORT_REFERENCE
@@ -21,6 +22,7 @@ REFERENCE: dict[str, dict[str, Any]] = {
     **TREE_REFERENCE,
     **SCHEDULE_REFERENCE,
     **EXPORT_REFERENCE,
+    **BYTES_REFERENCE,
     "info": CORE_REFERENCE["info"],
 }
 for _scoped in ("backup_search_files", "backup_suggest_names"):
