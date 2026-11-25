@@ -71,6 +71,21 @@ class CommandMethods:
         '''
         return self._command('backup_schedule_status', history_limit=history_limit)
 
+    def run_log(self, run_id: str, offset: Optional[int] = None, limit: Optional[int] = None,
+                tail: Optional[bool] = None) -> Any:
+        '''A bounded slice of the log of one backup run (backup_run_log).
+
+        Args:
+            run_id: The run id from schedule_status.
+            offset: First byte of the slice, or None (not together with tail).
+            limit: Largest number of bytes 1..65536, or None.
+            tail: True for the last limit bytes, or None.
+
+        Returns:
+            The slice: run_id, name, size_bytes, offset, length, eof, encoding, text and rotated.
+        '''
+        return self._command('backup_run_log', run_id=run_id, offset=offset, limit=limit, tail=tail)
+
     def help(self, cmdname: Optional[str] = None) -> Any:
         '''The command list, or the detail of one command (help).
 
