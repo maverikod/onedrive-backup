@@ -82,7 +82,7 @@ def _gated(report: Report, label: str, status: int, auth: bool) -> bool:
 
 
 def rest_removed() -> None:
-    '''H1..H10: every /api/v1/* route answers 404 (decision 4, D2); downloads are /downloads and the adapter transfer.
+    '''H1..H10: every /api/v1/* route is removed (decision 4, D2): a GET answers the framework 404; a POST or DELETE answers the framework 404 or the 405 {detail: Method Not Allowed} of the StaticFiles mount at / (the V-row rule of vuebase: a non-GET method on the mount answers 404 or 405); downloads are /downloads and the adapter transfer.
 
     Returns:
         None.
@@ -94,7 +94,8 @@ def rest_removed() -> None:
         got = _try(report, label, base.probe, method, path, body, JSON_HEADERS if body else None)
         if got is None or _gated(report, label, got[0], True):
             continue
-        if got[0] != 404 or got[2].strip() != base.FRAMEWORK_404:
+        mount_refusal = method != 'GET' and got[0] == 405 and got[2].strip() == '{"detail":"Method Not Allowed"}'
+        if not mount_refusal and (got[0] != 404 or got[2].strip() != base.FRAMEWORK_404):
             needle = '@app.%s(%s%s%s)' % (method.lower(), Q, template, Q)
             report.product.append('%s: answered %d %s, expected the framework 404 {detail: Not Found} (REST is removed, decision D2); still registered at %s'
                                   % (label, got[0], base.brief(got[2]), base.src_line(SERVER, needle)))
