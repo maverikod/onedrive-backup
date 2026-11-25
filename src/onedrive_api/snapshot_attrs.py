@@ -119,18 +119,21 @@ def backfill(conn: sqlite3.Connection, data_dir: str | Path) -> int:
         The number of snapshots that had no attributes.
     """
     rows = conn.execute("SELECT snapshot_id, time_utc FROM snapshot WHERE type_source IS NULL ORDER BY time_utc").fetchall()
-    windows = _windows(data_dir) if rows else []
-    last: datetime | None = None
-    cluster = "legacy-undated"
+    if not rows:
+        return 0
+    windows = _windows(data_dir)
+    sql = "SELECT time_utc, run_id FROM snapshot WHERE type_source = 'derived' ORDER BY time_utc"
+    derived: list[tuple[datetime | None, str]] = [(_moment(stamp), str(run)) for stamp, run in conn.execute(sql)]
     for snapshot_id, stamp in rows:
         when = _moment(stamp)
         hit = next((w for w in windows if when is not None and w[0] <= when <= w[1]), None)
         if hit is not None:
             values: tuple[Any, ...] = ("full", hit[3], hit[2], "record")
         else:
-            if when is not None and (last is None or when - last > LEGACY_GAP):
-                cluster = "legacy-" + when.strftime("%Y%m%dT%H%M%SZ")
-            last = when or last
+            near = [run for moment, run in derived if when and moment and timedelta(0) <= when - moment <= LEGACY_GAP]
+            legacy = "legacy-" + when.strftime("%Y%m%dT%H%M%SZ") if when else "legacy-undated"
+            cluster = near[-1] if near else legacy
+            derived.append((when, cluster))
             values = ("full", "unknown", cluster, "derived")
         conn.execute(UPDATE, values + (snapshot_id,))
     return len(rows)
