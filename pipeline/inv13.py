@@ -78,12 +78,12 @@ def _row_problems(rows: dict[str, dict]) -> list[str]:
         if row.get('surface') != surface or row.get('tag') != tag:
             found.append('rev13: row %s is %r/%r, expected %s/%s' % (rid, row.get('surface'), row.get('tag'), surface, tag))
         got = tuple(case.get('id') for case in row.get('cases', []))
-        if got != wanted:
+        if (got[:len(wanted)] if rid == 'M19' else got) != wanted:  # revision 14 appends the cases of 10.22.9 TD3/TD11 to M19 (inv14)
             found.append('rev13: row %s cases %s differ from 10.21.6/10.21.7 %s' % (rid, got, wanted))
         if rid in ROW_CHECKS and ROW_CHECKS[rid] not in row.get('checks', []):
             found.append('rev13: row %s does not name the check %s' % (rid, ROW_CHECKS[rid]))
     m19 = rows.get('M19') or {}
-    if m19.get('command') != COMMAND or tuple(m19.get('params', {})) != M19_PARAMS:
+    if m19.get('command') != COMMAND or tuple(m19.get('params', {}))[:len(M19_PARAMS)] != M19_PARAMS:
         found.append('rev13: row M19 must name %s with the cells %s, it has %r %s' % (COMMAND, M19_PARAMS, m19.get('command'), tuple(m19.get('params', {}))))
     if 'file_dir' not in str((rows.get('PL19') or {}).get('name')):
         found.append('rev13: row PL19 does not name the index file_dir')
@@ -91,8 +91,8 @@ def _row_problems(rows: dict[str, dict]) -> list[str]:
     for rid, wanted in APPENDED.items():
         row = rows.get(rid) or {}
         got = tuple(case.get('id') for case in row.get('cases', []))
-        if row.get('tag') != 'CURRENT' or got[-len(wanted):] != wanted:
-            found.append('rev13: row %s must stay CURRENT and end with the cases %s, it has %r %s' % (rid, wanted, row.get('tag'), got))
+        if row.get('tag') != 'CURRENT' or not any(got[i:i + len(wanted)] == wanted for i in range(len(got))):  # revision 14 appends after them (inv14)
+            found.append('rev13: row %s must stay CURRENT and carry the cases %s, it has %r %s' % (rid, wanted, row.get('tag'), got))
         found += ['rev13: row %s lacks the cell %s (10.21.4)' % (rid, name) for name in SCOPE if name not in row.get('params', {})]
     for rid in ('V3', 'V4', 'V9'):
         if '10.21' not in str((rows.get(rid) or {}).get('name')):
@@ -177,6 +177,6 @@ def problems(data: dict, names: dict[str, dict]) -> list[str]:
     '''
     rows = {row.get('id'): row for row in data['rows']}
     found = _row_problems(rows) + _contract_problems(data) + _registry_problems(names) + _record_problems(data['identity'])
-    if len(b4base.COMMANDS) != 18 or COMMAND not in b4base.COMMANDS:
-        found.append('rev13: pipeline.b4base.COMMANDS holds %d commands, expected the 17 of revision 12 and %s (18)' % (len(b4base.COMMANDS), COMMAND))
+    if len(b4base.COMMANDS) < 18 or COMMAND not in b4base.COMMANDS[:18]:
+        found.append('rev13: pipeline.b4base.COMMANDS holds %d commands, expected the 17 of revision 12 and %s first (18; revision 14 appends two, inv14)' % (len(b4base.COMMANDS), COMMAND))
     return found
