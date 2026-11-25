@@ -122,8 +122,8 @@ laws:
     PROCESS — the verification environment, not a production release target — so building,
     deploying, restarting and running the pipeline there against your own service is ordinary
     work, `root` included, and is never a question put to the user. With `variables.dev_prod: true`
-    that free work is on its DEV installation; its own PRODUCTION installation and database change only through the AUTOMATIC production pass of
-    `dev_prod_instances`, after the full DEV pipeline is GREEN. That same host carries PRODUCTION DATABASES and
+    that free work is on its DEV installation; its own PRODUCTION installation and database change only through the production pass of
+    `dev_prod_instances`, which runs ONLY on the user's explicit command after the full DEV pipeline is GREEN. That same host carries PRODUCTION DATABASES and
     other projects' live services — which is why the line is per PROJECT, not per host. OUTSIDE
     the boundary every other project is STRICTLY READ-ONLY on every host and through every
     surface. You MAY read, search, analyse, reproduce and diagnose. You MAY NOT write: no edit,
@@ -166,9 +166,9 @@ laws:
     transition it already authorizes. See `ops/verification-discipline.yaml`.
   server_branches_are_mirrors: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any push or site-to-site synchronisation] Push and synchronisation happen ONLY on
-    the user's explicit command, with two standing exceptions that need no command: the mandatory `cas`+`local` exchange of
-    `two_site_sync`, and the merge into and push of `main` by the AUTOMATIC production pass of
-    `dev_prod_instances`. Inside that exchange the integration branch is
+    the user's explicit command, with two standing exceptions that need no separate command: the mandatory `cas`+`local` exchange of
+    `two_site_sync`, and the merge into and push of `main` by the production pass of
+    `dev_prod_instances`, which the user's explicit production command already covers. Inside that exchange the integration branch is
     merged and its conflicts resolved, while the other site's non-integration branch (the server's
     `local` when the work site is local, the local `cas` when the work site is CAS) is a disposable
     mirror: overwrite it from GitHub without analysing or preserving them, its differences being
@@ -300,10 +300,11 @@ laws:
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any done claim] A service is done only after its final candidate is deployed to
     `root@192.168.254.26` — with `variables.dev_prod: true` to its DEV installation (deployed by `build.sh`,
     default `--dev yes`, registered under `iddev`) — reports the expected version and registration state, every
-    affected named check is GREEN, and the full pipeline, run once AUTOMATICALLY, is then GREEN against it; production then gets it AUTOMATICALLY, with no user command, under `dev_prod_instances` —
-    rebuilt without `-dev`, deployed, and checked against production by the same named checks that were GREEN in DEV — and
-    with `dev_prod` true the work is done only when those production checks are GREEN too; the full
-    pipeline against production runs only on the user's explicit command and is not part of done. A library is done only
+    affected named check is GREEN, and the full pipeline, run once AUTOMATICALLY, is then GREEN against it. With `dev_prod` true that GREEN full DEV pipeline
+    completes the work: production is NOT part of done and goes out only on the user's explicit
+    command under `dev_prod_instances` — rebuilt without `-dev`, deployed, and checked against production by default by the same named checks
+    that were GREEN in DEV; a commanded production pass is done when those production checks are GREEN; the full pipeline
+    against production runs only when the user's command names it. A library is done only
     after the same sequence over its real examples. A local result, commit, build, package,
     deploy acknowledgment, skipped check, unreachable service or model verdict is not delivery.
   exact_failure_reporting: >-

@@ -7,13 +7,13 @@ laws:
     progress. Under `local`, local branches are authoritative; under `cas`, CAS branches are
     authoritative. Prepare and verify work on the active site. NEVER edit `main` directly or
     rewrite published history. Push, promotion and every site-to-site synchronisation wait for
-    the user's explicit command, except the mandatory `cas`+`local` exchange of `two_site_sync`
-    and, for a `dev_prod` service, the AUTOMATIC production pass of `dev_prod_instances`.
+    the user's explicit command, except the mandatory `cas`+`local` exchange of `two_site_sync`.
     A merge into `main` and a push of `main` happen ONLY with the user's explicit permission, and
     only after a new version is released (version bump, build, deploy) and the FULL pipeline run
-    on that deployed version is GREEN. For a `dev_prod` service a GREEN full DEV pipeline IS that permission and no user command is
-    needed: the production pass merges the DEV-proven working branch into `main`, pushes `main`
-    and builds production from `main` AUTOMATICALLY (`dev_prod_instances`).
+    on that deployed version is GREEN. For a `dev_prod` service the user's explicit production command IS that permission: the
+    production pass it starts merges the DEV-proven working branch into `main`, pushes `main` and
+    builds production from `main` (`dev_prod_instances`); a GREEN full DEV pipeline alone never
+    touches `main`.
   two_site_sync: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before the first agent unit of every block, and
     whenever the two sites must be brought together, in a project registered on the Code Analysis
@@ -197,8 +197,8 @@ laws:
     pass with every uploaded artefact suffixed `-dev` (image tag `<version>-dev`, client `<client>-dev`)
     and the DEV Debian package, and it ends by deploying the DEV installation on `root@192.168.254.26`
     AUTOMATICALLY; `build.sh --dev no` is the PRODUCTION pass and runs
-    AUTOMATICALLY — the model itself starts it, with no user command, permission or question, right after the full DEV pipeline of that version is GREEN: it REBUILDS without `-dev`, deploys production and then runs the same named checks that were GREEN in DEV against
-    it — the full production pipeline only on the user's explicit command (`dev_prod_instances`). A library is never
+    ONLY on the user's explicit command, given after the full DEV pipeline of that version is GREEN — the model itself then runs it: it REBUILDS without `-dev`, deploys production and then runs, by default, the same named checks that were GREEN in DEV against
+    it — another check set, the full production pipeline included, only when the user's command names it (`dev_prod_instances`). A library is never
     deployed there — its PyPI publication is its deployment (`library_examples_are_the_pipeline`).
     Run only changed or new named pipeline commands; the pipeline uses the client from the CURRENT
     PROJECT'S CODE — for a server with its own client (`client_package/`, `client/` or a paired
@@ -232,8 +232,8 @@ laws:
     The project runs as TWO separate installations of the same code on `root@192.168.254.26`: PRODUCTION and DEV. Development,
     debugging and testing are done ONLY in DEV — every "deployed service", "live server", "real
     instance" or "candidate deploy" in this contract means the DEV installation. NEVER run a named check or the pipeline against production — the ONLY exceptions follow the
-    automatic production deploy: the same named checks that were GREEN in DEV for this work, run AUTOMATICALLY, and the full
-    pipeline against production, run ONLY on the user's explicit command — and NEVER point the dev installation or a test at the
+    production deploy the user commanded: by default the same named checks that were GREEN in DEV for this work, and another
+    check set, the full pipeline against production included, only when the user's command names it — and NEVER point the dev installation or a test at the
     production database. (1) IDENTITY: the root `projectid` file carries TWO identifiers of the code
     — `id` for production and `iddev` for development, like the program keys an installer writes
     to a registry; the dev installation uses `iddev` everywhere the production one uses `id`, and
@@ -254,7 +254,7 @@ laws:
     suffix is ALWAYS `-dev` — never `dev`, `_dev` or `.dev0` — and labels the ARTEFACTS (image tag,
     Debian package name, client distribution name) only; the code — the
     server's response, the client's `_version.py` — carries the bare `<version>`. `build.sh --dev no`
-    is the PRODUCTION pass and runs AUTOMATICALLY — the model itself starts it, with no user command, permission or question, right after the full DEV pipeline of that version is GREEN, in this order: (a) the
+    is the PRODUCTION pass and runs ONLY on the user's explicit command (user, 2026-11-25: "прод только по команде пользователя"), given after the full DEV pipeline of that version is GREEN; on that command the model itself runs it, in this order: (a) the
     working branch (`local` under file_access local, `cas` under cas), at that DEV version — the one
     whose full DEV pipeline has just gone GREEN — is merged into `main` with
     everything on it, and `main` is pushed — the production dependencies are derived by
@@ -272,13 +272,13 @@ laws:
     service it calls; a production settings file, config template or environment that names a
     `-dev` (or legacy `dev` / `_dev`) endpoint is a DEFECT, and `build.sh --dev no` refuses to deploy
     it. The same invocation then DEPLOYS production and proves health, the expected version and
-    registration under `id`. Right after that, still on `main`, the model AUTOMATICALLY runs against
-    production, in production mode, THE SAME NAMED CHECKS THAT WERE RUN AND GREEN IN DEV for this
-    work — the affected named checks of the task, each as `python -m pipeline <name>` — and NOT
-    the full pipeline: the FULL PIPELINE against production runs ONLY on the user's explicit
-    command (user, 2026-11-17: "прод полный прогон запускается только по команде пользователя.
-    После зеленого дев идут теже проверки, что и на дев"), never on its own, never as part of the
-    production pass and never as a done check. These are the only checks that ever target
+    registration under `id`. Right after that, still on `main`, the model runs against production, in
+    production mode, BY DEFAULT THE SAME NAMED CHECKS THAT WERE RUN AND GREEN IN DEV for this work
+    — the affected named checks of the task, each as `python -m pipeline <name>` (user,
+    2026-11-25: "При переходе на прод по умолчанию те же проверки, что и в дев") — unless the
+    user's production command names another check set; the FULL PIPELINE against production runs
+    ONLY when the user's command names it (user, 2026-11-17: "прод полный прогон запускается
+    только по команде пользователя"), never on its own and never as a default. These are the only checks that ever target
     production: the pipeline targets DEV by default and accepts the production target only on
     `main` (`PIPELINE_ENV=prod`) against the production installation that reports the version
     `build.sh --dev no` has just deployed. A RED production check is reported at once with its exact output; the previous image and spec stay
@@ -299,14 +299,17 @@ laws:
     the image included), logs, keys, image spec and runtime: `/etc/<svc>` -> `/etc/<svc>-dev`,
     `/var/lib/<svc>` -> `/var/lib/<svc>-dev`, `/var/log/<svc>` -> `/var/log/<svc>-dev`,
     `/opt/<svc>` -> `/opt/<svc>-dev`; DEV never reads or writes a production directory. (6)
-    PRODUCTION GOES OUT AUTOMATICALLY AFTER THE FULL DEV PIPELINE IS GREEN — no user command,
-    permission or confirmation is required, waited for or asked for: as soon as the full DEV
-    pipeline of a version is GREEN, the model itself runs `build.sh --dev no` in the same task.
-    Never before that GREEN: not on targeted GREEN alone, not after a RED or unfinished full DEV
-    run, not for a version whose full DEV run did not pass. Waiting for a production command,
-    asking for one or leaving `build.sh --dev no` to the user is a DEFECT. The GREEN full DEV
-    pipeline is also the permission for `main`: the production pass merges the working branch
-    into `main`, pushes `main` and builds production from `main` — nothing else touches `main`. (7) THE WORK IS SEPARATED
+    PRODUCTION GOES OUT ONLY ON THE USER'S EXPLICIT COMMAND (user, 2026-11-25; this reverses the
+    automatic production pass of v1.7.89–v1.7.95). The work is done when the full DEV pipeline of
+    the version is GREEN: the model then reports the DEV-proven version and its GREEN named checks
+    as ready for production and STOPS there — it never starts `build.sh --dev no`, merges into
+    `main` or pushes `main` on its own, and a GREEN DEV run, an earlier production command or a
+    command given for another version is never that command. The command is carried out only for
+    a version whose full DEV pipeline is GREEN — not on targeted GREEN alone, not after a RED or
+    unfinished full DEV run; otherwise the model reports what is missing. Starting production
+    without the command is a DEFECT. The user's production command is also the permission for
+    `main`: the production pass merges the working branch into `main`, pushes `main` and builds
+    production from `main` — nothing else touches `main`. (7) THE WORK IS SEPARATED
     FROM THE TEST SERVERS: the WORK goes to PRODUCTION — every model log of the development process
     (the session of `logger_exchange`, every task, answer and agent message), the exchange with the
     user, every document and every report are written to the PRODUCTION AI Logger, doc-store and
@@ -344,8 +347,9 @@ laws:
     `dev` every check and example tests through the DEV versions — the project's DEV installation,
     the DEV servers and the `<client>-dev` packages of the fleet services it uses
     (`fleet_dev_dependencies`); with `prod` it tests the production installation through the production servers and clients,
-    only after the production deploy of `build.sh --dev no`: the same named checks that were GREEN in DEV, automatically, and the
-    full pipeline only on the user's explicit command (`dev_prod_instances`). (2) NO HARDCODE: every endpoint the pipeline uses — the
+    only after the production deploy of `build.sh --dev no`, which runs only on the user's explicit command: by default the same
+    named checks that were GREEN in DEV, and another check set, the full pipeline included, only when the user's command names
+    it (`dev_prod_instances`). (2) NO HARDCODE: every endpoint the pipeline uses — the
     project's own server and every fleet service: URL, host, port, network name, registration id —
     has TWO environment variables, `<NAME>_URL_DEV` and `<NAME>_URL_PROD` (likewise `_ID_DEV` /
     `_ID_PROD` and the like), in ONE COMMITTED file `pipeline/endpoints.env` — never named `.env`
@@ -421,8 +425,8 @@ laws:
     service it depends on, waits until each is READY — registered in the MCP Proxy, `health` by its
     proxy id OK, version equal to the registered `expected_version` — and stops it after its idle
     pause once no holder is left. It is used ONLY through its production client
-    `ai-devlease-client >= 0.1.13` — the Python client, or its CLI `python -m ai_devlease_client`
-    for shell steps (exit 0 success, 1 server refusal, 2 usage, configuration or transport error) —
+    `ai-devlease-client >= 0.1.18` — the Python client, or its CLI `python -m ai_devlease_client`
+    (lease subcommands `acquire`, `renew`, `release`, `status`, `hold` since 0.1.18) for shell steps (exit 0 success, 1 server refusal, 2 usage, configuration or transport error) —
     and its command `info` is the server's guide. IDENTITY: the HOLDER of every lease is
     `<project>/<run id>` — the project's registry name and a run id unique to that `build.sh` pass
     or pipeline run, each part 1..64 characters of `[a-z0-9._-]`; the lease commands (`acquire`,
@@ -433,11 +437,11 @@ laws:
     deployed service up and proves that it works, through ai-devlease, in this order: `acquire`
     under its holder of its own service and of every DEV dependency its checks need, kept by
     `renew` while the pass runs -> `deploy_start` of its own `service_id` (a `ttl_seconds` that
-    covers the deploy with margin; `wait_seconds` to wait for foreign leases) -> the deploy (image,
+    covers the deploy with margin; a busy service is waited for by polling, (7)) -> the deploy (image,
     Debian package, installation, restart of its OWN unit) -> `register_service` with the current
     unit, containers, proxy id, dependencies and the NEW `expected_version`, the version this pass
     built -> `deploy_finish` with verification on (registration, health by proxy id, version) ->
-    `release`. `release` runs in a `finally`, and a failed deploy still closes its announcement
+    `release` AT ONCE, the pass's very next ai-devlease call (8). `release` also runs in a `finally`, and a failed deploy still closes its announcement
     with `deploy_finish` `succeeded: false`. FIRST INSTALL: while `list_services` does not know the
     project's `iddev`, `register_service` IS the first-install step of the service in the fleet —
     deploy, `register_service`, `acquire` of its own service (which starts and verifies it),
@@ -449,14 +453,17 @@ laws:
     fleet service of `pipeline/endpoints.env`; the lease names come from that committed file
     (`<NAME>_LEASE_DEV`), never a hardcode. `acquire` itself waits until the whole dependency chain
     is ready, and the first check starts only after that. During the run the leases are renewed in
-    the background every 60 s (TTL 300 s); at the end they are released in a `finally` — after
-    GREEN, RED, an exception, SIGINT and SIGTERM alike; the leases of a killed run expire by TTL.
+    the background every 60 s (TTL 300 s); they are released AT ONCE when the run ends — right
+    after its last check, before the result summary, the report or any other step (8) — in a
+    `finally`, after GREEN, RED, an exception, SIGINT and SIGTERM alike; only the leases of a
+    killed run expire by TTL.
     (3) WHAT BLOCKS: a stopped DEV container is NOT a blocker — the lease starts it. Only a FAILED
     LEASE blocks: E1 `SERVICE_NOT_IN_CATALOG` (not registered — its owner's `build.sh` registers
     it), E2 `START_TIMEOUT` and E3 `UNIT_START_FAILED` (the service did not come up) are an exact
     refusal with the error and its details, the affected checks are RED and the blocker is
     reported; E4 `EXCLUSIVE_LOCK_ACTIVE` (a foreign redeploy or `deploy_start` is under way) is
-    waited for and retried within the run's timeout, then reported the same way.
+    waited for and retried within the run's timeout, then reported the same way; a busy answer to
+    `build.sh` is polled under (7).
     (4) FORBIDDEN: a direct `systemctl start|stop|restart` of a fleet unit or `docker
     start|stop|restart` of a fleet container from `build.sh`, the pipeline, an example or a manual
     step. A stop goes through `stop_service`; the project's OWN deploy restarts only its own unit,
@@ -475,9 +482,31 @@ laws:
     (6) CHECKED BY THE PIPELINE: a pipeline that takes leases carries the named check
     `devlease_leases`, which proves this behaviour against the live ai-devlease (`status`): the
     run's holder holds every required lease before the first check, the expiry moves forward after
-    a renew, and no lease of the holder is left after a run that ended GREEN, one that ended RED
-    and one stopped by SIGTERM. See `ops/delivery.yaml` `fleet_service_leases` and
-    `ops/testing.yaml` `pipeline_cli.leases`.
+    a renew, and no lease of the holder is left right after a run that ended GREEN, one that ended
+    RED and one stopped by SIGTERM.
+    (7) BUSY LEASE — `build.sh` POLLS (user, 2026-11-25: "build.sh должен с интервалом в 10 сек
+    опрашивать сервер аренды, если аренда занята. Выход по таймауту через 3 часа"): when
+    ai-devlease answers that the service is busy — `deploy_start` `SERVICE_IN_USE` (foreign
+    leases), `DEPLOY_ACTIVE` (a foreign deploy or exclusive lock), `acquire`
+    `EXCLUSIVE_LOCK_ACTIVE` — `build.sh` neither fails nor gives up: it polls ai-devlease every
+    10 SECONDS, repeating the refused call (`deploy_start` with `wait_seconds` 0) 10 s after each
+    busy answer, logs every attempt with the blockers (holder, kind, `expires_at`) and the time
+    waited, keeps renewing its own leases while it waits, and continues the moment the call
+    succeeds. The wait has ONE deadline: 3 HOURS (10800 s) from the first busy answer of the pass;
+    when it passes, `build.sh` releases its leases and exits non-zero with the last refusal
+    (command, error code, blockers) and the time waited. Only a busy answer is polled — E1, E2,
+    E3, `DEPLOY_VERIFY_FAILED` and every other refusal fail the pass at once. Another interval, a
+    blind `sleep` instead of the call, an endless wait or an earlier give-up is a DEFECT.
+    (8) RELEASE AT ONCE (user, 2026-11-25: "Аренда обязана быть снята сразу после прогона"): a
+    lease lives only as long as the run or pass that took it. The pipeline releases all its leases
+    right after its last check and `build.sh` right after `deploy_finish` (on a first install,
+    right after its verifying `acquire`) — before any summary, report, further build step or exit,
+    on GREEN and RED alike — and then reads `status` to prove that no lease of its holder is left;
+    a lease still there makes the run RED. A lease is never left to expire by TTL, never kept for
+    a later run, a follow-up check or a debugging session — a later run takes its own new lease —
+    and a `hold` process is ended with SIGTERM or SIGINT, never SIGKILL (a killed `hold` releases
+    nothing). A lease still held after its run ended is a DEFECT. See `ops/delivery.yaml`
+    `fleet_service_leases` and `ops/testing.yaml` `pipeline_cli.leases`.
   verify_before_delivery: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before reporting delivery] Run the affected named check after deployment or over
     the real example. RED returns to diagnosis, proof, correction and deployment. When every

@@ -7,13 +7,13 @@ laws:
     progress. Under `local`, local branches are authoritative; under `cas`, CAS branches are
     authoritative. Prepare and verify work on the active site. NEVER edit `main` directly or
     rewrite published history. Push, promotion and every site-to-site synchronisation wait for
-    the user's explicit command, except the mandatory `cas`+`local` exchange of `two_site_sync`
-    and, for a `dev_prod` service, the AUTOMATIC production pass of `dev_prod_instances`.
+    the user's explicit command, except the mandatory `cas`+`local` exchange of `two_site_sync`.
     A merge into `main` and a push of `main` happen ONLY with the user's explicit permission, and
     only after a new version is released (version bump, build, deploy) and the FULL pipeline run
-    on that deployed version is GREEN. For a `dev_prod` service a GREEN full DEV pipeline IS that permission and no user command is
-    needed: the production pass merges the DEV-proven working branch into `main`, pushes `main`
-    and builds production from `main` AUTOMATICALLY (`dev_prod_instances`).
+    on that deployed version is GREEN. For a `dev_prod` service the user's explicit production command IS that permission: the
+    production pass it starts merges the DEV-proven working branch into `main`, pushes `main` and
+    builds production from `main` (`dev_prod_instances`); a GREEN full DEV pipeline alone never
+    touches `main`.
   cas_search_first: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: step 0 of every researcher, coder and tester unit
     of a project registered on the Code Analysis Server, before any edit] MUST: read
