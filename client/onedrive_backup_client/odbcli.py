@@ -272,7 +272,7 @@ def _execute(client: BackupClient, args: argparse.Namespace, params: dict) -> An
         The result to print.
     '''
     command = args.command
-    if command.startswith('schedule-'):
+    if command.startswith('schedule-') or command == 'run-log':
         return schedule.execute(client, args)
     if command == 'help':
         return client.help(args.cmdname)
@@ -364,7 +364,7 @@ def main(argv: Optional[list] = None) -> int:
     except ClientError as exc:
         print(_failure(exc), file=sys.stderr)
         return 1 if exc.code is not None or type(exc).__name__ == 'ClientAuthenticationError' else 3
-    if args.command.startswith('schedule-'):
+    if args.command.startswith('schedule-') or args.command == 'run-log':
         print(schedule.render(args, result))
     else:
         print(json.dumps(result, indent=2, ensure_ascii=False))
