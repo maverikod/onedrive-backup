@@ -73,6 +73,7 @@ class ReferenceContractTests(unittest.TestCase):
             "backup_list_files",
             "backup_prepare_download",
             "backup_download_status",
+            "backup_download_chunk",
             "backup_download_begin",
             "backup_delete_export",
             "backup_sites_list",
