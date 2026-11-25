@@ -27,10 +27,10 @@ from pipeline import b4base as base, b4client, cmdcases, credentials, live
 from pipeline.report import Report
 
 PYPROJECT = 'client/pyproject.toml'
-SUBCOMMAND = {'help': 'help', 'info': 'info', 'backup_snapshots': 'snapshots', 'backup_list_files': 'files',
-              'backup_prepare_download': 'prepare', 'backup_download_status': 'status', 'backup_delete_export': 'delete',
-              'backup_sites_list': 'sites', 'backup_libraries_list': 'libraries', 'backup_discovery_status': 'discovery-status',
-              'backup_download_begin': 'download-begin'}
+SUBCOMMAND = {'help': 'help', 'info': 'info', 'backup_snapshots': 'snapshots', 'backup_list_files': 'files', 'backup_filter_options': 'filter-options', 'backup_folder_children': 'folder-children',
+              'backup_prepare_download': 'prepare', 'backup_download_status': 'status', 'backup_delete_export': 'delete', 'backup_schedule_get': 'schedule-get', 'backup_schedule_set': 'schedule-set',
+              'backup_schedule_status': 'schedule-status', 'backup_sites_list': 'sites', 'backup_libraries_list': 'libraries', 'backup_discovery_status': 'discovery-status', 'backup_search_files': 'search-files',
+              'backup_suggest_names': 'suggest-names', 'backup_download_begin': 'download-begin', 'backup_download_chunk': 'chunk', 'backup_run_log': 'run-log'}
 OPTION_ALIAS = {'file_path': ('path',)}
 BASELINE = {'help': [], 'info': [], 'snapshots': [], 'files': ['abcdef12'], 'prepare': ['abcdef12'], 'status': [base.ZERO_ID],
             'delete': [base.ZERO_ID], 'sites': [], 'libraries': ['site-1'], 'discovery-status': [], 'health': [],
