@@ -94,7 +94,7 @@ def rest_removed() -> None:
         got = _try(report, label, base.probe, method, path, body, JSON_HEADERS if body else None)
         if got is None or _gated(report, label, got[0], True):
             continue
-        mount_refusal = method != 'GET' and got[0] == 405 and got[2].strip() == '{"detail":"Method Not Allowed"}'
+        mount_refusal = method != 'GET' and got[0] == 405 and got[2].strip() == b'{"detail":"Method Not Allowed"}'
         if not mount_refusal and (got[0] != 404 or got[2].strip() != base.FRAMEWORK_404):
             needle = '@app.%s(%s%s%s)' % (method.lower(), Q, template, Q)
             report.product.append('%s: answered %d %s, expected the framework 404 {detail: Not Found} (REST is removed, decision D2); still registered at %s'
