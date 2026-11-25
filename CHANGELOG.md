@@ -1,3 +1,13 @@
+## 0.3.31 — dates of the backups (matrix revision 14, group DATES, task 131, user decision 2026-11-25)
+
+- `backup_search_files`, `backup_suggest_names`, `backup_folder_children`: `dates_mode` (`latest` default = the newest snapshot of every library, `all` = every snapshot; not together with a non-empty `dates`, 400 `INVALID_DATE_SCOPE`); an explicit `dates` keeps working. Results carry `date_scope` ({mode, dates, snapshot_count}) and `warnings` ([{code, field, value, hint}], `UNKNOWN_SITE_ID`, `NO_SNAPSHOT_FOR_DATE`).
+- `backup_search_files`: `collapse` (`none` default, `version`, `file`), `order_by` (`name` default, `snapshot_time`, `mtime`, `size`), `fields` (1..30 item keys, 400 `INVALID_FIELDS` with `error.data.allowed`); items gain `file_id`, `ext`, `snapshot_time_local`, `snapshot_date`, `backup_type`, `trigger`, `run_id`, `snapshot_count`, `first_date`, `last_date`, `version_count`. `backup_folder_children` takes `collapse` and its counts follow it.
+- `backup_filter_options`: `dates[]` items gain `backup_types`, `triggers`, `run_count`, `library_count`, `last_snapshot_time`; the result gains `latest` and `warnings`. Bad `site_ids` and `dates` items answer `error.data` {field, index, value, expected, hint}.
+- `backup_snapshots`: items gain `site_id`, `site_name`, `library_name`, `drive_id`, `date`, `time_local`, `backup_type`, `trigger`, `run_id`, `type_source`; `hostname` and `paths` are no longer returned.
+- New snapshots are tagged `type-full`, `trigger-<scheduled|manual|unknown>` and `run-<run id>` by the backup; the file name index gets the columns `backup_type`, `trigger`, `run_id`, `type_source` (PRAGMA user_version 1) and the existing snapshots are backfilled in the index only (run record match, else a derived legacy run); no snapshot is rewritten.
+- Client: the matching parameters of `backup_search_files`, `backup_suggest_names` and `backup_folder_children`; odbcli: `--dates-mode`, `--collapse`, `--order-by`, `--fields`.
+- New modules `date_scope.py`, `file_collapse.py`, `search_query.py`, `snapshot_attrs.py`, `snapshot_view.py`.
+
 ## 0.3.30 — diagnosable backup runs (matrix revision 14, groups RUN-REASON and RUN-CLASS, task 129, user decision 2026-11-25)
 
 - `backup_schedule_status`: `last_run`, every `history` item and `current_run` carry the additive keys `reason` (null for exit 0 and while running, else 1..500 characters naming the phase guard, discovery, library or unexpected and the tool and exit code), `log` ({name, size_bytes, available} or null) and `retried` (always 0, a failed run is never retried).
