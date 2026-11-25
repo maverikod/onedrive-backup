@@ -181,7 +181,7 @@ def library_has_backup(target: Path) -> bool:
 
 def sync_library(
     cfg: dict[str, Any], site_id: str, drive_id: str, target: Path, *,
-    dry_run: bool
+    dry_run: bool, run_id: str | None = None, trigger: str | None = None,
 ) -> dict[str, Any]:
     """Scan, sync, keep the duplicate copies and snapshot one library.
 
@@ -194,6 +194,8 @@ def sync_library(
         drive_id: Stable document library drive ID.
         target: Mirror directory of the library.
         dry_run: When true, only plan the sync and change nothing.
+        run_id: The run id of the backup run; the snapshot is tagged type-full, trigger-<word> and run-<id> (10.22.2.5).
+        trigger: The trigger of the run: schedule or catchup (scheduled), another word (manual), None (unknown).
 
     Returns:
         Run record fields of the library: outcome "ok" or
@@ -201,6 +203,8 @@ def sync_library(
         duplicates and duplicate_summary. Raises BackupError when rclone or
         restic fails.
     """
+    from .snapshot_attrs import run_tags
+
     base = library_rclone(cfg, drive_id)
     scan = scan_library(run_command, base)
     if not dry_run:
@@ -222,11 +226,12 @@ def sync_library(
     record["outcome"] = "duplicate_incomplete" if errors else "ok"
     record["error"] = errors[0] if errors else None
     if not dry_run:
-        run_command(restic_base(cfg) + [
-            "backup", str(target), "--tag", "sharepoint",
-            "--tag", "site-" + stable_key(site_id),
-            "--tag", "drive-" + stable_key(drive_id),
-        ], restic_env(cfg))
+        tags = ["sharepoint", "site-" + stable_key(site_id), "drive-" + stable_key(drive_id)]
+        tags += run_tags(run_id, trigger) if run_id else []
+        command = restic_base(cfg) + ["backup", str(target)]
+        for tag in tags:
+            command += ["--tag", tag]
+        run_command(command, restic_env(cfg))
     return record
 
 
@@ -287,7 +292,10 @@ def backup_libraries(
                          "never backed up; skipped", site_id, drive_id)
         if row["outcome"] == "ok":
             try:
-                row.update(sync_library(cfg, site_id, drive_id, target, dry_run=dry_run))
+                row.update(sync_library(
+                    cfg, site_id, drive_id, target, dry_run=dry_run, run_id=os.environ.get("ONEDRIVE_RUN_ID"),
+                    trigger=os.environ.get("ONEDRIVE_RUN_TRIGGER"),
+                ))
             except (BackupError, OSError) as exc:
                 row["outcome"] = "failed"
                 row["error"] = "LIBRARY_COMMAND_FAILED"
