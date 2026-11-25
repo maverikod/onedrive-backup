@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 from mcp_proxy_adapter.commands.result import CommandResult, ErrorResult
+from mcp_proxy_adapter.core.errors import ValidationError
 
 from .catalog import CatalogError
 from .catalog_bytes import prepare_request, read_chunk
@@ -98,9 +99,10 @@ class BackupPrepareDownload(CatalogCommand):
         **kwargs: Any,
     ) -> CommandResult:
         if snapshot_id is None and file_id is None:
-            return ErrorResult(
-                message="Missing required parameters: snapshot_id", code=-32602,
-                details={"missing_parameters": ["snapshot_id"], "violation": "missing"},
+            # snapshot_id is required unless file_id is given: the same adapter error as a schema-required parameter.
+            raise ValidationError(
+                "Missing required parameters: snapshot_id",
+                data={"missing_parameters": ["snapshot_id"], "violation": "missing"},
             )
         params = {
             "snapshot_id": snapshot_id, "file_path": file_path, "file_id": file_id, "site_id": site_id,
