@@ -308,7 +308,7 @@ def odbcli_surface() -> None:
         report.env.append('help: not executed, production service unreachable: %s' % exc)
         commands = []
     if commands and commands != sorted(base.COMMANDS):
-        report.product.append('OS1 the live help lists %d commands %s, expected exactly the 11 commands of rows M1..M11 %s' % (len(commands), commands, sorted(base.COMMANDS)))
+        report.product.append('OS1 the live help lists %d commands %s, expected exactly the %d commands of the inventory %s' % (len(commands), commands, len(base.COMMANDS), sorted(base.COMMANDS)))
     wanted = {command: SUBCOMMAND.get(command, command.replace('_', '-')) for command in commands}
     if main is not None:
         listed = _subcommands(main)
