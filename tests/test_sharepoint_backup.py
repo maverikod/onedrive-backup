@@ -239,11 +239,13 @@ class SharePointBackupTests(unittest.TestCase):
             mock.patch.object(backup, "run_command",
                               side_effect=failed),
         ):
-            with self.assertRaises(backup.BackupError):
-                backup.backup_libraries(self.cfg, self.report,
-                                        dry_run=False)
-        self.assertFalse(any("backup" in c or "forget" in c
-                             for c in self.calls))
+            record = backup.backup_libraries(self.cfg, self.report, dry_run=False)
+        self.assertEqual(record["status"], "failed")
+        self.assertEqual([row["outcome"] for row in record["libraries"]], ["failed"] * 3)
+        self.assertEqual(len(record["failures"]), 3)
+        self.assertIn("RCLONE_FAILED", record["failures"][0])
+        self.assertEqual(len([c for c in self.calls if "sync" in c]), 3)
+        self.assertFalse(any("backup" in c or "forget" in c for c in self.calls))
 
     def test_bad_drive_and_legacy_remote_are_rejected(self) -> None:
         """Identifiers cannot inject rclone arguments or remote paths.
