@@ -440,7 +440,11 @@ def _execute(report: Report, row: dict, case: dict, contract: dict, state: Any) 
         report.info.append('%s: an S0 case cannot run on a service that is %s; covered by prepare_order and scaffold_gate_states' % (desc, state))
         return
     if row_id in ('M1', 'M2') and case['state'] == 'S1':
-        _meta_case(report, row_id, cid, desc, sent)
+        if cid.startswith(('tm9_', 'tm10_', 'tr_')):
+            from pipeline import rev14docs
+            rev14docs.execute(report, row_id, cid, desc)
+        else:
+            _meta_case(report, row_id, cid, desc, sent)
     elif cid.startswith('omit_'):
         _judge_rpc(report, desc, live.request(row['command'], sent), 'missing', False, cid[len('omit_'):])
     elif cid == 'unknown_param':
