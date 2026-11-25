@@ -7,6 +7,7 @@ from typing import Any
 from mcp_proxy_adapter.commands.result import CommandResult, ErrorResult
 
 from .catalog import CatalogError
+from .catalog_bytes import prepare_request, read_chunk
 from .commands_base import CatalogCommand, ExportCommand, _catalog
 
 
@@ -85,15 +86,28 @@ class BackupPrepareDownload(CatalogCommand):
 
     async def execute(
         self,
-        snapshot_id: str = "",
+        snapshot_id: str | None = None,
         file_path: str | None = None,
+        file_id: str | None = None,
+        site_id: str | None = None,
+        drive_id: str | None = None,
+        dir: str | None = None,
+        name: str | None = None,
+        copy_index: int | None = None,
+        inline_max_bytes: int | None = None,
         **kwargs: Any,
     ) -> CommandResult:
-        return await self.apply(
-            _catalog().prepare,
-            snapshot_id=snapshot_id,
-            file_path=file_path,
-        )
+        if snapshot_id is None and file_id is None:
+            return ErrorResult(
+                message="Missing required parameters: snapshot_id", code=-32602,
+                details={"missing_parameters": ["snapshot_id"], "violation": "missing"},
+            )
+        params = {
+            "snapshot_id": snapshot_id, "file_path": file_path, "file_id": file_id, "site_id": site_id,
+            "drive_id": drive_id, "dir": dir, "name": name, "copy_index": copy_index,
+            "inline_max_bytes": inline_max_bytes,
+        }
+        return await self.apply(prepare_request, cat=_catalog(), params=params)
 
     @classmethod
     def get_schema(cls) -> dict:
@@ -102,8 +116,20 @@ class BackupPrepareDownload(CatalogCommand):
             "properties": {
                 "snapshot_id": {"type": "string"},
                 "file_path": {"type": ["string", "null"], "default": None},
+                "file_id": {"type": "string", "description": "FORM A: the file_id of a search row or a list node, alone."},
+                "site_id": {"type": "string", "description": "FORM C: the site of the file, with drive_id, dir and name."},
+                "drive_id": {"type": "string", "description": "FORM C: the library of the file."},
+                "dir": {"type": "string", "description": "FORM C: the folder of the file, '' for the library root."},
+                "name": {"type": "string", "description": "FORM C: the shown name of the file."},
+                "copy_index": {
+                    "type": "integer", "minimum": 0, "maximum": 99,
+                    "description": "FORM C: the stored-copy index, 0 for the first copy.",
+                },
+                "inline_max_bytes": {
+                    "type": "integer", "minimum": 0, "maximum": 65536,
+                    "description": "A file of at most this many bytes comes back as content_b64 and stages no export.",
+                },
             },
-            "required": ["snapshot_id"],
             "additionalProperties": False,
         }
         return cls._schema_with_descriptions(schema)
@@ -120,6 +146,34 @@ class BackupDownloadStatus(ExportCommand):
     ) -> CommandResult:
         archive = _catalog()
         return await self.apply(archive.export_status, export_id=export_id)
+
+
+class BackupDownloadChunk(ExportCommand):
+    name = "backup_download_chunk"
+    descr = "Read one base64 slice of a staged export."
+
+    async def execute(
+        self,
+        export_id: str = "",
+        offset: int = 0,
+        limit: int = 65536,
+        **kwargs: Any,
+    ) -> CommandResult:
+        return await self.apply(read_chunk, cat=_catalog(), export_id=export_id, offset=offset, limit=limit)
+
+    @classmethod
+    def get_schema(cls) -> dict:
+        schema = {
+            "type": "object",
+            "properties": {
+                "export_id": {"type": "string", "pattern": "^[0-9a-f]{32}$", "minLength": 32, "maxLength": 32},
+                "offset": {"type": "integer", "minimum": 0, "maximum": 1099511627776, "default": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 262144, "default": 65536},
+            },
+            "required": ["export_id"],
+            "additionalProperties": False,
+        }
+        return cls._schema_with_descriptions(schema)
 
 
 class BackupDownloadBegin(ExportCommand):
