@@ -62,7 +62,7 @@ def problems(data: dict, names: dict[str, dict]) -> list[str]:
         if row.get('surface') != surface or row.get('tag') != TAG:
             found.append('rev12: row %s is %r/%r, expected %s/%s' % (rid, row.get('surface'), row.get('tag'), surface, TAG))
         got = tuple(case.get('id') for case in row.get('cases', []))
-        if wanted is not None and got != wanted:
+        if wanted is not None and (got[:len(wanted)] if rid == 'M17' else got) != wanted:  # revision 14 appends the cases of 10.23.R.6 to M17 (inv14)
             found.append('rev12: row %s cases %s differ from 10.20 %s' % (rid, got, wanted))
     for rid, command in zip(('M15', 'M16', 'M17'), SCHEDULE_COMMANDS):
         if (rows.get(rid) or {}).get('command') != command:
@@ -94,6 +94,6 @@ def problems(data: dict, names: dict[str, dict]) -> list[str]:
         for key in ('approval', 'user_words', 'date', 'interface', 'contract_gaps', 'changed_text'):
             if key not in record:
                 found.append('rev12: identity.reconciliations_10_20 lacks %s' % key)
-    if len(b4base.COMMANDS) != 18 or any(command not in b4base.COMMANDS for command in SCHEDULE_COMMANDS):
-        found.append('rev12: pipeline.b4base.COMMANDS holds %d commands %s, expected the 14 of revision 11, the three schedule commands and backup_folder_children of revision 13 (18)' % (len(b4base.COMMANDS), sorted(set(SCHEDULE_COMMANDS) - set(b4base.COMMANDS))))
+    if len(b4base.COMMANDS) < 18 or any(command not in b4base.COMMANDS[:18] for command in SCHEDULE_COMMANDS):
+        found.append('rev12: pipeline.b4base.COMMANDS holds %d commands %s, expected the 14 of revision 11, the three schedule commands and backup_folder_children of revision 13 first (18; revision 14 appends two, inv14)' % (len(b4base.COMMANDS), sorted(set(SCHEDULE_COMMANDS) - set(b4base.COMMANDS))))
     return found
