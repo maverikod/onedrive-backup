@@ -51,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     data_dir = os.environ.get("ONEDRIVE_BACKUP_DATA", "/data")
     recorder = RunRecorder(data_dir)
     run_id = recorder.start(dry_run)
+    os.environ["ONEDRIVE_RUN_ID"] = run_id
     sharepoint_backup.configure_logging(None)
     handler = open_run_log(data_dir, run_id)
     code = 1
