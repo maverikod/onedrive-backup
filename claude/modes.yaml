@@ -56,8 +56,9 @@ modes:
       Authoring and revising PROMPT TEXT in a project whose deliverable is prompt text — contract
       templates, prompt packages, project-bound bundles. Prompt text is not software that builds,
       runs or ships, so the discipline written for product work has no referent and is lifted for
-      that work. It is NOT lifted for anything else the repository contains: its scripts, its
-      tooling and its releases run under `planning` and `refactoring` as written.
+      that work. In the prompt factory its self-contained root also governs supporting inspection,
+      scripts, tooling, validation and releases; generated product modes and agent machinery never
+      become factory instructions. Required factory checks and approvals remain in its root.
     lifts: what `laws.autonomy_mode` names, and nothing else
     never_lifts: what `laws.autonomy_mode` names as never lifted
     model_policy: >-
@@ -89,7 +90,7 @@ modes:
       - the current model maintains the same immutable completion checklist without handing it to another model
       - the same model may author `pipeline/checks/` in the tester stage and product code in the coder stage
       - a bug check is fixed by the demonstrated live RED before implementation and is never weakened to obtain GREEN
-      - only the named real-target check and the required final full `pipeline` may accept code
+      - named real-target checks accept code; a full `pipeline` is OPTIONAL and NEVER runs without explicit user permission
       - plans, documentation and other non-executable artifacts receive no model certification; report their evidence and leave acceptance to the user
     overrides: what `laws.stupid_mode` names, and nothing else
   no_logger_mode:
@@ -120,7 +121,8 @@ modes:
       only then does this mode touch the plan (`laws.external_surface_change_requires_matrix_revision`):
       unfreeze without asking, analyse HRS and MRS, HRS options to the user for permission, MRS and
       concepts, the matrix, then the user's permission and the freeze, then pipeline RED and code
-      (`laws.external_api_change_pipeline_first`); no G/T/A step is written. A bug fix follows
+      (`laws.external_api_change_pipeline_first`); an existing surface with no governing plan uses
+      the explicit user owner_approval in its matrix TODO instead of a PLAN freeze; no G/T/A step is written. A bug fix follows
       `laws.bugfix_acceptance_cycle`; a new project or contour follows `laws.external_contour_first`.
     model_policy: >-
       `coder` and every other unit run on the tier `ops/model-selection.yaml` `agent_launch`

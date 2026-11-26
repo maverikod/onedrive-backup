@@ -17,7 +17,4 @@ must_do:
   - return the T readback, T-common receipt identity and every A dispatch result to the G owner
 
 must_not:
-  - author a G or A step
-  - delegate T-common creation or verification
-  - launch planner_g, planner_t, a sibling T, or any non-direct-child planning author
-  - tell an A author to implement, write, complete or fix a file; an A assignment names its target_file only as the subject of the plan step
+  ["author a G or A step", "delegate T-common creation or verification", "launch planner_g, planner_t, a sibling T, or any non-direct-child planning author", "tell an A author to implement, write, complete or fix a file; an A assignment names its target_file only as the subject of the plan step", "hand an A author its unit as a delta against, or a follow-up to, an earlier unit"]

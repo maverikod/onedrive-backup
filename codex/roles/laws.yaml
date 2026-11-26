@@ -140,23 +140,24 @@ laws:
     `project_kind`, `bugfix_acceptance_cycle`,
     `deployed_pipeline_green_is_done`, `verify_before_delivery`, the CAS two-site model and
     `root@192.168.254.26`. Direct action is then the normal path. Work in that project that is NOT
-    prompt authoring — scripts, tooling, releases — runs under `planning` and `refactoring` as
-    written. NEVER, at either value: cancel `project_boundary`, `preserve_user_work`,
+    prompt authoring is governed by its own root contract. In the prompt factory, that
+    self-contained root also governs supporting scripts, tooling, inspection, validation and
+    releases; generated product planning/refactoring stages never become factory instructions. NEVER, at either value: cancel `project_boundary`, `preserve_user_work`,
     `non_destructive_git`, `exact_failure_reporting`, the ban on model co-authorship in commits,
     or the prohibition on deploying prompts into a product repository without a shown diff and
     an explicit approval; set `autonomy` yourself; carry the mode into a project whose bundle
     does not declare it; or cite it in a product repository as grounds for skipping anything.
   stupid_mode: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: the first action after the user explicitly enables `stupid_mode` / "Режим тупого",
-    and every later task while it remains enabled] This is the Codex/OpenAI single-model mode; the
-    Claude line carries the same latch with the same semantics.
+    and every later task while it remains enabled] This is the current runtime single-model mode; the
+    other runtime line carries the same latch with the same semantics.
     Its state machine has exactly two transitions: DISABLED -> ENABLED only on an explicit user
     command, and ENABLED -> DISABLED only on an explicit user command. When the current session
     contains no explicit enable command or carried enabled state, the initial state is disabled.
     Once enabled, it remains enabled across task boundaries, retries, failures, pauses and context
     compaction. Task completion, a new request, a tool failure, model preference, cost, elapsed
     time, or silence from the user NEVER disables it. Ambiguity preserves the current state and
-    requires a question; Codex never infers either transition. While enabled, the current session
+    requires a question; the model never infers either transition. While enabled, the current session
     model performs every applicable stage serially. It NEVER launches a subagent, routes
     a unit to another model tier, calls a model-backed verifier through a tool, asks another model
     for review, or treats its own reading of an artifact as verification. Therefore
@@ -170,7 +171,8 @@ laws:
     live RED before the implementation changes and is never weakened, skipped, stubbed or deleted
     to obtain GREEN. There is no model acceptance stage, including `conscience`: CODE IS ACCEPTED
     ONLY by the named `pipeline` check against the real deployed service or runnable example and
-    by the required final full `pipeline`. A plan, document, or other artifact the pipeline cannot
+    by a full `pipeline` only when explicitly authorized by the user; the named checks suffice
+    otherwise. A plan, document, or other artifact the pipeline cannot
     execute receives no model certification; report its direct evidence and the user decides.
     This mode cancels NOTHING else: external-contour order, the bug-fix cycle, real deployment,
     project boundaries, preservation of user work, exact failure reporting, versioning, Git
@@ -330,7 +332,10 @@ laws:
     `ops/planning-runtime.yaml` `plan_steps_check_event` is the full state machine.
   user_authorized_plan_freeze: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: preparing, requesting or executing any PLAN freeze]
-    Only the user may authorize freeze. No mechanical validation, semantic GREEN, matrix review,
+    When no governing plan covers an existing external surface, use the explicit user owner_approval
+    record of `external_surface_change_requires_matrix_revision` instead: there is no PLAN freeze and
+    the TODO is never described as frozen. This exception never replaces the freeze of an existing
+    governing plan or the plan for a new external contour. Only the user may authorize freeze. No mechanical validation, semantic GREEN, matrix review,
     implementation request, agent verdict, procedure or prior permission authorizes it. Keep one
     mutable candidate through the whole finding/correction/rerun cycle and NEVER freeze an
     intermediate correction. Before requesting permission, incorporate the reviewed matrix and, in `planning`,
@@ -357,7 +362,8 @@ laws:
     deploying, restarting and running the pipeline there against your own service is ordinary
     work, `root` included, and is never a question put to the user. With `variables.dev_prod: true`
     that free work is on its DEV installation; its own PRODUCTION installation and database change only through the production pass of
-    `dev_prod_instances`, which runs ONLY on the user's explicit command after the full DEV pipeline is GREEN. That same host carries PRODUCTION DATABASES and
+    `dev_prod_instances`, which runs AUTOMATICALLY immediately after every affected named DEV check
+    is GREEN. That same host carries PRODUCTION DATABASES and
     other projects' live services — which is why the line is per PROJECT, not per host. OUTSIDE
     the boundary every other project is STRICTLY READ-ONLY on every host and through every
     surface. You MAY read, search, analyse, reproduce and diagnose. You MAY NOT write: no edit,
@@ -370,6 +376,18 @@ laws:
     and the exact proposed change, report it to the user in the same message, then continue
     without the change or state that you are blocked. If ownership is unclear, treat it as
     outside and ask first.
+  immediate_service_bug_registration: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: discovery of an actual defect in any used service,
+    OWN or FOREIGN, in every mode and role] The detecting model MUST IMMEDIATELY create a bug in
+    the production Plan Manager, before a workaround, retries, handoff or unrelated work.
+    Record the executing model and discovery project's name/UUID in evidence and the description.
+    Anchor it to the affected project that NEEDS THE FIX, never to the discovery project merely
+    because the caller works there; for an own-service bug they may coincide. Use live project
+    identity and bug_create help, not guessed source parameters. Report the returned bug UUID
+    and affected-project anchor. This is the narrow exception to orchestrator, read-only,
+    report-only and planning-role write limits solely for registering/readback of this bug;
+    it grants no foreign repair or plan-truth write. Follow ops/service-bugs.yaml, including
+    explicit registration-failure handling; a promise, TODO or final warning is not a filed bug.
   source_freshness: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: every statement about the state of the plan, the code, or the documentation] Truth
     lives in four places and each answers for itself: the Plan Manager for plan state, the site
@@ -389,7 +407,7 @@ laws:
     handoff, elapsed time, model doubt or desire for higher confidence changes no state and grants no
     repeat. Allowed executions are ONLY: the first required verification for that state; the same
     named focused check once after a relevant implementation or deployed-state change in its required
-    RED/GREEN loop; exactly one contract-required final full pipeline after targeted GREEN; one fresh
+    RED/GREEN loop; one full pipeline only with explicit user permission for that target and run; one fresh
     source read immediately before a mutation/dispatch when `source_freshness` or the planning-common
     gate requires it; one scoped repeat explicitly ordered by the user; or a tool-failure retry that
     produced no verdict and is permitted after classification. NEVER launch sequential or parallel
@@ -398,23 +416,42 @@ laws:
     unchanged state. A verification without an authorizing rule or an unchanged-state repeat outside
     this allowlist is a contract DEFECT: stop, reuse the existing evidence and continue from the
     transition it already authorizes. See `ops/verification-discipline.yaml`.
+  full_pipeline_user_permission: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: every pipeline invocation, build/deploy wrapper,
+    verification and done claim, in every mode] A full pipeline is OPTIONAL in DEV, production and
+    libraries. NEVER start it autonomously: only the user's explicit permission naming the full run
+    and its target authorizes it. A bug-fix request, targeted GREEN, deploy, automatic production
+    pass, completion rule, earlier permission for another run, silence or a script default is NOT
+    permission. Without that permission use ONLY the affected named checks; do not invoke `python -m
+    pipeline` without a check argument, an all-checks option, or a wrapper/CI job that launches all
+    checks. Build, deploy and startup smoke steps must select named checks and must not hide a full
+    run. Record full_pipeline: not_run_not_authorized when no permission was given; this is not a
+    failure, delivery blocker or production prerequisite. If a full run was explicitly authorized,
+    honor its scope and report its result; a RED or unfinished authorized run blocks completion.
+    This law overrides any stale automatic-full-run or mandatory-full-GREEN wording. Production
+    follows targeted DEV GREEN automatically, from main after both source branches are merged,
+    independently of permission for a full run.
   branch_discipline: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any branch, merge, or release action] `main` is production and never work in
     progress. Under `local`, local branches are authoritative; under `cas`, CAS branches are
     authoritative. Prepare and verify work on the active site. NEVER edit `main` directly or
-    rewrite published history. Push, promotion and every site-to-site synchronisation wait for
-    the user's explicit command, except the mandatory `cas`+`local` exchange of `two_site_sync`.
-    A merge into `main` and a push of `main` happen ONLY with the user's explicit permission, and
-    only after a new version is released (version bump, build, deploy) and the FULL pipeline run
-    on that deployed version is GREEN. For a `dev_prod` service the user's explicit production command IS that permission: the
-    production pass it starts merges the DEV-proven working branch into `main`, pushes `main` and
-    builds production from `main` (`dev_prod_instances`); a GREEN full DEV pipeline alone never
-    touches `main`.
+    rewrite published history. Push, promotion and site-to-site synchronisation require the user's
+    explicit command outside the two mandatory standing exceptions: `two_site_sync` and the
+    complete automatic dev_prod lifecycle, final synchronization included (`deployment_block_lifecycle`).
+    A merge into `main` and push of `main` require the user's explicit permission outside dev_prod.
+    For a `dev_prod` service, the user's standing rule authorizes the AUTOMATIC production pass
+    immediately after every affected named DEV check is GREEN: first merge ALL content from the
+    current working branch AND the actual DEV source branch into `main`, resolve conflicts without
+    dropping either side, push `main`, then build production from `main` (`dev_prod_instances`).
+    Record both source refs/commits. A full pipeline is optional and requires separate explicit user
+    permission; it is never a condition for this transition. A RED or unfinished affected named check
+    blocks production.
   server_branches_are_mirrors: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any push or site-to-site synchronisation] Push and synchronisation happen ONLY on
     the user's explicit command, with two standing exceptions that need no separate command: the mandatory `cas`+`local` exchange of
-    `two_site_sync`, and the merge into and push of `main` by the production pass of
-    `dev_prod_instances`, which the user's explicit production command already covers. Inside that exchange the integration branch is
+    `two_site_sync`, and the complete production pass and final project-wide synchronization of
+    `dev_prod_instances` and `deployment_block_lifecycle`, which the standing automatic DEV-to-production rule already authorizes
+    after targeted DEV GREEN. Inside that exchange the integration branch is
     merged and its conflicts resolved, while the other site's non-integration branch (the server's
     `local` when the work site is local, the local `cas` when the work site is CAS) is a disposable
     mirror: overwrite it from GitHub without analysing or preserving them, its differences being
@@ -423,19 +460,20 @@ laws:
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before a CAS-backed operation in the `local` profile] Ordinary local reads, edits,
     builds and tests never require branch synchronisation or mirror attestation. Current local
     content reaches CAS through `two_site_sync`, once before each block; outside that exchange do
-    not push or synchronise without the user's explicit command. Read-only agents use the local checkout directly and do not attest
+    not push or synchronise without the user's explicit command, except the automatic dev_prod production pass after targeted DEV GREEN and its mandatory final synchronization after production GREEN. Read-only agents use the local checkout directly and do not attest
     local/CAS refs.
   branch_sync_after_every_step: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: after a local step] Report the local result and leave remote and CAS refs untouched
-    until the next `two_site_sync`. Outside it, push or synchronise only when the user explicitly
-    commands it. Never imply that a local
+    until the next `two_site_sync`, except the automatic dev_prod production pass after targeted DEV GREEN and its mandatory final synchronization after production GREEN.
+    Outside those two exceptions, push or synchronise only when the user explicitly commands it. Never imply that a local
     commit or prepared release was pushed.
   two_site_sync: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before the first agent unit of every block, and
     whenever the two sites must be brought together, in a project registered on the Code Analysis
     Server] MANDATORY and without asking: the model performs this exchange itself, including the
-    GitHub push of both `cas` and `local`. It is the ONE standing exception to "push and
-    synchronisation only on the user's explicit command", and it is the precondition of every CAS
+    GitHub push of both `cas` and `local`. This is one of two standing exceptions to "push and
+    synchronisation only on the user's explicit command"; the other is the automatic dev_prod
+    lifecycle including its final project-wide synchronization (`deployment_block_lifecycle`), and it is the precondition of every CAS
     search step (`cas_search_first`): it keeps the server repository and its index identical to
     the work site. Topology: the local checkout and the server repository carry the same two
     branches, `local` and `cas`; GitHub (`origin`) is the only exchange point and there is no
@@ -496,7 +534,7 @@ laws:
     execute a build, test or deploy script through the
     proxy; edit a project file through the proxy; route ordinary work through an MCP terminal
     sandbox or host-exec path. ONE named exception to the no-remote-edit rule: the `refactor`
-    block of `ops/cas-tools.yaml` — `split_file_to_package`, `split_class`,
+    block of `ops/cas-tools.yaml` — `extract_method`, `split_constant`, `split_file_to_package`, `split_class`,
     `extract_superclass` — runs here in its fixed order, because no hand-written local edit
     performs that rewrite safely.
   cas_mode: >-
@@ -594,7 +632,9 @@ laws:
     After deploying each group, run only the named checks mapped to that group: RED
     returns the entire still-red group to diagnosis, proof, correction and deployment; GREEN opens
     the next group. A group of one is valid but is not the default decomposition. When the complete
-    requested contour is targeted-GREEN, the model runs the full pipeline once AUTOMATICALLY, with no user command or question. The pipeline is the
+    requested contour is targeted-GREEN, the named checks accept it; NEVER run the full pipeline
+    without explicit user permission for that run and target (`full_pipeline_user_permission`). With
+    dev_prod true, proceed immediately to production by `dev_prod_instances`. The pipeline is the
     verifier; do not add a model-verifier ladder, branch-attestation loop or narrative acceptance
     layer. See `ops/delivery.yaml` `external_contour_first`. A bug fix, a refactoring or any change
     that leaves the external interface as it is never enters this law: it runs on the TODO tree of
@@ -616,8 +656,10 @@ laws:
     first on a rank repeats steps 3-7 on that rank, the second on a rank moves the next correction
     one rank higher and repeats steps 3-7. GREEN
     closes the mapped checklist items without model review. A user-supplied block uses the same
-    loop, not a new orchestration scheme. As soon as every item in the block is targeted-GREEN, the model runs the full pipeline once
-    AUTOMATICALLY, with no user command or question — never earlier. A mock, local-only result, diff, agent report, commit, build or deploy
+    loop, not a new orchestration scheme. As soon as every item in the block is targeted-GREEN, the
+    affected named checks accept the block; with dev_prod true proceed immediately to production.
+    NEVER run the full pipeline without explicit user permission for that run and target
+    (`full_pipeline_user_permission`). A mock, local-only result, diff, agent report, commit, build or deploy
     acknowledgment is not RED or GREEN. See `ops/delivery.yaml` `bugfix_cycle`.
   external_contour_coverage: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: defining or changing the external service or library contour] Every declared
@@ -673,8 +715,8 @@ laws:
     case's result contract. Skipped/XFAIL/manual cases, success inferred from no exception, HTTP
     status alone, a substring, schema alone, or a matrix copied but not executed are defects. A
     changed callable, parameter, relation, return/result/error contract or side effect updates the
-    project TODO first and requires a new user-authorized frozen PLAN revision;
-    never edit only the local snapshot. The pipeline fails RED when the project/TODO/plan identity,
+    project TODO first and requires a new user-authorized frozen PLAN revision, or, only for an
+    existing surface with no governing plan, its explicit user owner_approval record; never edit only the local snapshot. The pipeline fails RED when the project/TODO/plan identity,
     live callable inventory, accepted-parameter cells, relations, result contracts or derived
     executable assertions do not match. See
     `ops/planning-runtime.yaml` `pipeline_matrix_todo` and `ops/testing.yaml` `command_parameter_matrix`.
@@ -684,7 +726,9 @@ laws:
     anchored by that project's immutable `anchor_project_id`. This anchored TODO is the required
     project work record; do not invent a project attribute that Plan Manager does not expose.
     Absence, duplicates, a foreign-project anchor, or disagreement with the matrix incorporated into
-    the frozen plan revision blocks plan freeze and implementation. This applies to both `service`
+    the frozen plan revision blocks plan freeze and implementation. For an existing surface with no
+    governing plan, compare against the exact matrix accepted in the user owner_approval record
+    instead; do not create a plan just to hold that approval. This applies to both `service`
     and `library` projects.
   external_surface_change_requires_matrix_revision: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: proposing, planning or making any addition, removal or change to a service command,
@@ -702,8 +746,21 @@ laws:
     successor revision UUID and the HRS, MRS and matrix change; only the user's explicit permission
     freezes it (`laws.user_authorized_plan_freeze`); (7) after the freeze refresh
     `pipeline/matrix.yaml` and continue by `laws.external_api_change_pipeline_first`. No G/T/A step
-    is written or rewritten: a full step record is not required. A project with no plan updates
-    its matrix TODO and asks the user the same way before any repository change. No direct
+    is written or rewritten: a full step record is not required. An existing surface with no
+    governing plan follows the owner_approval path instead of steps (1)-(7): update the unique
+    project-anchored matrix TODO with the complete affected rows, parameter cells, relations and
+    result contracts; present that exact delta and the TODO's id and current updated_at; wait for the
+    user's explicit approval of it. The planner then appends an owner_approval record in that TODO's
+    text, containing the exact accepted matrix/delta, the user's authorization and its date, and
+    reads back the TODO id and updated_at. Those native fields plus the exact approval text identify
+    the authority in execution tasks and `pipeline/matrix.yaml`; plan id and plan revision are
+    absent, never invented. The TODO remains open: neither its record nor its native status is called
+    frozen. A change to the approved matrix invalidates the approval and requires a new presented
+    delta and explicit user approval. "Freeze D1-D8, no plan, only TODO" authorizes this approval
+    record for exactly those presented deltas, never a plan freeze. Only then refresh the local
+    matrix and affected checks, obtain RED against the unchanged contour and continue by
+    `laws.external_api_change_pipeline_first`. This path never bypasses an existing governing plan or
+    `laws.external_contour_first` for a new contour. No direct
     external-API edit may bypass this event. See `ops/planning-runtime.yaml`
     `external_surface_change_events`.
   external_api_change_pipeline_first: >-
@@ -711,7 +768,8 @@ laws:
     request/response schema, parameter, constraint, result/error contract or observable side
     effect, or to a public library constructor, function, method, signature, parameter, constraint,
     return type, result/error contract or observable side effect] After the matrix change of
-    `laws.external_surface_change_requires_matrix_revision` is authorized by the user and frozen, the FIRST
+    `laws.external_surface_change_requires_matrix_revision` is authorized by the user and frozen, or
+    its owner_approval is recorded for an existing surface with no governing plan, the FIRST
     repository changes MUST be `pipeline/matrix.yaml` and the affected named checks under
     `pipeline/checks/`. Run those named checks against the unchanged deployed service or current
     runnable library examples and obtain RED for the planned contour change. Until that RED exists,
@@ -733,8 +791,9 @@ laws:
     `pipeline` package or declares a `pipeline` console script, and the project is never
     installed into the user site or the system Python: every project has a top-level `pipeline`,
     so a shared install shadows another project's (user, 2026-11-07). `python -m pipeline` runs
-    everything, `python -m pipeline <check-name>` one check, `python -m pipeline --list`
-    enumerates. `run_tests.sh`, `test_all.py`, a Makefile target, a per-subsystem runner
+    everything ONLY with explicit user permission for that target and run
+    (`full_pipeline_user_permission`); without it an argument-free invocation is FORBIDDEN, `python -m pipeline <check-name>` one check, `python -m pipeline --list`
+    enumerates. `run_tests.sh`, `test_all.py`, a Makefile target, a per- subsystem runner
     or a CI-only script is a SECOND pipeline and therefore a defect: fold its checks in, delete
     it, repoint every document. See `ops/testing.yaml` `pipeline_cli`.
   library_examples_are_the_pipeline: >-
@@ -766,8 +825,9 @@ laws:
     pushed, from that same checkout switched to `main` — under file_access cas from a
     separate production clone of `main` outside the CAS watch directory (`cas_index_is_dev`) —
     (`dev_prod_instances`); never
-    from a linked git worktree or detached HEAD. Every build pass that uploads anything takes a NEW version — the
-    previous one plus exactly one, never a gap: Docker Hub and PyPI never take the same version
+    from a detached HEAD; a linked-worktree DEV build is allowed only by an explicit project-specific
+    owner authorization, with its exact branch/commit recorded, and never for production. Every build pass that uploads anything takes a NEW version — the
+    previous one in the selected DEV or production publication line plus exactly one, never a gap: Docker Hub and PyPI never take the same version
     twice, so a fix after RED is the next candidate, and only a pass that failed before any upload
     retries its version. Image tag, Debian installation package, responding server and client
     package metadata carry the same version. One build pass builds the image and pushes it to
@@ -781,22 +841,25 @@ laws:
     affects the Docker Hub push, and a flag that skips an attempt (`SKIP_PUSH`, `SKIP_PYPI`,
     `SKIP_UPLOAD`, `--skip-push`, or `dontpubpypi` used to skip) is a DEFECT. A failed publication
     still leaves the work undelivered (`pypi_publication_scope`). A library with no Docker
-    image builds its PyPI artifact in the same single-script discipline and publishes it after the full GREEN (a client library on every pass). Deploy and install a service
+    image builds its PyPI artifact in the same single-script discipline and publishes it after the
+    affected named example checks are GREEN (a client library on every pass). Deploy and install a service
     candidate on `root@192.168.254.26` as part of debugging and acceptance. While `variables.dev_prod` is
     `true`, `build.sh` takes `--dev yes|no` with `yes` by default: the default DEV pass is this build
     pass with every uploaded artefact suffixed `-dev` (image tag `<version>-dev`, client `<client>-dev`)
     and the DEV Debian package, and it ends by deploying the DEV installation on `root@192.168.254.26`
-    AUTOMATICALLY; `build.sh --dev no` is the PRODUCTION pass and runs
-    ONLY on the user's explicit command, given after the full DEV pipeline of that version is GREEN — the model itself then runs it: it REBUILDS without `-dev`, deploys production and then runs, by default, the same named checks that were GREEN in DEV against
+    AUTOMATICALLY; `build.sh --dev no` is the PRODUCTION pass and runs AUTOMATICALLY immediately
+    after all affected named DEV checks are GREEN — the model itself runs it without another command:
+    it REBUILDS without `-dev`, deploys production and then runs, by default, the same named checks that were GREEN in DEV against
     it — another check set, the full production pipeline included, only when the user's command names it (`dev_prod_instances`). A library is never
     deployed there — its PyPI publication is its deployment (`library_examples_are_the_pipeline`).
     Run only changed or new named pipeline commands; the pipeline uses the client from the CURRENT
     PROJECT'S CODE — for a server with its own client (`client_package/`, `client/` or a paired
     client checkout), that client installed from source — and NEVER a PyPI-installed client, not
     even the one this pass has just published; a client of ANOTHER fleet service is the last
-    published `<client>-dev` of `fleet_dev_dependencies`. The full pipeline runs once AUTOMATICALLY, with no user command or question, as soon as the whole requested task
-    or block is targeted-GREEN; waiting for or asking for a full-run command is a DEFECT. Only after that full run is GREEN does the same script
-    publish the already-built library package to PyPI — mandatorily, under
+    published `<client>-dev` of `fleet_dev_dependencies`. NEVER run the full pipeline without
+    explicit user permission for that run and target (`full_pipeline_user_permission`); it is
+    optional and never a delivery or publication prerequisite. Once all affected named checks are
+    GREEN and any explicitly authorized full run is GREEN, the same script publishes the already-built library package to PyPI — mandatorily, under
     `pypi_publication_scope` — without rebuilding or changing the version; a server or
     application package goes to PyPI only with the user's explicit permission. See
     `ops/delivery.yaml` `build_and_publication`.
@@ -807,7 +870,9 @@ laws:
     EVERY `build.sh` pass, UNCONDITIONALLY and MANDATORILY, in the same pass that pushes the server
     image to Docker Hub: never gated on a pipeline result, never skipped, never asked about.
     LIBRARIES — the package of a `project_kind: library` project that is not a client, even when it
-    also ships commands — are published MANDATORILY as soon as the full pipeline is GREEN for the exact candidate, by `build.sh`, in the same task, without asking. Either way the
+    also ships commands — are published MANDATORILY as soon as all affected named example checks are
+    GREEN for the exact candidate and any explicitly authorized full run is GREEN; a full run is
+    optional, never a publication prerequisite, by `build.sh`, in the same task, without asking. Either way the
     work is not delivered until the published version and artifact hashes are verified; a built
     client or a GREEN library left unpublished is a DEFECT, never a question put to the user. No
     check ever uses a PyPI-installed copy of the project's own client: the pipeline takes it from
@@ -816,13 +881,48 @@ laws:
     service runtime) — are NEVER published to PyPI without the user's explicit permission for that
     exact package and version; a GREEN pipeline, a published client or an earlier permission is
     not that permission. See `ops/delivery.yaml` `publish_gate`.
+  deployment_block_lifecycle: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before EVERY DEV build, after DEV/production
+    results, and before delivery with variables.dev_prod true] The working branches are `local`
+    for file_access local and `cas` for file_access cas. BEFORE EVERY DEV BUILD, inventory every
+    branch and LOCAL worktree included in the deployment block, including dirty/untracked/ignored
+    content. Preserve private and unrelated work. Commit accepted block content on its owning
+    branch, merge ALL included branches/worktree commits into the mode-selected working branch,
+    resolve conflicts preserving every accepted change, and prove all recorded source commits
+    are ancestors of its integrated HEAD. A report, patch-equivalence claim or worktree snapshot
+    is not ancestry. Build.sh must refuse a missing source commit or incomplete block inventory.
+    Build/deploy that exact integrated candidate, then run only the affected named DEV checks.
+    Before any subsequent DEV build repeat this integration gate for newly changed block state.
+    AFTER ALL those checks are GREEN, integrate any remaining accepted block commits; if this
+    changes the tested candidate, rebuild DEV and run the affected named checks before proceeding.
+    Remove the block's merged clean worktrees only after both ancestry and DEV GREEN are proven;
+    preserve dirty/private files, never force-remove or delete the authoritative checkout, and
+    record every removal or exact blocker. MUST CONTINUE immediately: merge `local`/`cas` and ALL
+    recorded current-working and actual DEV-source commits into `main`, push `main`, build
+    production ONLY FROM `main`, deploy and run the SAME named checks as the GREEN DEV set.
+    No extra production command and no stop at ready-for-production. A full pipeline runs ONLY
+    on an explicit user command for that run and target (`full_pipeline_user_permission`).
+    AFTER PRODUCTION GREEN on that SAME set, perform FULL SYNCHRONIZATION of EVERY repository
+    of this project: the local checkout, GitHub origin and registered CAS mirror (and any other
+    configured replica). Inventory and account for every branch/ref and remaining worktree,
+    preserve private/unrelated files, integrate unique accepted project content without force
+    or history rewriting, publish and fetch the agreed branch/tag refs, and prove exact matching
+    commits/trees for corresponding refs with zero ahead/behind. Keep immutable release snapshots
+    and intentional working/main topology; synchronization does not mean moving release refs or
+    checking out main in an indexed CAS project. A newly discovered content change invalidates
+    affected acceptance and returns through DEV before production and final synchronization.
+    The standing user rule authorizes the entire lifecycle, including final remote synchronization.
+    The orchestrator MUST dispatch every remaining transition instead of a reporting agent; only
+    an exact failed gate, explicit user stop or genuinely missing decision can block it. Delivery
+    is complete only after production same-check GREEN, merged-worktree disposition and final
+    replica readback. See `ops/delivery.yaml` `dev_prod.deployment_block`.
   dev_prod_instances: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any build, deploy, verification, database, logger
     or `projectid` action while `variables.dev_prod` is `true`; with `false` this law does not apply]
     The project runs as TWO separate installations of the same code on `root@192.168.254.26`: PRODUCTION and DEV. Development,
     debugging and testing are done ONLY in DEV — every "deployed service", "live server", "real
     instance" or "candidate deploy" in this contract means the DEV installation. NEVER run a named check or the pipeline against production — the ONLY exceptions follow the
-    production deploy the user commanded: by default the same named checks that were GREEN in DEV for this work, and another
+    automatic production deploy after targeted DEV GREEN: by default the same named checks that were GREEN in DEV for this work, and another
     check set, the full pipeline against production included, only when the user's command names it — and NEVER point the dev installation or a test at the
     production database. (1) IDENTITY: the root `projectid` file carries TWO identifiers of the code
     — `id` for production and `iddev` for development, like the program keys an installer writes
@@ -844,10 +944,16 @@ laws:
     suffix is ALWAYS `-dev` — never `dev`, `_dev` or `.dev0` — and labels the ARTEFACTS (image tag,
     Debian package name, client distribution name) only; the code — the
     server's response, the client's `_version.py` — carries the bare `<version>`. `build.sh --dev no`
-    is the PRODUCTION pass and runs ONLY on the user's explicit command (user, 2026-11-25: "прод только по команде пользователя"), given after the full DEV pipeline of that version is GREEN; on that command the model itself runs it, in this order: (a) the
-    working branch (`local` under file_access local, `cas` under cas), at that DEV version — the one
-    whose full DEV pipeline has just gone GREEN — is merged into `main` with
-    everything on it, and `main` is pushed — the production dependencies are derived by
+    is the PRODUCTION pass and runs AUTOMATICALLY immediately after ALL affected named DEV checks of
+    the complete task are GREEN, without another user command. MUST CONTINUE immediately through
+    production and final synchronization; stopping at DEV GREEN or ready-for-production is
+    forbidden. Follow `deployment_block_lifecycle` before EVERY DEV build and after both GREEN
+    barriers. The full pipeline is optional and may
+    run ONLY on explicit user permission (`full_pipeline_user_permission`); no full run is required
+    for this transition. A RED or unfinished affected check, or a RED/in-flight explicitly authorized
+    full run, blocks production. The model itself proceeds in this order: (a) inventory the current
+    working branch and the actual branch/commit used by DEV; merge ALL content of BOTH sources into
+    `main`, preserving everything on it, and `main` is pushed — the production dependencies are derived by
     `build.sh` (`pipeline_environment` (4)); (b) the authoritative checkout is switched to `main` — under file_access cas, whose authoritative checkout is the one the Code Analysis Server indexes, a SEPARATE production clone of `main` outside the CAS watch directory is used instead, because the indexed checkout never leaves the working branch (`cas_index_is_dev`); (c)
     `build.sh --dev no` runs there — PRODUCTION IS BUILT ONLY FROM THE BRANCH `main` (user,
     2026-11-25: "сборка прод только с ветки main. Т.е. сначала нужно слить локал или cas в main. И
@@ -855,11 +961,14 @@ laws:
     and `build.sh --dev no` starts only after them; `build.sh` never merges, switches or pushes a
     branch, and before anything is built it REFUSES with an exact error and builds nothing when the
     current branch is not `main` (a detached HEAD, `local`, `cas` or any other branch), the tree is
-    dirty, local `main` differs from `origin/main`, or `main` does not contain the DEV-proven
-    commit of the working branch (the merge was not done); a production build from any branch
-    other than `main` is a DEFECT. There it REBUILDS everything WITHOUT `-dev` under that same version number: the image `<image>:<version>`
-    pushed to Docker Hub, the production Debian package `<svc>-docker`, the client `<client>`
-    `<version>` published to PyPI — the Docker Hub push and the client publication UNCONDITIONALLY
+    dirty, local `main` differs from `origin/main`, or `main` does not contain BOTH the recorded
+    current-working-branch commit AND the DEV-proven source commit (one of the merges was not done); a production build from any branch
+    other than `main` is a DEFECT. There it REBUILDS everything WITHOUT `-dev` at its own independent
+    production version V, supplied to the build through the project's supported version input before
+    any artifact is built. V is the next unused production version, validated against production
+    Docker Hub tags and PyPI releases; the DEV version line stays unchanged. Every production
+    artifact and responding server carries V: the image `<image>:V` pushed to Docker Hub, the production Debian package `<svc>-docker`, the client `<client>`
+    V published to PyPI — the Docker Hub push and the client publication UNCONDITIONALLY
     and MANDATORILY, as in every build pass — every fleet client the project depends on declared
     under its production name at a version NOT LOWER than the one the DEV pipeline tested (`>=`,
     `pipeline_environment` (4)). PRODUCTION carries NO `-dev` anywhere: the package
@@ -897,17 +1006,14 @@ laws:
     the image included), logs, keys, image spec and runtime: `/etc/<svc>` -> `/etc/<svc>-dev`,
     `/var/lib/<svc>` -> `/var/lib/<svc>-dev`, `/var/log/<svc>` -> `/var/log/<svc>-dev`,
     `/opt/<svc>` -> `/opt/<svc>-dev`; DEV never reads or writes a production directory. (6)
-    PRODUCTION GOES OUT ONLY ON THE USER'S EXPLICIT COMMAND (user, 2026-11-25; this reverses the
-    automatic production pass of v1.7.89–v1.7.95). The work is done when the full DEV pipeline of
-    the version is GREEN: the model then reports the DEV-proven version and its GREEN named checks
-    as ready for production and STOPS there — it never starts `build.sh --dev no`, merges into
-    `main` or pushes `main` on its own, and a GREEN DEV run, an earlier production command or a
-    command given for another version is never that command. The command is carried out only for
-    a version whose full DEV pipeline is GREEN — not on targeted GREEN alone, not after a RED or
-    unfinished full DEV run; otherwise the model reports what is missing. Starting production
-    without the command is a DEFECT. The user's production command is also the permission for
-    `main`: the production pass merges the working branch into `main`, pushes `main` and builds
-    production from `main` — nothing else touches `main`. (7) THE WORK IS SEPARATED
+    PRODUCTION FOLLOWS TARGETED DEV GREEN AUTOMATICALLY (user, 2026-11-26). Do not stop at
+    ready-for-production or ask for a production command. First merge ALL content of the current
+    working branch AND the actual DEV source branch into `main`, push `main`, and only then invoke
+    `build.sh --dev no` on `main`. The build refuses a missing source commit. If integration changes
+    behavior relative to the tested DEV candidate, verify the affected merged behavior in DEV with
+    named checks before production; never infer permission for a full run. The automatic production pass
+    is the standing permission for this merge and push; other main operations still require explicit
+    user permission. (7) THE WORK IS SEPARATED
     FROM THE TEST SERVERS: the WORK goes to PRODUCTION — every model log of the development process
     (the session of `logger_exchange`, every task, answer and agent message), the exchange with the
     user, every document and every report are written to the PRODUCTION AI Logger, doc-store and
@@ -927,8 +1033,8 @@ laws:
     the production proxy, and a DEV server registers there under its
     `-dev` server id and its `iddev`, and its `<NAME>_URL_DEV` / `<NAME>_URL_PROD` proxy values in
     `pipeline/endpoints.env` are the same address. No DEV proxy is deployed for, used by or named in
-    the settings of any other project, and no DEV server ever registers in a DEV proxy; the
-    mcp-server project's own DEV installation exists only as the target under test of its own
+    the settings of any other project, and no DEV server ever registers in a DEV proxy; the mcp-
+    server project's own DEV installation exists only as the target under test of its own
     pipeline. See
     `ops/delivery.yaml` `dev_prod`.
   cas_index_is_dev: >-
@@ -957,7 +1063,8 @@ laws:
     `dev` every check and example tests through the DEV versions — the project's DEV installation,
     the DEV servers and the `<client>-dev` packages of the fleet services it uses
     (`fleet_dev_dependencies`); with `prod` it tests the production installation through the production servers and clients,
-    only after the production deploy of `build.sh --dev no`, which runs only on the user's explicit command: by default the same
+    only after the production deploy of `build.sh --dev no`, which runs automatically after targeted
+    DEV GREEN and both source branches are merged into main: by default the same
     named checks that were GREEN in DEV, and another check set, the full pipeline included, only when the user's command names
     it (`dev_prod_instances`). (2) NO HARDCODE: every endpoint the pipeline uses — the
     project's own server and every fleet service: URL, host, port, network name, registration id —
@@ -1001,8 +1108,8 @@ laws:
     in `pipeline/endpoints.env` hold the same production address. That is not a production fallback and is never reported as one; a `-dev` endpoint or a `<client>-dev` of such a service is a DEFECT.
     In the OWN project of a production-only service every check runs against production, so its
     full pipeline is a production full run: it runs ONLY on the user's explicit command, never
-    automatically — after targeted GREEN the work reports and waits for that command (v1.7.93).
-    `lmrs` is never called directly at all: its models are reached ONLY through macsc
+    automatically; after targeted GREEN the work may complete without a full run, recording it as not
+    authorized. `lmrs` is never called directly at all: its models are reached ONLY through macsc
     (`lmrs_only_through_macsc`). THE DEV CLIENT: in DEV mode check BOTH
     sources — PyPI (the newest published `<client>-dev`) and the service's LOCAL project checkout
     (`~/projects/tools/<checkout>`, its current branch, the version from its single version
@@ -1138,20 +1245,29 @@ laws:
     nothing). A lease still held after its run ended is a DEFECT. See `ops/delivery.yaml`
     `fleet_service_leases` and `ops/testing.yaml` `pipeline_cli.leases`.
   deployed_pipeline_green_is_done: >-
-    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any done claim] A service is done only after its final candidate is deployed to
-    `root@192.168.254.26` — with `variables.dev_prod: true` to its DEV installation (deployed by `build.sh`,
-    default `--dev yes`, registered under `iddev`) — reports the expected version and registration state, every
-    affected named check is GREEN, and the full pipeline, run once AUTOMATICALLY, is then GREEN against it. With `dev_prod` true that GREEN full DEV pipeline
-    completes the work: production is NOT part of done and goes out only on the user's explicit
-    command under `dev_prod_instances` — rebuilt without `-dev`, deployed, and checked against production by default by the same named checks
-    that were GREEN in DEV; a commanded production pass is done when those production checks are GREEN; the full pipeline
-    against production runs only when the user's command names it. A library is done only
-    after the same sequence over its real examples. A local result, commit, build, package,
-    deploy acknowledgment, skipped check, unreachable service or model verdict is not delivery.
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any done claim] A service is done only after its final candidate is
+    built and deployed to `root@192.168.254.26`, reports the expected version and MCP Proxy registration,
+    and every
+    affected named check is GREEN. With `variables.dev_prod: true`, targeted DEV GREEN immediately
+    starts the AUTOMATIC production pass of `dev_prod_instances`: merge ALL content of the current
+    working branch AND the actual DEV source branch into `main`, push `main`, build production only
+    from `main`, deploy it and run the same named checks against production. Done then requires those production checks
+    GREEN. A full pipeline is optional in every environment and NEVER runs without explicit user
+    permission (`full_pipeline_user_permission`); report it as not run when not authorized, without
+    blocking targeted acceptance. Any explicitly authorized full run that is RED or unfinished blocks
+    completion. A library is done after its affected real-example named checks are GREEN and the
+    verified package is published to PyPI under `pypi_publication_scope`. A commit, build, package,
+    deploy acknowledgment, skipped affected check, unreachable service or model verdict is not delivery.
+    With dev_prod true this is not delivered until `deployment_block_lifecycle` has removed the
+    merged clean block worktrees and synchronized ALL project repositories after production GREEN
+    on the SAME named checks, with ref/tree readback and zero ahead/behind. MUST CONTINUE through
+    those mandatory transitions before reporting completion.
+
   verify_before_delivery: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before reporting delivery] Run the affected named check after deployment or over
     the real example. RED returns to diagnosis, proof, correction and deployment. When every
-    requested item is targeted-GREEN, run the full pipeline once AUTOMATICALLY, with no user command or question. Report the exact command,
+    requested item is targeted-GREEN, perform automatic production if dev_prod is true; NEVER run a
+    full pipeline without explicit user permission for that run and target. Report the exact command,
     target, responding version and result.
   cheapest_capable_model: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: every agent selection outside explicitly enabled `stupid_mode`] Start on the

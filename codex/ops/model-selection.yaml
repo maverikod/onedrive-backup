@@ -11,7 +11,7 @@ principle: >-
   pipeline GREEN is acceptance.
 
 mode_gate:
-  planning: the orchestrator owns HRS/MRS; every G/T/A unit is assigned to the cheapest capable level tier only after the parent-common gate
+  planning: "the orchestrator owns HRS/MRS; every G/T/A unit is assigned to the cheapest capable level tier only after the parent-common gate"
   analysis: every research or inspection unit is assigned to the cheapest capable agent
   refactoring: every check, implementation, deploy and correction unit is assigned to an agent
   stupid_mode: >-
@@ -99,14 +99,14 @@ checklist:
     - no agent or orchestrator may delete, weaken, waive, reorder or mark an item not applicable
 
 acceptance:
-  implementation: mapped named pipeline commands on the real thing; one full pipeline, automatic with no user command, after the complete block is targeted-GREEN
+  implementation: mapped named pipeline commands on the real thing; full pipeline OPTIONAL and NEVER without explicit user permission for that run and target
   plans_and_docs: checklist evidence returned by the assigned agent for the user to accept
   forbidden: pre-RED model review, model-verifier ladders, narrative certification, a rank raised by a RED alone
 
 verification_reuse:
   law: laws.verification_once_per_state
   rule: one GREEN result for one target/state identity is reused; a different model never repeats it for confidence
-  allowed_repeats: [required focused check after relevant state change, one required final full pipeline, required fresh pre-mutation read, explicit user-ordered repeat, classified no-verdict tool retry]
+  allowed_repeats: [required focused check after relevant state change, one explicitly user-authorized full pipeline, required fresh pre-mutation read, explicit user-ordered repeat, classified no-verdict tool retry]
   forbidden: [double-check agent, review-of-review, parallel verifier, unchanged-state rerun, compaction-driven rerun]
 
 single_model_mode:

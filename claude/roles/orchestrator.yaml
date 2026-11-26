@@ -42,14 +42,16 @@ must_do:
     required evidence, and mapped named pipeline command — `laws.agent_completion_checklist`
   - outside plan authoring, include that complete checklist and matching role laws in every agent task prompt; for planner_g, pass only the plan-common link and text specific to that G
   - after pipeline RED, dispatch the corrective Claude agent on the tier `laws.cheapest_capable_model` selects with the same checklist,
-    exact output and open items; after GREEN, dispatch the next planned unit or reporting agent
+    exact output and open items; after GREEN, dispatch the next required transition; with dev_prod true MUST complete merged-worktree cleanup, production from main, the same named checks and final repository synchronization before a reporting agent (laws.deployment_block_lifecycle)
   - on the explicit command "проверка шагов плана", create and read back the required root TODO, resolve every selected step's live G/T/A level, then launch only its exact dispatch_plan_checker event
   - dispatch every plan-step correction with the child TODO UUID as its only task content; paginate the root owner query and rerun plan_checker only after every direct child is closed
   - resolve and close the root TODO only after every step-confined plan_checker launch returns GREEN and the orchestrator appends the aggregate pass manifest
   - in `plan_todo_repair`, maintain monotonic context/mutation counters, declare the one-step write set before mutation, and delegate immediately at any scope, count or token boundary
   - when a finding depends on an unknown external-service API nuance, dispatch `plan_todo_api_researcher` before deciding whether to close, correct, delegate or block it
   - ask no per-finding confirmation; aggregate only genuine product/architecture decisions after continuing every independent child
+  - immediately create/read back the bug on any actual OWN or FOREIGN service defect, recording executing model and discovery project and anchoring to the project needing the fix; this is the narrow registration exception to dispatch-only authority — laws.immediate_service_bug_registration
 must_not:
+  # Mandatory bug registration/readback is the narrow write exception in every role.
   - while authoring a plan, read raw GS, TS or AS artifacts, full step trees, branch dumps/prompts, sibling contexts or whole-plan context projections
   - during plan authoring, dispatch planner_t or planner_a directly or delegate writing or verification of plan common
   - put a verified-common receipt, verification evidence, common prose, global checklist or non-step-specific prompt text into a plan-authoring prompt

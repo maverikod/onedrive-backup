@@ -82,23 +82,24 @@ laws:
     `project_kind`, `bugfix_acceptance_cycle`,
     `deployed_pipeline_green_is_done`, `verify_before_delivery`, the CAS two-site model and
     `root@192.168.254.26`. Direct action is then the normal path. Work in that project that is NOT
-    prompt authoring — scripts, tooling, releases — runs under `planning` and `refactoring` as
-    written. NEVER, at either value: cancel `project_boundary`, `preserve_user_work`,
+    prompt authoring is governed by its own root contract. In the prompt factory, that
+    self-contained root also governs supporting scripts, tooling, inspection, validation and
+    releases; generated product planning/refactoring stages never become factory instructions. NEVER, at either value: cancel `project_boundary`, `preserve_user_work`,
     `non_destructive_git`, `exact_failure_reporting`, the ban on model co-authorship in commits,
     or the prohibition on deploying prompts into a product repository without a shown diff and
     an explicit approval; set `autonomy` yourself; carry the mode into a project whose bundle
     does not declare it; or cite it in a product repository as grounds for skipping anything.
   stupid_mode: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: the first action after the user explicitly enables `stupid_mode` / "Режим тупого",
-    and every later task while it remains enabled] This is the Codex/OpenAI single-model mode; the
-    Claude line carries the same latch with the same semantics.
+    and every later task while it remains enabled] This is the current runtime single-model mode; the
+    other runtime line carries the same latch with the same semantics.
     Its state machine has exactly two transitions: DISABLED -> ENABLED only on an explicit user
     command, and ENABLED -> DISABLED only on an explicit user command. When the current session
     contains no explicit enable command or carried enabled state, the initial state is disabled.
     Once enabled, it remains enabled across task boundaries, retries, failures, pauses and context
     compaction. Task completion, a new request, a tool failure, model preference, cost, elapsed
     time, or silence from the user NEVER disables it. Ambiguity preserves the current state and
-    requires a question; Codex never infers either transition. While enabled, the current session
+    requires a question; the model never infers either transition. While enabled, the current session
     model performs every applicable stage serially. It NEVER launches a subagent, routes
     a unit to another model tier, calls a model-backed verifier through a tool, asks another model
     for review, or treats its own reading of an artifact as verification. Therefore
@@ -112,7 +113,8 @@ laws:
     live RED before the implementation changes and is never weakened, skipped, stubbed or deleted
     to obtain GREEN. There is no model acceptance stage, including `conscience`: CODE IS ACCEPTED
     ONLY by the named `pipeline` check against the real deployed service or runnable example and
-    by the required final full `pipeline`. A plan, document, or other artifact the pipeline cannot
+    by a full `pipeline` only when explicitly authorized by the user; the named checks suffice
+    otherwise. A plan, document, or other artifact the pipeline cannot
     execute receives no model certification; report its direct evidence and the user decides.
     This mode cancels NOTHING else: external-contour order, the bug-fix cycle, real deployment,
     project boundaries, preservation of user work, exact failure reporting, versioning, Git
@@ -225,7 +227,10 @@ laws:
     `ops/planning-runtime.yaml` `plan_steps_check_event` is the full state machine.
   user_authorized_plan_freeze: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: preparing, requesting or executing any PLAN freeze]
-    Only the user may authorize freeze. No mechanical validation, semantic GREEN, matrix review,
+    When no governing plan covers an existing external surface, use the explicit user owner_approval
+    record of `external_surface_change_requires_matrix_revision` instead: there is no PLAN freeze and
+    the TODO is never described as frozen. This exception never replaces the freeze of an existing
+    governing plan or the plan for a new external contour. Only the user may authorize freeze. No mechanical validation, semantic GREEN, matrix review,
     implementation request, agent verdict, procedure or prior permission authorizes it. Keep one
     mutable candidate through the whole finding/correction/rerun cycle and NEVER freeze an
     intermediate correction. Before requesting permission, incorporate the reviewed matrix and, in `planning`,
@@ -243,8 +248,9 @@ laws:
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before the first agent unit of every block, and
     whenever the two sites must be brought together, in a project registered on the Code Analysis
     Server] MANDATORY and without asking: the model performs this exchange itself, including the
-    GitHub push of both `cas` and `local`. It is the ONE standing exception to "push and
-    synchronisation only on the user's explicit command", and it is the precondition of every CAS
+    GitHub push of both `cas` and `local`. This is one of two standing exceptions to "push and
+    synchronisation only on the user's explicit command"; the other is the automatic dev_prod
+    lifecycle including its final project-wide synchronization (`deployment_block_lifecycle`), and it is the precondition of every CAS
     search step (`cas_search_first`): it keeps the server repository and its index identical to
     the work site. Topology: the local checkout and the server repository carry the same two
     branches, `local` and `cas`; GitHub (`origin`) is the only exchange point and there is no
@@ -310,7 +316,9 @@ laws:
     After deploying each group, run only the named checks mapped to that group: RED
     returns the entire still-red group to diagnosis, proof, correction and deployment; GREEN opens
     the next group. A group of one is valid but is not the default decomposition. When the complete
-    requested contour is targeted-GREEN, the model runs the full pipeline once AUTOMATICALLY, with no user command or question. The pipeline is the
+    requested contour is targeted-GREEN, the named checks accept it; NEVER run the full pipeline
+    without explicit user permission for that run and target (`full_pipeline_user_permission`). With
+    dev_prod true, proceed immediately to production by `dev_prod_instances`. The pipeline is the
     verifier; do not add a model-verifier ladder, branch-attestation loop or narrative acceptance
     layer. See `ops/delivery.yaml` `external_contour_first`. A bug fix, a refactoring or any change
     that leaves the external interface as it is never enters this law: it runs on the TODO tree of
@@ -327,8 +335,10 @@ laws:
     first on a rank repeats steps 3-7 on that rank, the second on a rank moves the next correction
     one rank higher and repeats steps 3-7. GREEN
     closes the mapped checklist items without model review. A user-supplied block uses the same
-    loop, not a new orchestration scheme. As soon as every item in the block is targeted-GREEN, the model runs the full pipeline once
-    AUTOMATICALLY, with no user command or question — never earlier. A mock, local-only result, diff, agent report, commit, build or deploy
+    loop, not a new orchestration scheme. As soon as every item in the block is targeted-GREEN, the
+    affected named checks accept the block; with dev_prod true proceed immediately to production.
+    NEVER run the full pipeline without explicit user permission for that run and target
+    (`full_pipeline_user_permission`). A mock, local-only result, diff, agent report, commit, build or deploy
     acknowledgment is not RED or GREEN. See `ops/delivery.yaml` `bugfix_cycle`.
   project_matrix_todo_required: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: creating, reading, attaching work to, freezing a plan for, or implementing in any
@@ -336,7 +346,9 @@ laws:
     anchored by that project's immutable `anchor_project_id`. This anchored TODO is the required
     project work record; do not invent a project attribute that Plan Manager does not expose.
     Absence, duplicates, a foreign-project anchor, or disagreement with the matrix incorporated into
-    the frozen plan revision blocks plan freeze and implementation. This applies to both `service`
+    the frozen plan revision blocks plan freeze and implementation. For an existing surface with no
+    governing plan, compare against the exact matrix accepted in the user owner_approval record
+    instead; do not create a plan just to hold that approval. This applies to both `service`
     and `library` projects.
   external_surface_change_requires_matrix_revision: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: proposing, planning or making any addition, removal or change to a service command,
@@ -354,8 +366,21 @@ laws:
     successor revision UUID and the HRS, MRS and matrix change; only the user's explicit permission
     freezes it (`laws.user_authorized_plan_freeze`); (7) after the freeze refresh
     `pipeline/matrix.yaml` and continue by `laws.external_api_change_pipeline_first`. No G/T/A step
-    is written or rewritten: a full step record is not required. A project with no plan updates
-    its matrix TODO and asks the user the same way before any repository change. No direct
+    is written or rewritten: a full step record is not required. An existing surface with no
+    governing plan follows the owner_approval path instead of steps (1)-(7): update the unique
+    project-anchored matrix TODO with the complete affected rows, parameter cells, relations and
+    result contracts; present that exact delta and the TODO's id and current updated_at; wait for the
+    user's explicit approval of it. The planner then appends an owner_approval record in that TODO's
+    text, containing the exact accepted matrix/delta, the user's authorization and its date, and
+    reads back the TODO id and updated_at. Those native fields plus the exact approval text identify
+    the authority in execution tasks and `pipeline/matrix.yaml`; plan id and plan revision are
+    absent, never invented. The TODO remains open: neither its record nor its native status is called
+    frozen. A change to the approved matrix invalidates the approval and requires a new presented
+    delta and explicit user approval. "Freeze D1-D8, no plan, only TODO" authorizes this approval
+    record for exactly those presented deltas, never a plan freeze. Only then refresh the local
+    matrix and affected checks, obtain RED against the unchanged contour and continue by
+    `laws.external_api_change_pipeline_first`. This path never bypasses an existing governing plan or
+    `laws.external_contour_first` for a new contour. No direct
     external-API edit may bypass this event. See `ops/planning-runtime.yaml`
     `external_surface_change_events`.
   external_api_change_pipeline_first: >-
@@ -363,7 +388,8 @@ laws:
     request/response schema, parameter, constraint, result/error contract or observable side
     effect, or to a public library constructor, function, method, signature, parameter, constraint,
     return type, result/error contract or observable side effect] After the matrix change of
-    `laws.external_surface_change_requires_matrix_revision` is authorized by the user and frozen, the FIRST
+    `laws.external_surface_change_requires_matrix_revision` is authorized by the user and frozen, or
+    its owner_approval is recorded for an existing surface with no governing plan, the FIRST
     repository changes MUST be `pipeline/matrix.yaml` and the affected named checks under
     `pipeline/checks/`. Run those named checks against the unchanged deployed service or current
     runnable library examples and obtain RED for the planned contour change. Until that RED exists,

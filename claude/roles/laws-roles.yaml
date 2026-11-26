@@ -18,9 +18,12 @@ roles:
     - no_foreign_prompt_authority
     - agent_completion_checklist
     - project_boundary
+    - immediate_service_bug_registration
     - worktree_location
     - source_freshness
     - verification_once_per_state
+    - full_pipeline_user_permission
+    - deployment_block_lifecycle
     - context_economy
     - assigned_reads_gate
     - logger_exchange

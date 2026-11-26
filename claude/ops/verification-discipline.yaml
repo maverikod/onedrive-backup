@@ -15,7 +15,7 @@ preflight:
 allowed_execution:
   - the first execution required for the current target and state identity
   - the same named focused check once after a relevant implementation or deployed-state change in the prescribed RED/GREEN loop
-  - exactly one final full pipeline after all required focused checks are GREEN, when the contract requires it
+  - a full pipeline ONLY with explicit user permission for that run and target; never infer it from targeted GREEN or a delivery rule
   - one fresh source read immediately before a mutation or dispatch that `source_freshness` or the planning common gate requires
   - one repeat explicitly ordered by the user; a scoped single-use permission authorizes no other repeat
   - a retry after a tool failure only when the failure was classified, produced no verdict, and the applicable tool rule permits retry

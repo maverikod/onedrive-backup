@@ -17,6 +17,4 @@ must_do:
   - return the G readback, G-common receipt identity and every T dispatch result to the orchestrator
 
 must_not:
-  - author a T or A step
-  - delegate G-common creation or verification
-  - launch planner_g, planner_a, a sibling G, or any non-direct-child planning author
+  ["author a T or A step", "delegate G-common creation or verification", "launch planner_g, planner_a, a sibling G, or any non-direct-child planning author", "hand a T author its unit as a delta against, or a follow-up to, an earlier unit"]

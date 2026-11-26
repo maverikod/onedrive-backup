@@ -65,11 +65,11 @@ external_api_research:
   prompt:
     exact_fields: [finding_todo_uuid, target_step_uuid, external_service, api_question, required_evidence]
   result_limit: the role card's `result` envelope in the logger answer; the Plan Manager report on the finding TODO holds at most 2000 tokens with source identity, evidence references, factual conclusion and unresolved point only
-  report: the researcher's `report_create` on the finding TODO is its only write; read it with `report_get` only when the envelope does not decide the finding
+  report: the researcher's report_create and mandatory immediate service-bug registration are its only writes; read it with `report_get` only when the envelope does not decide the finding
   decisions:
     contract_supports_current_plan: close stale finding with the research evidence
     contract_requires_local_change: apply direct-mutation gate, otherwise delegate by finding UUID
-    foreign_service_defect: register one evidence-backed issue against the owning project; never edit that service
+    foreign_service_defect: IMMEDIATELY create the evidence-backed bug against the project needing the fix, with executing model and discovery project recorded; never edit that service
     unresolved_product_decision: block the local finding and include it in the single consolidated user question
 
 delegation:

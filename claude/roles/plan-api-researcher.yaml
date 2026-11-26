@@ -14,7 +14,7 @@ must_do:
   - "write the `result` envelope as the answer message of `ops/logger-exchange.yaml` and end with its final lines, `report: <report_id>` included"
 
 must_not:
-  - mutate the plan, TODO, foreign service, repository or deployed state; the one `report_create` above is the only write
+  - mutate the plan, TODO, foreign service, repository or deployed state; the one `report_create` above and mandatory immediate service-bug registration are the only writes
   - write the report or the answer to disk; only `no_logger_mode`, enabled by the user, moves the answer into a file
   - decide product intent, invent missing API behavior, repeat research for an unchanged service/version/question key, or launch another agent
 

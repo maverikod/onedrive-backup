@@ -1,0 +1,70 @@
+# onedrive-backup — mandatory service-defect registration
+# EVENT-SELECTED OPERATION CARD. Only roles/triggers.yaml selects this file.
+template_version: v1.7.101
+
+requirement: >-
+  On discovering an actual defect in ANY service being used, OWN or FOREIGN, the detecting
+  model MUST IMMEDIATELY create a bug in the production Plan Manager. This is mandatory,
+  before a workaround, further retries, unrelated work, a handoff or the final report.
+  Only the bounded live help and project-identity reads needed to submit a valid bug come first.
+  Expected negative-test results and a caller's own invalid arguments are not service defects
+  unless the service's behavior violates its declared contract.
+
+authority: >-
+  Applies in every mode and role, including the orchestrator and read-only/planning agents.
+  It is the narrow exception to a role's report-only or no-write restriction: create and
+  read back the bug record, not product code or plan truth. It never authorizes fixing a
+  foreign project, changing its deployment, or broadening the current task.
+
+ownership:
+  target: >-
+    Resolve the imported project UUID of the service/code that NEEDS THE FIX. Anchor the bug
+    to that affected project with source_type: project and source_project_id: <affected_project_uuid>.
+    A service/proxy installation UUID is not automatically a project UUID. Use live project_list
+    and the known service/repository binding; never guess ownership.
+  discovery: >-
+    Separately record the project where the defect was DISCOVERED, with its name and immutable
+    project UUID. The discovery project does not replace the affected-project anchor.
+    For an own-service defect the two projects may be the same.
+  unclear: >-
+    If the affected project cannot be identified or is not imported, report the exact registration
+    blocker and service identity immediately; do not anchor it to the caller as a placeholder or
+    import/change another project without authority. Submit as soon as the binding is available.
+
+required_record:
+  model: >-
+    The EXECUTING model that detected the defect, from its launch/runtime identity; a tier alias
+    is resolved to its recorded model binding. Never substitute the parent or invent an id.
+    If the runtime does not expose the exact id, still create immediately with the known model
+    identity and an explicit unknown-id reason; complete it when the identity becomes available.
+  discovery_project: name and immutable UUID of the project where the fault was observed
+  affected_project: name and immutable UUID of the project that needs correction; this is the anchor
+  service: called service id/copy, command or endpoint, DEV/production target and responding version when available
+  reproduction: exact call, relevant non-secret arguments, actual error/result, expected behavior and concise evidence
+
+submission:
+  schema: read current command-specific help for bug_create; no invented top-level parameters
+  shape: >-
+    bug_create {source_type: project, source_project_id: <affected_project_uuid>,
+    title, short_description, detailed_description, kind, severity, priority_nice,
+    reporter: <executing model identity>, created_by: <actor>,
+    evidence: {model: <executing model identity>,
+    discovery_project: {name, id}, affected_project: {name, id},
+    service, command, actual_result, expected_result, reproduction}}
+  metadata: >-
+    The model and discovery-project fields belong in evidence and the human-readable description;
+    source_project_id is the affected project's anchor, never a surrogate discovery field.
+  receipt: >-
+    Read the returned bug UUID and owning project; put them into the detecting unit's logger
+    answer/report or allowed result fields and report them to the user. "Will file later", a TODO,
+    an agent message or a final warning is not bug registration.
+  repeated_symptom: >-
+    Once this occurrence has its bug UUID, append further evidence there rather than filing the
+    same failing call repeatedly. Do not delay a new defect for a broad duplicate search.
+
+registration_failure: >-
+  Capture the exact failed bug_create/help call and error; never claim a bug was created without
+  its returned UUID. If the Plan Manager is unavailable, record the pending defect in the
+  available authorized logger/task channel, state that registration failed, and submit against
+  the affected project as the first action when registration becomes possible. A logger outage
+  does not authorize scratch files; its existing outage/no_logger_mode rule still applies.

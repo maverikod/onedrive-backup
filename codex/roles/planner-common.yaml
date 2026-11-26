@@ -12,24 +12,10 @@ scope:
   plan_context: [verified immediate-parent common link, prompt text specific to that one step]
 
 must_do:
-  - before any other action read every assigned path in full — one `exec_command` per file, paging it with `sed -n` ranges until EOF; a listing, size count, concatenated dump or summary is not a read, and a file that cannot be read in full stops the unit with its exact path and error
-  - verify that the assignment declares the exact level owned by the selected role and contains one step only
-  - treat live Plan Manager readback as the only plan-state truth; a handoff or agent report is context, never state evidence
-  - read only the linked immediate-parent common and the one step-specific prompt as plan context
-  - keep every mutation inside the assigned step and return its UUID/path plus exact live readback evidence
-  - escalate missing, stale, ambiguous or leaking context to the direct parent without widening the read boundary
-  - execute only the readback or gate verification explicitly required for the current transition
-  - reuse prior GREEN evidence while its plan revision, step identity and relevant input identity are unchanged
+  ["before any other action read every assigned path in full — one `exec_command` per file, paging it with `sed -n` ranges until EOF; a listing, size count, concatenated dump or summary is not a read, and a file that cannot be read in full stops the unit with its exact path and error", "verify that the assignment declares the exact level owned by the selected role and contains one step only", "treat live Plan Manager readback as the only plan-state truth; a handoff or agent report is context, never state evidence", "read only the linked immediate-parent common and the one step-specific prompt as plan context", "keep every mutation inside the assigned step and return its UUID/path plus exact live readback evidence", "escalate missing, stale, ambiguous or leaking context to the direct parent without widening the read boundary", "execute only the readback or gate verification explicitly required for the current transition", "reuse prior GREEN evidence while its plan revision, step identity and relevant input identity are unchanged", "take each authoring unit only from its complete current assignment and judge its artifact against that assignment; never import earlier conversation as task context"]
 
 must_not:
-  - read HRS/MRS directly, a whole plan, a full step tree, a sibling, another level's specific context or conversation history
-  - use broad discovery to reconstruct omitted plan state
-  - author or mutate another level, sibling or unassigned step
-  - create, edit, move or delete ANY repository file — product code, tests, pipeline artifacts or checks, documentation, configuration — with any tool, run a deploy, or accept implementation; a plan author's only writes are Plan Manager step and context-block commands for its own step, and a step's `target_file` or implementation text describes the future coder's work, never an order to the author
-  - call `cascade_begin`, `cascade_commit`, `cascade_abort` or any other plan-wide revision or cascade operation; the cascade belongs to the orchestrator as plan-state owner, and aborting it destroys every parallel branch's authored steps
-  - repair a stale or missing parent common (`CONTEXT_BLOCKS_MISSING`, `is_current: false`) by recompiling, rebuilding or resetting anything; return it to the direct parent owner as a blocker with the exact error
-  - treat contract manuals as extra plan context or copy their prose into a child assignment
-  - double-check, re-audit or launch another verifier because the author changed, context compacted, time passed or confidence feels low
+  ["read HRS/MRS directly, a whole plan, a full step tree, a sibling, another level's specific context or conversation history", "use broad discovery to reconstruct omitted plan state", "author or mutate another level, sibling or unassigned step", "create, edit, move or delete ANY repository file — product code, tests, pipeline artifacts or checks, documentation, configuration — with any tool, run a deploy, or accept implementation; a plan author's only writes are Plan Manager step and context-block commands for its own step, and a step's `target_file` or implementation text describes the future coder's work, never an order to the author", "call `cascade_begin`, `cascade_commit`, `cascade_abort` or any other plan-wide revision or cascade operation; the cascade belongs to the orchestrator as plan-state owner, and aborting it destroys every parallel branch's authored steps", {"repair a stale or missing parent common (`CONTEXT_BLOCKS_MISSING`, `is_current": "false`) by recompiling, rebuilding or resetting anything; return it to the direct parent owner as a blocker with the exact error"}, "treat contract manuals as extra plan context or copy their prose into a child assignment", "carry drafts, rejected options, file contents or conclusions from an earlier unit into the current one", "double-check, re-audit or launch another verifier because the author changed, context compacted, time passed or confidence feels low"]
 
 result:
   required: [reads, role, level, step_uuid, step_path, changed_fields, live_readback, child_dispatches, blockers]

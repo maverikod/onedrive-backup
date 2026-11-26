@@ -7,7 +7,7 @@
 # read from fresh command-specific `help` is unavailable, and inventing a command name is a
 # defect, not an attempt.
 
-template_version: v1.7.97
+template_version: v1.7.101
 
 purpose: >-
   The Code Analysis Server is the authoritative surface for the registered server-side project:
@@ -157,16 +157,30 @@ blocks:
 
   refactor:
     applies_after_event_selection: >-
-      before splitting a file or a class, before extracting a superclass, and whenever a file or
+      before extracting a method or constant, splitting a file or class, extracting a superclass, and whenever a file or
       a class has grown past the point where the `analysis` block flags it — `list_long_files`,
       `analyze_complexity`, `find_duplicates` or `comprehensive_analysis`
     commands:
+      extract_method: >-
+        extract whole statement-aligned ranges of one function or method; first use dry_run:
+        true. Call {project_id, file_path, config: {target: "Class.method", extractions:
+        [{start_line, end_line, new_name}]}, dry_run: true}; line bounds are 1-based inclusive
+        in the ORIGINAL source, never recomputed between cuts. An unbundled helper has at most
+        8 parameters (self/cls excluded); more inputs require bundle: <DataclassName> on that
+        extraction, producing one frozen-dataclass parameter bundle_ctx. Live help defines the
+        current restrictions and proof results; a refusal is not evidence that no extraction exists.
+      split_constant: >-
+        split a module-level list, tuple, set, frozenset or dict into named groups while
+        preserving its value; first use {project_id, file_path, constant, groups:
+        {<GROUP>: {items: [...], module: <optional sibling module>}}, dry_run: true}.
+        Omit module to keep the group in the original file; rest_group optionally receives
+        unassigned items. Read live help before writing.
       split_file_to_package: split one file into a package of several modules
       split_class: split one class into several smaller classes
       extract_superclass: lift shared behaviour of several classes into a base class
     availability: >-
       This block is available in BOTH work profiles — it is the one CAS write path the `local`
-      profile admits, carved out of `laws.local_mode` by name. The reason is that these three
+      profile admits, carved out of `laws.local_mode` by name. The reason is that these
       commands do a structural rewrite no local edit sequence performs safely by hand, and the
       server-side project mirrors the local checkout, so the result comes back through the
       branches. Nothing else in `local` changes: builds, tests, deploys and ordinary file edits
@@ -180,7 +194,11 @@ blocks:
       the `analysis` block — length, complexity, duplication. The split follows from that
       analysis: which module boundary the tree already implies, which class carries two
       responsibilities, which base class the hierarchy is asking for. A split chosen without the
-      tree analysis is a split chosen on taste. (3) Map every caller with the
+      tree analysis is a split chosen on taste. (2) For a long method consider the chain
+      extract_method -> split_class -> split_file_to_package, using only the stages analysis
+      justifies; use split_constant for an oversized collection and extract_superclass for
+      shared behaviour. Preview first and inspect the returned proofs, imports and size verdict.
+      (3) Map every caller with the
       `refactoring_support` block: `find_usages`, `find_dependencies`, `get_entity_dependents`,
       `get_class_hierarchy`; a split that ignores an importer breaks it silently. (4) Take the
       locks from the `locks` block for every file the split will touch. (5) Run the split
@@ -292,8 +310,8 @@ blocks:
     rules:
       - >-
         In `local`, ordinary work uses the authoritative local checkout. Server-side Git, push and
-        site-to-site synchronisation run only on the user's explicit command or as the mandatory
-        exchange of block `two_site_sync`. Inside that exchange the server's `local` branch is
+        site-to-site synchronisation run only on the user's explicit command, as the mandatory
+        exchange of block `two_site_sync`, or as the automatic dev_prod production pass after targeted DEV GREEN (main merge/push only). Inside that exchange the server's `local` branch is
         overwritten from GitHub and its CAS-only differences are disposable; the server's `cas`
         branch is merged, never discarded.
       - >-

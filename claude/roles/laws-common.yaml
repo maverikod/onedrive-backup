@@ -123,7 +123,8 @@ laws:
     deploying, restarting and running the pipeline there against your own service is ordinary
     work, `root` included, and is never a question put to the user. With `variables.dev_prod: true`
     that free work is on its DEV installation; its own PRODUCTION installation and database change only through the production pass of
-    `dev_prod_instances`, which runs ONLY on the user's explicit command after the full DEV pipeline is GREEN. That same host carries PRODUCTION DATABASES and
+    `dev_prod_instances`, which runs AUTOMATICALLY immediately after every affected named DEV check
+    is GREEN. That same host carries PRODUCTION DATABASES and
     other projects' live services — which is why the line is per PROJECT, not per host. OUTSIDE
     the boundary every other project is STRICTLY READ-ONLY on every host and through every
     surface. You MAY read, search, analyse, reproduce and diagnose. You MAY NOT write: no edit,
@@ -136,6 +137,18 @@ laws:
     and the exact proposed change, report it to the user in the same message, then continue
     without the change or state that you are blocked. If ownership is unclear, treat it as
     outside and ask first.
+  immediate_service_bug_registration: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: discovery of an actual defect in any used service,
+    OWN or FOREIGN, in every mode and role] The detecting model MUST IMMEDIATELY create a bug in
+    the production Plan Manager, before a workaround, retries, handoff or unrelated work.
+    Record the executing model and discovery project's name/UUID in evidence and the description.
+    Anchor it to the affected project that NEEDS THE FIX, never to the discovery project merely
+    because the caller works there; for an own-service bug they may coincide. Use live project
+    identity and bug_create help, not guessed source parameters. Report the returned bug UUID
+    and affected-project anchor. This is the narrow exception to orchestrator, read-only,
+    report-only and planning-role write limits solely for registering/readback of this bug;
+    it grants no foreign repair or plan-truth write. Follow ops/service-bugs.yaml, including
+    explicit registration-failure handling; a promise, TODO or final warning is not a filed bug.
   source_freshness: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: every statement about the state of the plan, the code, or the documentation] Truth
     lives in four places and each answers for itself: the Plan Manager for plan state, the site
@@ -155,7 +168,7 @@ laws:
     handoff, elapsed time, model doubt or desire for higher confidence changes no state and grants no
     repeat. Allowed executions are ONLY: the first required verification for that state; the same
     named focused check once after a relevant implementation or deployed-state change in its required
-    RED/GREEN loop; exactly one contract-required final full pipeline after targeted GREEN; one fresh
+    RED/GREEN loop; one full pipeline only with explicit user permission for that target and run; one fresh
     source read immediately before a mutation/dispatch when `source_freshness` or the planning-common
     gate requires it; one scoped repeat explicitly ordered by the user; or a tool-failure retry that
     produced no verdict and is permitted after classification. NEVER launch sequential or parallel
@@ -164,11 +177,27 @@ laws:
     unchanged state. A verification without an authorizing rule or an unchanged-state repeat outside
     this allowlist is a contract DEFECT: stop, reuse the existing evidence and continue from the
     transition it already authorizes. See `ops/verification-discipline.yaml`.
+  full_pipeline_user_permission: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: every pipeline invocation, build/deploy wrapper,
+    verification and done claim, in every mode] A full pipeline is OPTIONAL in DEV, production and
+    libraries. NEVER start it autonomously: only the user's explicit permission naming the full run
+    and its target authorizes it. A bug-fix request, targeted GREEN, deploy, automatic production
+    pass, completion rule, earlier permission for another run, silence or a script default is NOT
+    permission. Without that permission use ONLY the affected named checks; do not invoke `python -m
+    pipeline` without a check argument, an all-checks option, or a wrapper/CI job that launches all
+    checks. Build, deploy and startup smoke steps must select named checks and must not hide a full
+    run. Record full_pipeline: not_run_not_authorized when no permission was given; this is not a
+    failure, delivery blocker or production prerequisite. If a full run was explicitly authorized,
+    honor its scope and report its result; a RED or unfinished authorized run blocks completion.
+    This law overrides any stale automatic-full-run or mandatory-full-GREEN wording. Production
+    follows targeted DEV GREEN automatically, from main after both source branches are merged,
+    independently of permission for a full run.
   server_branches_are_mirrors: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any push or site-to-site synchronisation] Push and synchronisation happen ONLY on
     the user's explicit command, with two standing exceptions that need no separate command: the mandatory `cas`+`local` exchange of
-    `two_site_sync`, and the merge into and push of `main` by the production pass of
-    `dev_prod_instances`, which the user's explicit production command already covers. Inside that exchange the integration branch is
+    `two_site_sync`, and the complete production pass and final project-wide synchronization of
+    `dev_prod_instances` and `deployment_block_lifecycle`, which the standing automatic DEV-to-production rule already authorizes
+    after targeted DEV GREEN. Inside that exchange the integration branch is
     merged and its conflicts resolved, while the other site's non-integration branch (the server's
     `local` when the work site is local, the local `cas` when the work site is CAS) is a disposable
     mirror: overwrite it from GitHub without analysing or preserving them, its differences being
@@ -177,12 +206,12 @@ laws:
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before a CAS-backed operation in the `local` profile] Ordinary local reads, edits,
     builds and tests never require branch synchronisation or mirror attestation. Current local
     content reaches CAS through `two_site_sync`, once before each block; outside that exchange do
-    not push or synchronise without the user's explicit command. Read-only agents use the local checkout directly and do not attest
+    not push or synchronise without the user's explicit command, except the automatic dev_prod production pass after targeted DEV GREEN and its mandatory final synchronization after production GREEN. Read-only agents use the local checkout directly and do not attest
     local/CAS refs.
   branch_sync_after_every_step: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: after a local step] Report the local result and leave remote and CAS refs untouched
-    until the next `two_site_sync`. Outside it, push or synchronise only when the user explicitly
-    commands it. Never imply that a local
+    until the next `two_site_sync`, except the automatic dev_prod production pass after targeted DEV GREEN and its mandatory final synchronization after production GREEN.
+    Outside those two exceptions, push or synchronise only when the user explicitly commands it. Never imply that a local
     commit or prepared release was pushed.
   worktree_location: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before any `git worktree add` for a local checkout
@@ -264,6 +293,41 @@ laws:
     to the `tester` stage. The `coder` stage NEVER edits a check; a check weakened by the hand
     that made it pass is self-acceptance. A check that cannot be shown RED on the broken behaviour
     and GREEN on the fixed one measures the wrong quantity; do not add a separate model review.
+  deployment_block_lifecycle: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before EVERY DEV build, after DEV/production
+    results, and before delivery with variables.dev_prod true] The working branches are `local`
+    for file_access local and `cas` for file_access cas. BEFORE EVERY DEV BUILD, inventory every
+    branch and LOCAL worktree included in the deployment block, including dirty/untracked/ignored
+    content. Preserve private and unrelated work. Commit accepted block content on its owning
+    branch, merge ALL included branches/worktree commits into the mode-selected working branch,
+    resolve conflicts preserving every accepted change, and prove all recorded source commits
+    are ancestors of its integrated HEAD. A report, patch-equivalence claim or worktree snapshot
+    is not ancestry. Build.sh must refuse a missing source commit or incomplete block inventory.
+    Build/deploy that exact integrated candidate, then run only the affected named DEV checks.
+    Before any subsequent DEV build repeat this integration gate for newly changed block state.
+    AFTER ALL those checks are GREEN, integrate any remaining accepted block commits; if this
+    changes the tested candidate, rebuild DEV and run the affected named checks before proceeding.
+    Remove the block's merged clean worktrees only after both ancestry and DEV GREEN are proven;
+    preserve dirty/private files, never force-remove or delete the authoritative checkout, and
+    record every removal or exact blocker. MUST CONTINUE immediately: merge `local`/`cas` and ALL
+    recorded current-working and actual DEV-source commits into `main`, push `main`, build
+    production ONLY FROM `main`, deploy and run the SAME named checks as the GREEN DEV set.
+    No extra production command and no stop at ready-for-production. A full pipeline runs ONLY
+    on an explicit user command for that run and target (`full_pipeline_user_permission`).
+    AFTER PRODUCTION GREEN on that SAME set, perform FULL SYNCHRONIZATION of EVERY repository
+    of this project: the local checkout, GitHub origin and registered CAS mirror (and any other
+    configured replica). Inventory and account for every branch/ref and remaining worktree,
+    preserve private/unrelated files, integrate unique accepted project content without force
+    or history rewriting, publish and fetch the agreed branch/tag refs, and prove exact matching
+    commits/trees for corresponding refs with zero ahead/behind. Keep immutable release snapshots
+    and intentional working/main topology; synchronization does not mean moving release refs or
+    checking out main in an indexed CAS project. A newly discovered content change invalidates
+    affected acceptance and returns through DEV before production and final synchronization.
+    The standing user rule authorizes the entire lifecycle, including final remote synchronization.
+    The orchestrator MUST dispatch every remaining transition instead of a reporting agent; only
+    an exact failed gate, explicit user stop or genuinely missing decision can block it. Delivery
+    is complete only after production same-check GREEN, merged-worktree disposition and final
+    replica readback. See `ops/delivery.yaml` `dev_prod.deployment_block`.
   cas_index_is_dev: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any CAS project registration, two-site exchange,
     branch switch or production pass, in every project]
@@ -297,16 +361,24 @@ laws:
     `model-access-core`, never worked around. See `ops/delivery.yaml`
     `fleet_dev_dependencies.lmrs_only_through_macsc`.
   deployed_pipeline_green_is_done: >-
-    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any done claim] A service is done only after its final candidate is deployed to
-    `root@192.168.254.26` — with `variables.dev_prod: true` to its DEV installation (deployed by `build.sh`,
-    default `--dev yes`, registered under `iddev`) — reports the expected version and registration state, every
-    affected named check is GREEN, and the full pipeline, run once AUTOMATICALLY, is then GREEN against it. With `dev_prod` true that GREEN full DEV pipeline
-    completes the work: production is NOT part of done and goes out only on the user's explicit
-    command under `dev_prod_instances` — rebuilt without `-dev`, deployed, and checked against production by default by the same named checks
-    that were GREEN in DEV; a commanded production pass is done when those production checks are GREEN; the full pipeline
-    against production runs only when the user's command names it. A library is done only
-    after the same sequence over its real examples. A local result, commit, build, package,
-    deploy acknowledgment, skipped check, unreachable service or model verdict is not delivery.
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any done claim] A service is done only after its final candidate is
+    built and deployed to `root@192.168.254.26`, reports the expected version and MCP Proxy registration,
+    and every
+    affected named check is GREEN. With `variables.dev_prod: true`, targeted DEV GREEN immediately
+    starts the AUTOMATIC production pass of `dev_prod_instances`: merge ALL content of the current
+    working branch AND the actual DEV source branch into `main`, push `main`, build production only
+    from `main`, deploy it and run the same named checks against production. Done then requires those production checks
+    GREEN. A full pipeline is optional in every environment and NEVER runs without explicit user
+    permission (`full_pipeline_user_permission`); report it as not run when not authorized, without
+    blocking targeted acceptance. Any explicitly authorized full run that is RED or unfinished blocks
+    completion. A library is done after its affected real-example named checks are GREEN and the
+    verified package is published to PyPI under `pypi_publication_scope`. A commit, build, package,
+    deploy acknowledgment, skipped affected check, unreachable service or model verdict is not delivery.
+    With dev_prod true this is not delivered until `deployment_block_lifecycle` has removed the
+    merged clean block worktrees and synchronized ALL project repositories after production GREEN
+    on the SAME named checks, with ref/tree readback and zero ahead/behind. MUST CONTINUE through
+    those mandatory transitions before reporting completion.
+
   exact_failure_reporting: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: any failing command or test] Report the exact failing command and the important
     error details. NEVER summarise a failure into "it did not work".

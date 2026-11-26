@@ -1,5 +1,5 @@
 # onedrive-backup — common laws for every role stage
-template_version: v1.7.97
+template_version: v1.7.101
 startup_contract:
   required_reads: [this file, triggers.yaml]
   exact_scope: >-
@@ -56,14 +56,7 @@ stage_model:
     conscience: exceptional user-requested holistic risk report after pipeline evidence; never a bulk step checker and never code acceptance
 
 subagent_policy:
-  default: >-
-    Dispatch every substantive unit to an agent. Start at the cheapest Claude tier that is
-    plausibly capable at the edge of its ability. Every modifying agent uses its own LOCAL git
-    worktree and branch; read-only agents use the authoritative work site. For a checkout directly
-    under `~/projects/tools`, every NEW worktree goes under
-    `~/projects/tools/wt/<checkout-directory-name>/<unique-worktree-name>/`. No agent pushes or
-    synchronises sites unless the user explicitly commands that operation or `laws.two_site_sync`
-    assigns the exchange to that unit.
+  default: "Dispatch every substantive unit to an agent. Start at the cheapest Claude tier that is plausibly capable at the edge of its ability. Every modifying agent uses its own LOCAL git worktree and branch; read-only agents use the authoritative work site. For a checkout directly under `~/projects/tools`, every NEW worktree goes under `~/projects/tools/wt/<checkout-directory-name>/<unique-worktree-name>/`. No agent pushes or synchronises sites unless the user explicitly commands that operation or `laws.two_site_sync` assigns the exchange to that unit, or the automatic dev_prod production pass assigns its main merge/push after targeted DEV GREEN and final project-wide synchronization after production GREEN (laws.deployment_block_lifecycle)."
   model_tier: >-
     Every launch passes its Claude tier key — `haiku`, `sonnet`, `opus` or `fable` — as the
     `model` argument per `ops/model-selection.yaml`; the full ids there are tier bindings, never
@@ -73,7 +66,7 @@ subagent_policy:
     (`laws.cheapest_capable_model`).
   acceptance: >-
     A service unit is accepted by its named `pipeline` check on the deployed server; a library unit
-    is accepted by its named example check. The full pipeline accepts the completed task. No model
+    is accepted by its named example check. The affected named checks accept the task; full pipeline is OPTIONAL and NEVER runs without explicit user permission. No model
     verifier, conscience pass, or branch-attestation round is added around those results. A higher
     tier after RED is a corrective executor, never a reviewer.
   checklist:
@@ -91,7 +84,7 @@ subagent_policy:
   forbidden:
     - launching an agent without an explicit model tier key, or with a full model id or effort setting instead of it
     - performing agent work in the orchestrator session outside its planning HRS/MRS ownership, `stupid_mode` or `prompt_development`
-    - dispatching the same Claude tier again after pipeline RED
+    - "escalating a correction solely for its FIRST RED; the first failure permits correction on its warranted rank and only the SECOND failure of the same item on that rank advances one rank"
     - launching a model reviewer before pipeline RED
     - deleting, weakening, waiving or marking a checklist item not applicable
     - treating an agent report as execution evidence
@@ -116,4 +109,4 @@ context_discipline:
   - read every path in the assigned `agent_reads` in full, in one batch of parallel reads, before the first action, open the return with `reads:`, then never re-read an unchanged file — `laws.assigned_reads_gate`, `laws.context_economy`
 
 escalation_chain: "blocked or ambiguous -> state exact evidence -> ask only when local evidence cannot resolve it safely"
-tool_error_law: "tool error -> stop, classify it, and follow tooling-rules before continuing"
+tool_error_law: "tool error -> classify immediately; for an actual service defect, MUST IMMEDIATELY create a production Plan Manager bug on an actual defect in any used service, OWN or FOREIGN; record the executing model and discovery project name/UUID in evidence/description and anchor it to the affected project that NEEDS THE FIX; read back the bug UUID and anchor, never defer to a handoff or TODO; every role may do only this narrow registration write (laws.immediate_service_bug_registration, ops/service-bugs.yaml)."

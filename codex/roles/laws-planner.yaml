@@ -40,7 +40,10 @@ laws:
     `ops/planning-runtime.yaml` `plan_steps_check_event` is the full state machine.
   user_authorized_plan_freeze: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: preparing, requesting or executing any PLAN freeze]
-    Only the user may authorize freeze. No mechanical validation, semantic GREEN, matrix review,
+    When no governing plan covers an existing external surface, use the explicit user owner_approval
+    record of `external_surface_change_requires_matrix_revision` instead: there is no PLAN freeze and
+    the TODO is never described as frozen. This exception never replaces the freeze of an existing
+    governing plan or the plan for a new external contour. Only the user may authorize freeze. No mechanical validation, semantic GREEN, matrix review,
     implementation request, agent verdict, procedure or prior permission authorizes it. Keep one
     mutable candidate through the whole finding/correction/rerun cycle and NEVER freeze an
     intermediate correction. Before requesting permission, incorporate the reviewed matrix and, in `planning`,
@@ -79,7 +82,9 @@ laws:
     After deploying each group, run only the named checks mapped to that group: RED
     returns the entire still-red group to diagnosis, proof, correction and deployment; GREEN opens
     the next group. A group of one is valid but is not the default decomposition. When the complete
-    requested contour is targeted-GREEN, the model runs the full pipeline once AUTOMATICALLY, with no user command or question. The pipeline is the
+    requested contour is targeted-GREEN, the named checks accept it; NEVER run the full pipeline
+    without explicit user permission for that run and target (`full_pipeline_user_permission`). With
+    dev_prod true, proceed immediately to production by `dev_prod_instances`. The pipeline is the
     verifier; do not add a model-verifier ladder, branch-attestation loop or narrative acceptance
     layer. See `ops/delivery.yaml` `external_contour_first`. A bug fix, a refactoring or any change
     that leaves the external interface as it is never enters this law: it runs on the TODO tree of
@@ -139,8 +144,8 @@ laws:
     case's result contract. Skipped/XFAIL/manual cases, success inferred from no exception, HTTP
     status alone, a substring, schema alone, or a matrix copied but not executed are defects. A
     changed callable, parameter, relation, return/result/error contract or side effect updates the
-    project TODO first and requires a new user-authorized frozen PLAN revision;
-    never edit only the local snapshot. The pipeline fails RED when the project/TODO/plan identity,
+    project TODO first and requires a new user-authorized frozen PLAN revision, or, only for an
+    existing surface with no governing plan, its explicit user owner_approval record; never edit only the local snapshot. The pipeline fails RED when the project/TODO/plan identity,
     live callable inventory, accepted-parameter cells, relations, result contracts or derived
     executable assertions do not match. See
     `ops/planning-runtime.yaml` `pipeline_matrix_todo` and `ops/testing.yaml` `command_parameter_matrix`.
@@ -150,7 +155,9 @@ laws:
     anchored by that project's immutable `anchor_project_id`. This anchored TODO is the required
     project work record; do not invent a project attribute that Plan Manager does not expose.
     Absence, duplicates, a foreign-project anchor, or disagreement with the matrix incorporated into
-    the frozen plan revision blocks plan freeze and implementation. This applies to both `service`
+    the frozen plan revision blocks plan freeze and implementation. For an existing surface with no
+    governing plan, compare against the exact matrix accepted in the user owner_approval record
+    instead; do not create a plan just to hold that approval. This applies to both `service`
     and `library` projects.
   external_surface_change_requires_matrix_revision: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: proposing, planning or making any addition, removal or change to a service command,
@@ -168,8 +175,21 @@ laws:
     successor revision UUID and the HRS, MRS and matrix change; only the user's explicit permission
     freezes it (`laws.user_authorized_plan_freeze`); (7) after the freeze refresh
     `pipeline/matrix.yaml` and continue by `laws.external_api_change_pipeline_first`. No G/T/A step
-    is written or rewritten: a full step record is not required. A project with no plan updates
-    its matrix TODO and asks the user the same way before any repository change. No direct
+    is written or rewritten: a full step record is not required. An existing surface with no
+    governing plan follows the owner_approval path instead of steps (1)-(7): update the unique
+    project-anchored matrix TODO with the complete affected rows, parameter cells, relations and
+    result contracts; present that exact delta and the TODO's id and current updated_at; wait for the
+    user's explicit approval of it. The planner then appends an owner_approval record in that TODO's
+    text, containing the exact accepted matrix/delta, the user's authorization and its date, and
+    reads back the TODO id and updated_at. Those native fields plus the exact approval text identify
+    the authority in execution tasks and `pipeline/matrix.yaml`; plan id and plan revision are
+    absent, never invented. The TODO remains open: neither its record nor its native status is called
+    frozen. A change to the approved matrix invalidates the approval and requires a new presented
+    delta and explicit user approval. "Freeze D1-D8, no plan, only TODO" authorizes this approval
+    record for exactly those presented deltas, never a plan freeze. Only then refresh the local
+    matrix and affected checks, obtain RED against the unchanged contour and continue by
+    `laws.external_api_change_pipeline_first`. This path never bypasses an existing governing plan or
+    `laws.external_contour_first` for a new contour. No direct
     external-API edit may bypass this event. See `ops/planning-runtime.yaml`
     `external_surface_change_events`.
   external_api_change_pipeline_first: >-
@@ -177,7 +197,8 @@ laws:
     request/response schema, parameter, constraint, result/error contract or observable side
     effect, or to a public library constructor, function, method, signature, parameter, constraint,
     return type, result/error contract or observable side effect] After the matrix change of
-    `laws.external_surface_change_requires_matrix_revision` is authorized by the user and frozen, the FIRST
+    `laws.external_surface_change_requires_matrix_revision` is authorized by the user and frozen, or
+    its owner_approval is recorded for an existing surface with no governing plan, the FIRST
     repository changes MUST be `pipeline/matrix.yaml` and the affected named checks under
     `pipeline/checks/`. Run those named checks against the unchanged deployed service or current
     runnable library examples and obtain RED for the planned contour change. Until that RED exists,

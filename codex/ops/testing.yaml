@@ -9,7 +9,7 @@ rules:
   - every agent receives the immutable checklist for the whole group with every criterion, required evidence and exact mapped named pipeline command
   - local and unit runs are diagnostic; the real service or runnable example supplies RED and GREEN
   - before the first live RED there is no model review; after RED the corrective agent on the rank `laws.cheapest_capable_model` selects diagnoses, proves, fixes, deploys and runs only the same mapped block commands
-  - run the full pipeline once, AUTOMATICALLY, with no user command or question, as soon as the complete requested task or bug block is targeted-GREEN
+  - "A full pipeline is OPTIONAL in every environment and NEVER runs without explicit user permission for that run and target (laws.full_pipeline_user_permission). Build/deploy/startup wrappers must not launch it. Use only affected named checks by default; record full_pipeline: not_run_not_authorized without blocking delivery or automatic production."
   - never add verifier agents or branch-attestation rounds around a mechanical pipeline result
   - reuse every GREEN command result while its target version and relevant inputs are unchanged; never rerun it for confidence, after compaction or through another agent
   - when an existing external API changes, the first repository changes are pipeline/matrix.yaml and the affected named checks; those checks must be RED against the unchanged contour before API, client, example or product-code edits begin
@@ -19,9 +19,10 @@ pipeline_cli:
   location: "the project's own checkout only; never shipped in a distribution, never installed into the user site or the system Python"
   interpreter: "the project's own environment (`.venv`), set up from the checkout"
   run_all: "python -m pipeline"
+  run_all_authorization: "OPTIONAL; NEVER invoke without explicit user permission naming this full run and target; this includes wrappers and CI"
   run_one: "python -m pipeline <check-name>"
   list_checks: "python -m pipeline --list"
-  environment: "`PIPELINE_ENV` = `dev` (working branch) | `prod` (`main`, only after the production deploy of `build.sh --dev no`, which runs only on the user's explicit command: by default the same named checks that were GREEN in DEV, another set, the full pipeline included, only when the command names it); decided by the current branch — `main` is always `prod`, any other branch always `dev`; a contradicting explicit value is refused; exported by `build.sh`, never a committed file; every endpoint has `<NAME>_URL_DEV` / `<NAME>_URL_PROD` in the committed `pipeline/endpoints.env` (never `.env`, no secrets) and the branch picks one in one pipeline module — no hardcode (`laws.pipeline_environment`)"
+  environment: "`PIPELINE_ENV` = `dev` (working branch) | `prod` (`main`, only after the production deploy of `build.sh --dev no`, which runs automatically after targeted DEV GREEN and both source branches are merged into main: by default the same named checks that were GREEN in DEV, another set, the full pipeline included, only when the command names it); decided by the current branch — `main` is always `prod`, any other branch always `dev`; a contradicting explicit value is refused; exported by `build.sh`, never a committed file; every endpoint has `<NAME>_URL_DEV` / `<NAME>_URL_PROD` in the committed `pipeline/endpoints.env` (never `.env`, no secrets) and the branch picks one in one pipeline module — no hardcode (`laws.pipeline_environment`)"
   leases: "with `PIPELINE_ENV=dev` the pipeline takes ai-devlease leases (holder `<project>/<run id>`) on its own DEV service and every DEV fleet service of `pipeline/endpoints.env` (`<NAME>_LEASE_DEV`) BEFORE the first check, renews them every 60 s in the background, releases them AT ONCE right after the last check — before the summary or report — in a `finally` after GREEN, RED, an exception, SIGINT and SIGTERM, then proves by `status` that none is left; only a failed lease blocks (E1/E2/E3 exact refusal, E4 wait and retry); no direct systemctl/docker start or stop; the named check `devlease_leases` proves it; production runs and production-only services take no lease (`laws.fleet_service_leases`)"
   layout:
     package: "pipeline/"
@@ -32,7 +33,7 @@ pipeline_cli:
     unit_check: "pipeline/checks/check_unit_<module>.py"
     module_entry: "pipeline/__main__.py calls pipeline.main:main; no `pipeline` console script and no `pipeline*` package include in any pyproject.toml"
   contract:
-    - no arguments runs every check
+    - "no arguments runs every check; invoking it without explicit user permission for that full run and target is FORBIDDEN"
     - one argument runs only that named check
     - every service check reaches the server only through the project client; the client owns both normal typed methods and the bounded validation invocation that can send a raw parameter map for negative cases
     - every library check runs the corresponding real example or testing-script capability
@@ -49,8 +50,11 @@ external_contour_coverage:
 command_parameter_matrix:
   law: laws.pipeline_parameter_matrix
   artifact: pipeline/matrix.yaml
-  authority: the matrix incorporated from the project's directly anchored Plan Manager TODO into the frozen normative plan revision
-  required_identity: [project id, TODO id, TODO updated_at, plan id, frozen plan revision]
+  authority: the matrix incorporated from the project's directly anchored Plan Manager TODO into the frozen normative plan revision; for an existing surface with no governing plan, the exact matrix in its explicit user owner_approval record
+  required_identity:
+    common: [project id, TODO id, TODO updated_at]
+    governing_plan: [plan id, frozen plan revision]
+    owner_approval: [exact approved matrix, exact user authorization text and date, approval record text]
   source_of_surface:
     service: the live command listing or API schema, cross-checked with the project client
     library: the declared public callable inventory, cross-checked with the importable library surface
@@ -96,7 +100,7 @@ command_parameter_matrix:
     - value-dependent relationship selectors are validated sufficiently to select the relation; an invalid selector reports its own type/value error
     - every case references its row baseline result contract or a focused override and carries exact executable assertions for the outcome determined by its command, supplied parameters and preconditions
   execution:
-    - reject a local matrix whose project/TODO identity or content does not match the frozen normative plan revision
+    - reject a local matrix whose project/TODO identity or content does not match the frozen normative plan revision, or, only without a governing plan, its exact owner_approval record; an approved-matrix change invalidates that approval
     - every derived case executes through the project client or real library example/testing script
     - the named check fails when any required case is absent, duplicated, skipped, XFAIL, manual-only, lacks a result contract or does not assert the returned value or error and observable side effects
     - the pipeline fails before acceptance when the live callable inventory, parameter schema or result/error schema has no exact matrix match
@@ -106,7 +110,7 @@ command_parameter_matrix:
     - accepting no exception, HTTP status alone, a substring, type alone or schema alone as proof of a correct result
     - omitting a command/method row, an accepted parameter cell, a declared relationship or one of its required focused cases
     - a documentation-only matrix that the pipeline does not load
-    - a local-only matrix edit not preceded by an updated project TODO, semantic GREEN, explicit user freeze authorization and one new frozen PLAN revision
+    - a local-only matrix edit not preceded by an updated project TODO, semantic GREEN, explicit user freeze authorization and one new frozen PLAN revision; only an existing surface with no governing plan uses explicit user owner_approval instead
 
 bugfix_check:
   sequence:
@@ -116,16 +120,16 @@ bugfix_check:
     - after root-cause proof and correction, run build.sh, then deploy/install the service candidate or start the library example
     - run only the same mapped block commands
     - RED after a correction is a failure: the first on a rank is corrected again on that rank, the second raises the next correction exactly one rank; GREEN closes the mapped items without model review
-    - after every item in the requested block is GREEN, run the full pipeline once AUTOMATICALLY, with no user command or question
+    - "after every affected named check in the requested block is GREEN, immediately perform automatic production if dev_prod is true. A full pipeline is OPTIONAL in every environment and NEVER runs without explicit user permission for that run and target (laws.full_pipeline_user_permission). Build/deploy/startup wrappers must not launch it. Use only affected named checks by default; record full_pipeline: not_run_not_authorized without blocking delivery or automatic production."
 
 definition_of_done:
   law: laws.deployed_pipeline_green_is_done
-  service: the final candidate is deployed — while `laws.variables.dev_prod` is true, to its DEV installation (deployed by `build.sh`, default `--dev yes`, `laws.dev_prod_instances`) and never a check against production — is built by build.sh, reports the expected version and registration state, and the automatic full pipeline is GREEN against it; its build passes pushed the image to Docker Hub and published the matching client to PyPI
-  library: the locally built candidate's automatic full pipeline is GREEN over every declared example, then that exact package is published to PyPI; that publication is the library's deployment
+  service: "build.sh built/published/deployed the final candidate, registration/health/version and all affected named DEV checks are GREEN; with dev_prod true immediately merge ALL current-branch and actual DEV-source content into main, push main, build production only from main, deploy and run the SAME named checks to GREEN, then fully synchronize ALL project repositories with ref/tree readback before reporting completion; merged clean block worktrees must have been removed after DEV GREEN (laws.deployment_block_lifecycle). A full pipeline is OPTIONAL in every environment and NEVER runs without explicit user permission for that run and target (laws.full_pipeline_user_permission). Build/deploy/startup wrappers must not launch it. Use only affected named checks by default; record full_pipeline: not_run_not_authorized without blocking delivery or automatic production."
+  library: "all affected named real-example checks of the built candidate are GREEN, any explicitly authorized full run is GREEN and the exact package is published to PyPI. A full pipeline is OPTIONAL in every environment and NEVER runs without explicit user permission for that run and target (laws.full_pipeline_user_permission). Build/deploy/startup wrappers must not launch it. Use only affected named checks by default; record full_pipeline: not_run_not_authorized without blocking delivery or automatic production."
   not_done:
     - a local-only or mock result
     - a commit, build, package or deploy acknowledgment without the real named check
     - an agent or model verdict
-    - targeted checks passed but the full pipeline did not run; run it at once — waiting for or asking for a command is a DEFECT
+    - "an affected named check or explicitly authorized full run is RED or unfinished; an unauthorized optional full run is not a missing acceptance requirement"
     - a skipped check or unreachable service
-  evidence: exact command, target, responding version, named-check result and final full-pipeline result
+  evidence: "exact command, target, responding version, named-check results, both source refs/commits and authorized full-run result, otherwise full_pipeline: not_run_not_authorized"

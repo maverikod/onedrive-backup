@@ -1,5 +1,5 @@
 # onedrive-backup — orchestrator event registry for Codex
-template_version: v1.7.97
+template_version: v1.7.101
 mode_aliases: {planning: [planning, plan], plan_todo_repair: [plan_todo_repair, plan-todo-repair, "исправление TODO после проверки плана"], analysis: [analysis, inspect], stupid_mode: [stupid_mode, stupid-mode, single-model, "Режим тупого"], no_logger_mode: [no_logger_mode, no-logger, "без логгера", "Режим без логгера"], prompt_development: [prompt_development, prompt-development, autonomy], refactoring: [refactoring, implement]}
 registry_contract:
   purpose: This complete startup registry selects files by event; it is not permission to read every path.
@@ -139,7 +139,7 @@ events:
   pipeline_result:
     when: an agent returns a mapped pipeline RED or GREEN result
     orchestrator_reads: [codex/roles/orchestrator.yaml, codex/ops/model-selection.yaml]
-    action: route RED to the corrective rank of `laws.cheapest_capable_model` and GREEN to the next planned unit
+    action: route RED to the corrective rank of `laws.cheapest_capable_model`; on complete-block DEV GREEN with dev_prod true MUST dispatch merged-worktree cleanup then production from main and the same named checks; on production GREEN MUST dispatch full project repository synchronization before reporting (laws.deployment_block_lifecycle); other GREEN routes to the next planned unit
   requested_risk_report:
     when: after pipeline evidence, the user requests a human-readable risk report
     orchestrator_reads: [codex/roles/orchestrator.yaml, codex/ops/model-selection.yaml]
@@ -154,21 +154,22 @@ events:
     when: an assigned unit reads or writes the documentation server
     orchestrator_reads: []
     agent_reads: [codex/ops/doc-store-tools.yaml]
+  service_defect_detected: {when: an actual error is discovered in any used service OWN or FOREIGN, orchestrator_reads: [codex/ops/service-bugs.yaml], agent_reads: [codex/ops/service-bugs.yaml], action: immediately create and read back a bug anchored to the project needing the fix with executing model and discovery project recorded; no deferred handoff}
   cas_operation:
-    when: an assigned unit uses CAS; file_access is cas or local_ide; tree analysis, a structural rewrite such as splitting a file/class or extracting a superclass, code that is too long, too complex or duplicated, server git, a file too large for one inline call, a lock, job id, index-health or claim that something is absent from the project is involved; or the user explicitly commands local-to-CAS synchronization
+    when: an assigned unit uses CAS; file_access is cas or local_ide; tree analysis, a structural rewrite such as splitting a file/class, extracting a method or constant, or extracting a superclass, code that is too long, too complex or duplicated, server git, a file too large for one inline call, a lock, job id, index-health or claim that something is absent from the project is involved; or the user explicitly commands local-to-CAS synchronization
     orchestrator_reads: []
     agent_reads: [codex/ops/cas-tools.yaml]
   git_remote_or_release:
     when: a push, pull, fetch, remote update, version release or package publication is requested
     orchestrator_reads: [codex/roles/orchestrator.yaml]
     agent_reads: [codex/ops/delivery.yaml]
-    gate: the mandatory `cas` and `local` push inside `laws.two_site_sync` needs no command and `main` is never part of it; for every other remote change the user must explicitly authorize the remote-changing operation
+    gate: the mandatory `cas` and `local` push inside `laws.two_site_sync` needs no command and `main` is never part of it; the automatic dev_prod production pass immediately after targeted DEV GREEN requires merging ALL current and DEV source content into main and pushing main, plus full project synchronization after production GREEN; for every other remote change the user must explicitly authorize the remote-changing operation
     action: dispatch the selected modifying owner; the orchestrator performs no git or publication command
   site_synchronization:
-    when: local-to-CAS or CAS-to-local synchronization is requested, or the mandatory `laws.two_site_sync` exchange is due before the first agent unit of a block
+    when: local-to-CAS or CAS-to-local synchronization is requested, final project synchronization after production GREEN is due, or the mandatory `laws.two_site_sync` exchange is due before the first agent unit of a block
     orchestrator_reads: [codex/roles/orchestrator.yaml]
     agent_reads: [codex/ops/cas-tools.yaml]
-    gate: the mandatory `laws.two_site_sync` exchange needs no command; for every other site change the user must explicitly authorize the site-changing operation
+    gate: the mandatory `laws.two_site_sync` exchange and full project repository synchronization after production GREEN under `laws.deployment_block_lifecycle` need no separate command; for every other site change the user must explicitly authorize the site-changing operation
     action: dispatch the selected modifying owner; the orchestrator performs no transfer command
   tool_failure:
     when: a tool returns misuse, denial, transport, infrastructure or server failure

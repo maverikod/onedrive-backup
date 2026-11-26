@@ -9,7 +9,7 @@ rules:
   - state each authoring unit's scope, inputs and acceptance completely in its own assignment; see `agent_reuse_in_plan_creation`
   - decomposition ends in the external-contour order of `laws.external_contour_first`; see `branch_order`
   - no plan may freeze without the user's explicit authorization for the exact presented current candidate; matrix completion and semantic GREEN only permit requesting that authorization
-  - HRS/MRS and plan common stay with the orchestrator, which launches planner_g only; planner_g writes G common and launches planner_t only; planner_t writes T common and launches planner_a only
+  - "HRS/MRS and plan common stay with the orchestrator, which launches planner_g only; planner_g writes G common and launches planner_t only; planner_t writes T common and launches planner_a only"
   - each owner writes and verifies its own common without another agent, and gives each direct child only that common link plus prompt text specific to the child step
 
 agent_reuse_in_plan_creation: >-
@@ -27,8 +27,8 @@ agent_reuse_in_plan_creation: >-
 branch_order:
   law: laws.external_contour_first
   before_freeze: [task, complete external surface, project-anchored matrix TODO, command/method rows, parameter cells, parameter-relations table, result-contract table for every derived case, matrix review, incorporate into mutable normative plan, semantic audit and corrections to aggregate GREEN, present exact candidate, explicit user freeze authorization, freeze plan revision once]
-  service: [materialize frozen matrix snapshot, empty API or command schema with parameter validation, runnable server skeleton with no product logic, complete client, pipeline over derived focused cases, implementation by bounded matrix group, deploy and named checks, full pipeline]
-  library: [materialize frozen matrix snapshot, empty public callable and example skeletons with parameter validation and no product logic, runnable examples or testing script, pipeline over derived focused cases, implementation by bounded matrix group, full pipeline, publication]
+  service: [materialize frozen matrix snapshot, empty API or command schema with parameter validation, runnable server skeleton with no product logic, complete client, pipeline over derived focused cases, implementation by bounded matrix group, deploy and named checks, optional explicitly user-authorized full pipeline]
+  library: [materialize frozen matrix snapshot, empty public callable and example skeletons with parameter validation and no product logic, runnable examples or testing script, pipeline over derived focused cases, implementation by bounded matrix group, optional explicitly user-authorized full pipeline, publication]
   ownership: A-level target-file ownership is defined only in `ops/planning-a-authoring.yaml`
   context_refresh: >-
     after a plan mutation refresh only the not-yet-started child projections whose inputs changed,

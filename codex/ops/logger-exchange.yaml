@@ -1,6 +1,6 @@
 # onedrive-backup — AI Logger exchange card for Codex
 # EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
-template_version: v1.7.97
+template_version: v1.7.101
 # Read by EVERY launched agent — every `dispatch_*` event lists it — and by the orchestrator through
 # `agent_dispatch`. It is complete on its own: a role that reads no law excerpt needs nothing else to
 # take its task from the logger and to answer through it. `laws.logger_exchange` points here.
@@ -11,6 +11,9 @@ absolute_prohibitions:
   - NEVER open, close or replace a logger session unless you are the session model; use the `logger_session` your launch prompt names, and pass that same id to every unit you launch.
   - NEVER write a report into the Plan Manager unless your role is `researcher` or `plan_todo_api_researcher`.
   - NEVER write the work into a DEV installation — no `-dev` logger, Plan Manager, doc-store or Code Analysis Server; only the PRODUCTION ids of `production_services`.
+
+service_defects: >-
+  MUST IMMEDIATELY create a production Plan Manager bug on an actual defect in any used service, OWN or FOREIGN; record the executing model and discovery project name/UUID in evidence/description and anchor it to the affected project that NEEDS THE FIX; read back the bug UUID and anchor, never defer to a handoff or TODO; every role may do only this narrow registration write (laws.immediate_service_bug_registration, ops/service-bugs.yaml). This takes precedence over a role-specific report-only/no-write rule solely for the bug record. No exact model id exposed: state the known model identity and the unknown-id reason; never guess. Registration failure is reported as unfiled with its exact error, and filed at first availability.
 
 purpose: >-
   The AI Logger is the main exchange channel of the contract. Every role writes and reads it: the

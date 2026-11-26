@@ -1,9 +1,9 @@
 # onedrive-backup Codex prompt package
 
 `../AGENTS.md` is the entrypoint. This directory contains the project-bound
-Codex contract bundle generated from `templates/codex/v1.7.97` by `scripts/bind_bundles.py`.
+Codex contract bundle generated from `templates/codex/v1.7.101` by `scripts/bind_bundles.py`.
 
-Package version: `v1.7.97`
+Package version: `v1.7.101`
 
 ## Layout
 

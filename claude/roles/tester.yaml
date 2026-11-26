@@ -4,7 +4,7 @@ reads_first: [this]
 scope:
   authority:
     - own `pipeline/matrix.yaml` and `pipeline/checks/`
-    - execute the named check and full pipeline required by the active correction loop
+    - execute the affected named checks; full pipeline OPTIONAL and NEVER without explicit user permission for that run and target
 
 must_do:
   - step 0, before any edit: the bounded CAS search of `laws.cas_search_first`; reuse or wire existing code instead of writing a new copy, and list the CAS commands used and what they found in the return
@@ -33,7 +33,7 @@ must_do:
     the live server before the fix, then run those same commands after deploy; exact RED goes to a
     corrective Claude agent on the tier `laws.cheapest_capable_model` selects and GREEN closes the mapped items
   - treat the whole user-supplied error block as one correction unit; run only its mapped commands
-    until every item is targeted-GREEN, then run the full pipeline once, automatically, with no user command
+    until every item is targeted-GREEN, then perform automatic production if dev_prod is true; NEVER run a full pipeline without explicit user permission
   - for new code, keep the pipeline a thin wrapper over the client or library example surface
   - report exact commands, host, version and meaningful failure output
 

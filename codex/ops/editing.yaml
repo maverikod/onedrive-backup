@@ -14,5 +14,5 @@ before_edit:
   - note any nearby tests, configs, or callers that may need updates
 
 after_edit:
-  - re-read the changed region
+  - "inspect the changed region in the successful edit result; re-read only when that result leaves the surrounding context unclear"
   - run relevant verification commands

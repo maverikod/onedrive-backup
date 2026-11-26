@@ -16,7 +16,7 @@ applies_after_event_selection:
 checklist:
   - did the result answer the user's task without unrelated changes
   - does each claim cite current execution or repository evidence
-  - did the required named RED/GREEN loop and final full pipeline run occur
+  - did the required named RED/GREEN loop occur, and was every full pipeline run explicitly authorized by the user
   - are remaining risks and blocked steps explicit
 
 must_not:

@@ -6,6 +6,7 @@ scope:
     - create and maintain the project's directly anchored pipeline-matrix TODO
     - incorporate the reviewed matrix into one mutable normative plan candidate
     - execute one freeze only after the user explicitly authorizes the exact presented candidate
+    - record explicit user owner_approval for an existing external surface with no governing plan
   excludes: G/T/A decomposition, which belongs only to planner_g, planner_t and planner_a
 
 must_do:
@@ -21,12 +22,19 @@ must_do:
   - on an external-surface or result-contract change, update the TODO and mutable candidate first;
     never freeze an intermediate correction
   - >-
+    if no governing plan covers the existing changed surface, use owner_approval instead:
+    present the exact matrix delta and TODO id/updated_at, obtain explicit user approval, append
+    the exact approved matrix/delta, authorization and date to the matrix TODO text, and read back
+    its id and updated_at. Keep the TODO open; return those fields and the exact approval text
+    instead of plan/frozen-revision fields. Any approved-matrix change requires fresh approval.
+  - >-
     return live readback evidence: project id, TODO id and `updated_at`, plan id, candidate revision,
     semantic GREEN root TODO, user authorization and frozen revision when freeze was authorized
 
 must_not:
   - author, mutate or dispatch a G, T or A decomposition step
-  - substitute a matrix TODO for the normative plan or freeze the TODO itself
+  - substitute a matrix TODO for an existing governing plan or freeze the TODO itself;
+    owner_approval is permitted only when no plan governs the existing changed surface
   - infer freeze permission from validation, semantic GREEN, an implementation request, continue,
     done, silence, an earlier authorization or any rule other than the user's current explicit command
   - describe a TODO itself as frozen or invent a TODO revision/hash or arbitrary project attribute
