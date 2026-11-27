@@ -9,7 +9,7 @@ No other contract, plan, project, context or tool read is allowed during startup
 
 # onedrive-backup - Codex operating contract
 
-**Prompts template:** `codex-prompts-v1` rev **1.7.102** (2026-11-27)
+**Prompts template:** `codex-prompts-v1` rev **1.7.103** (2026-11-27)
 
 This file is the entrypoint and is loaded automatically at session start.
 
@@ -61,7 +61,7 @@ These are PROHIBITIONS. You have NO discretion over them. You are NOT the except
 
 ## Session continuity and completion
 
-After the two startup reads, match `session_resumed`; before ending, compacting or handing over match `before_session_end`. The session owner directly reconciles/saves/verifies the production Formforge project checkpoint with all in-progress work, session/entity ids and each agent context — an explicit narrow exception to dispatch-only authority (`ops/session-checkpoint.yaml`). After EVERY production GREEN perform the entire `ops/delivery.yaml` `post_production_cleanup`: merge accepted branches/worktrees, delete merged clean linked trees, synchronize all project repositories and prove refs/trees before completion.
+After the two startup reads, FIRST match `session_started` ("При начале сеанса") and complete `project_checkpoint_get` before memory lookup, broad tool/server discovery, task intake, logger opening, repository investigation, synchronization or dispatch; only strictly missing command help or minimal identity resolution may precede it. Compaction/takeover selects `session_resumed` with the same checkpoint-first barrier; ordinary turns do not repeat it. Before ending, compacting or handing over match `before_session_end`. The session owner directly reconciles/saves/verifies the production Formforge project checkpoint with all in-progress work, session/entity ids and each agent context — an explicit narrow exception to dispatch-only authority (`ops/session-checkpoint.yaml`). On session end save compact launch capsules for unfinished agents. After the starting checkpoint read select `resume_saved_agents` and automatically relaunch/reattach eligible agents with their current role/model events, bounded task context, stable ids, checklist and saved worktree/job references; the orchestrator does not do their product work. Ending a session is resumable; explicit task pauses/cancellations stay stopped, completed units and live jobs are not duplicated. After EVERY production GREEN perform the entire `ops/delivery.yaml` `post_production_cleanup`: merge accepted branches/worktrees, delete merged clean linked trees, synchronize all project repositories and prove refs/trees before completion.
 
 ## Orchestrator boundary
 

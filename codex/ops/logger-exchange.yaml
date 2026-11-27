@@ -1,6 +1,6 @@
 # onedrive-backup — AI Logger exchange card for Codex
 # EVENT-SELECTED OPERATION CARD. Only `roles/triggers.yaml` selects this file.
-template_version: v1.7.102
+template_version: v1.7.103
 # Read by EVERY launched agent — every `dispatch_*` event lists it — and by the orchestrator through
 # `agent_dispatch`. It is complete on its own: a role that reads no law excerpt needs nothing else to
 # take its task from the logger and to answer through it. `laws.logger_exchange` points here.
@@ -139,3 +139,7 @@ no_logger_mode:
     When the user disables the mode, the session model opens the logger session if it has none,
     appends every task and answer file of the mode to it in order with its original `occurred_at`,
     reads each back with `message_get`, and only then deletes the files.
+
+checkpoint_order: "At session start, complete session_started project_checkpoint_get FIRST, before opening a logger or searching memory/tool catalogs. Restore known session references; only then open one logger for a new top-level session, or reuse the verified current-session logger during compaction/takeover. Logger opening is never a prerequisite of checkpoint reading."
+
+agent_resumption: "After the checkpoint-first read, the session owner reconstructs a bounded agent task from its saved resume capsule, preserves original task/answer/checklist references, and writes the new launch task into the one current logger session. The resumed agent receives only its own context and permitted parent references. New logger/task/agent ids return to the project checkpoint; use resume_saved_agents, never perform product work in the orchestrator."

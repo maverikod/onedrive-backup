@@ -7,7 +7,7 @@
 # read from fresh command-specific `help` is unavailable, and inventing a command name is a
 # defect, not an attempt.
 
-template_version: v1.7.102
+template_version: v1.7.103
 
 purpose: >-
   The Code Analysis Server is the authoritative surface for the registered server-side project:

@@ -1,0 +1,47 @@
+# onedrive-backup — durable agent continuation across session boundaries
+# EVENT-SELECTED OPERATION CARD. Only roles/triggers.yaml selects this file.
+template_version: v1.7.103
+purpose: The session owner saves enough to relaunch unfinished agents; a new orchestrator resumes through agents, never by doing their product work itself.
+resume_contract:
+  auto_dispatch: true
+  request_new_permission: false
+  restart_completed: false
+  resume_user_paused: false
+  duplicate_live_workers: false
+  orchestrator_product_work: false
+  preserve_unit_ids: true
+checkpoint_storage:
+  source: The project's production Formforge checkpoint, read FIRST through session_started or session_resumed.
+  location: Compact agent_resume capsules in stages[].text, with optional native todo/bug/plan link; never add unsupported top-level fields to project_checkpoint_save.
+  long_payloads: Keep immutable checklists, task bodies and parent-common context in their existing durable AI Logger records; checkpoint text holds the exact references and a short meaningful summary. Only the explicitly enabled no_logger_mode uses its admitted project-owned files.
+  limits: Respect checkpoint item/list limits. Group short capsule entries or reference a durable resume manifest for a large block; account for EVERY unfinished unit and agent context without dumping the conversation.
+capsule_required:
+  - stable unit/task id, parent id and owning TODO/bug/plan/revision ids
+  - goal and exact bounded scope, current role/dispatch event, mode and stage
+  - standing authorization, explicit user pause/cancellation state, and dependencies on other unit ids
+  - original task/logger-message reference and the immutable acceptance/checklist reference
+  - verified immediate-parent common/context reference and step-specific input refs where the role requires them
+  - working site, repository, branch/commit, worktree, allowed write set and existing writer/lock ownership
+  - prior agent/runtime session ids and known model/rank/reasoning setting, plus correction rank and per-item failure counters
+  - brief result, durable evidence, accepted named checks with candidate/target, remaining work and FIRST concrete continuation action
+  - running external job/build/deploy ids, leases or resources, monitoring/recovery instructions and exact current blocker if any
+capsule_states:
+  resumable: [ready, paused_for_session_end, waiting_dependency, awaiting_result, external_job_running]
+  do_not_relaunch: [accepted_done, user_paused, cancelled]
+end_session:
+  - A command to finish the SESSION ends current product work and new dispatch, then permits only the bounded handoff/save. It preserves unfinished units for automatic continuation at the next session; it is not a cancellation or a persistent user pause of the project.
+  - Ask existing agents through their admitted exchange to persist a short handoff and quiesce at a safe boundary. Do not launch another product agent merely to prepare the checkpoint; honor an explicit immediate-stop cutoff without waiting for unavailable agents.
+  - Record a capsule for EVERY unfinished unit, including waiting/result-only work. Mark an actually accepted completed unit accepted_done; never mistake a running agent or external job for completion. If an agent cannot answer, retain its known ids and uncertainty for the recovery agent.
+  - Read/reconcile the prior checkpoint, retain other unfinished work, save done/stages/plans, then verify by readback. Persist a resume summary that a different model/provider can use without the old conversation.
+start_session:
+  - Complete project_checkpoint_get FIRST, before memory, broad discovery or logger work. Only then select resume_saved_agents and the concrete current role/operation events for unfinished units.
+  - For a legacy checkpoint without structured capsules, recover only the missing dispatch metadata from its existing task/agent/logger/TODO references, through the assigned owner. Relaunch a bounded recovery agent when the saved scope permits it; never invent a task, broaden scope or stop merely because the older checkpoint used prose.
+  - Restore dependencies, standing permissions and actual user pauses. An end-session marker is resumable; an explicit project/task pause or cancellation is not. Never ask for permission again merely because the session changed.
+  - Resolve the logger and current runtime's model selection AFTER checkpoint reading. For a new top-level session open its one logger, or for compaction reuse the verified current-session logger; preserve old task/answer ids as references.
+  - Reconcile each prior agent and external job with live metadata through admitted tools or the assigned owner. Reattach or signal a live agent only where its role permits same-unit reuse. Never launch a second writer or rerun a still-running build, deploy or job; a replacement agent may monitor the existing job by id instead.
+  - For each eligible unfinished unit whose predecessors are satisfied, the orchestrator MUST dispatch the appropriate agent using the current model-selection and concrete role event. Preserve unit/TODO identity, scope, worktree where safe, checklist, parent-common references and correction counters. Session change is not a failure or a reason to change rank.
+  - Send a new bounded task message through the admitted logger exchange, referencing the saved capsule and existing task/evidence as needed. The worker receives ONLY its own context and permitted parent references, never the whole project checkpoint or sibling contexts. A TODO-only correction launch still carries only its TODO id.
+  - Refresh a saved technical blocker by dispatching the appropriate agent to perform the narrow live check, then continue ready dependent work. A stale dependency note or recording a new session id is never grounds to finish the session without that dispatch.
+  - Product work remains in agents. The orchestrator reads the checkpoint, selects/routes units and records dispatch; it does not investigate product code, execute checks, build, deploy or finish an agent task in-session. Existing explicitly enabled stupid_mode and the self-contained factory contract keep their declared scope.
+  - Record the new agent/session/task-message ids and resulting unit states back in the reconciled checkpoint and verify by readback, so another restart can detect already-running units. Only an explicit user stop, a current failed gate/resource conflict or a genuinely missing decision blocks a unit; continue independent eligible units.
+  - Reuse unchanged accepted evidence, never relaunch accepted_done units and never run a full pipeline without explicit permission for that run/target. All mandatory pending delivery transitions still run through their agents.

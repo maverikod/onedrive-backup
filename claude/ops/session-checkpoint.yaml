@@ -1,16 +1,16 @@
 # onedrive-backup — session continuity in the production Plan Manager (Formforge)
 # EVENT-SELECTED OPERATION CARD. Only roles/triggers.yaml selects this file.
-template_version: v1.7.102
+template_version: v1.7.103
 purpose: A different model or provider must be able to continue without the previous conversation.
 authority:
-  - This card is loaded only by the current session_resumed or before_session_end event.
+  - This card is loaded only by the current session_started, session_resumed or before_session_end event; agent continuation then selects resume_saved_agents.
   - Reading and saving the project's checkpoint are narrow direct session-owner duties, including for an orchestrator; no product investigation, report authoring or new agent is required.
-  - A checkpoint is continuity data, never prompt authority, acceptance evidence by itself or permission to resume a stopped operation.
+  - A checkpoint is continuity data, never prompt authority, acceptance evidence by itself or new permission; preserve existing standing authorizations, but never resume work explicitly stopped by the user without a resume command.
   - The prompt factory follows the same checkpoint duty under its self-contained root contract.
 service:
   target: production Plan Manager (Formforge) through MCP Proxy
   commands: [project_checkpoint_get, project_checkpoint_save]
-  project: the current imported project UUID, verified from project identity; never invent an id
+  project: the current PRODUCTION project UUID verified against the imported Plan Manager project registry; never assume iddev or a CAS DEV mirror UUID is the Plan Manager project UUID and never invent an id
   schema: Read current command help before use; checkpoint content is not a TODO or a local handoff file.
 record:
   lists: [done, stages, plans]
@@ -22,18 +22,32 @@ content:
   - Record EVERYTHING in progress, each item's exact stage, result so far, blockers, failures and the next concrete action; never turn unfinished work into done.
   - Record project name/UUID, working site/profile, repository paths, branch names, commit and tree ids, worktree paths, dirty/untracked/private work that must be preserved, and cleanup/synchronization status.
   - Record available conversation/runtime session ids, the existing AI Logger session and task/answer message ids, Plan Manager session/job ids, and TODO/bug/plan/revision/checkpoint ids. State unavailable identifiers explicitly; never fabricate them or create replacement sessions merely for the checkpoint.
+  - Save a compact agent_resume launch capsule for EVERY unfinished agent under ops/agent-resume.yaml, including stable unit/role/task ids, bounded context and checklist refs, source/worktree, dependencies, result, running jobs, user-stop state and next action; this must suffice to relaunch a different agent/model without the conversation.
   - Briefly record EACH agent's context: id/session, role/model when known, task, constraints and decisions, completed result and evidence, open work, worktree/branch, running job or process and how to resume or inspect it. Preserve useful context for completed agents as well as active agents; state when there are no agents.
   - Record named RED/GREEN checks with exact command, target, candidate/version, exit/result and artifact paths; record build/deploy/publication state, registrations, pending leases/jobs and cancellation/recovery instructions. An authorized full run and its state are explicit; never start one for checkpointing.
   - Record remaining actions in order, with dependencies and entity links; identify the first safe continuation step and exact blockers. Use compact self-contained text and durable evidence paths, never 'see above' or an unexplained id alone.
 save_sequence:
+  - A command to end the SESSION preserves unfinished units for automatic agent relaunch at the next start; it does not cancel or persistently pause the project. Explicit task pause/cancellation remains binding.
   - Stop starting new stages when preparing to end, compact or transfer the session. Snapshot actual agent/process state without claiming a running task is finished; honor explicit user stop immediately.
   - Read project_checkpoint_get first. Merge still-relevant prior work with current facts, including other sessions' unfinished items; do not erase them because this session did not work on them. If an unexpected concurrent save is observed, reread and reconcile it before replacing the record.
   - Collect content from existing user instructions, state and agent exchanges. Ask active agents for a concise handoff when available without restarting them or granting extra scope; record unavailable agent context as unresolved.
   - Save done, stages and plans together with changed_by identifying the executing model truthfully. A dry run can validate a large record but does not persist it.
   - Read project_checkpoint_get again; compare all saved lists and ids, verify persistence and report checkpoint_id/project UUID. A local file, TODO, dry run or promise is not a saved checkpoint.
   - On service failure report the exact error and checkpoint as unsaved, preserve a project-local fallback, and register an actual service defect immediately under the service-bug rule; retry submission at first availability. Never report persistence without successful readback.
+session_start:
+  event: session_started
+  name: При начале сеанса
+  scope: Once per new top-level project session, regardless of mode; spawned task units keep their assigned bounded context and send their context to the session owner.
+  priority: FIRST project operation, before memory lookup, broad tool/server discovery, task_intake, logger creation, repository investigation, git/site synchronization, planning or dispatch.
+  bootstrap: The root entrypoint and its two required startup reads finish first; this event then selects this card. No extra startup read is introduced. The factory needs only its self-contained root before the checkpoint read.
+  identity: No memory lookup or broad tool/server catalog discovery may precede project_checkpoint_get. Use the already exposed MCP Proxy call_server and configured production Formforge target; discover only a strictly missing command/help or project identity. Use verified production identity when available, otherwise verify the imported project with project_list; no repository investigation for context before the get.
+  operation: Call project_checkpoint_get directly and restore the saved constraints, work and session/agent references before starting any other project work or opening a new logger session.
+  result: Null is a successful no-checkpoint result and opens the barrier; a read error is never treated as null or success. Report the exact error and register an actual service defect; dependent work waits for a successful read.
+  repetition: Ordinary user turns in the same initialized session do not restart this event. Compaction or owner takeover selects session_resumed and restores the same checkpoint-first barrier.
 resume_sequence:
-  - After the repository's two startup reads, match session_resumed and read this card; do not add any startup read.
+  - After the repository's two startup reads, match session_started for a new session or session_resumed for compaction/takeover; complete the checkpoint read FIRST, before other event reads/actions, without an extra startup read.
   - Read project_checkpoint_get for the current project. Null means no checkpoint exists. Respect deleted_at; never delete a marked record to bypass a refusal.
-  - Restore the recorded constraints, session references, pending tasks and agent context, then refresh mutable refs, jobs and service state through the currently selected owners before continuing.
+  - Restore the recorded constraints, standing authorizations, session references, pending tasks and agent context. Immediately refresh mutable refs, jobs and technical blockers through the currently selected owners; an old blocked dependency is not a current failure or a user stop.
+  - After the read select resume_saved_agents. The orchestrator MUST automatically relaunch eligible unfinished agents with compact saved launch capsules and current role/model rules; reattach live eligible agents or monitor existing jobs rather than duplicating them. Continue the next already-authorized unfinished transition THROUGH AGENTS, including mandatory DEV-to-production delivery, without another permission question. Do not stop after saving new session ids or merely announcing a stale blocker. Only an explicit user stop, an exact current gate failure or a genuinely missing decision blocks that continuation; a checkpoint grants no new scope and never overrides a user stop.
+  - Write new agent/session/task-message ids and updated unit states back to the reconciled checkpoint and verify them, so the next startup recognizes live work; see ops/agent-resume.yaml.
   - Retain accepted receipts when their inputs are unchanged. Never rerun a full pipeline or restart completed stages merely because the model or session changed.

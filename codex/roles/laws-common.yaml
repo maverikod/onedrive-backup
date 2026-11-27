@@ -56,7 +56,13 @@ laws:
   session_checkpoint: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before ending, compacting or handing over a session,
     and when starting or resuming project work] MUST preserve a self-contained project checkpoint
-    in production Formforge: read project_checkpoint_get, reconcile still-relevant unfinished work,
+    in production Formforge. At a new top-level session, session_started is FIRST after mandatory
+    contract bootstrap: complete project_checkpoint_get before task intake, logger opening,
+    memory lookup, broad tool/server discovery, repository investigation, git/site synchronization
+    or dispatch; only strictly missing command/help/identity
+    discovery may precede it. Null is a valid empty checkpoint; an error never opens the barrier.
+    After compaction/takeover session_resumed restores this same checkpoint-first barrier. Then
+    reconcile still-relevant unfinished work,
     save ALL done/stages/plans with project_checkpoint_save, then read back and compare. Record
     the objective, user constraints/decisions, EVERYTHING in progress and exact next actions,
     available conversation/runtime/AI Logger/Plan Manager session and job ids, TODO/bug/plan ids,
@@ -67,7 +73,15 @@ laws:
     The session owner, including an orchestrator, performs only this narrow checkpoint read/write
     directly; this is not a report or a replacement for the AI Logger exchange. Before resuming,
     read the checkpoint after the two startup reads and current event selection; refresh mutable
-    facts without replaying completed stages or full runs. See ops/session-checkpoint.yaml.
+    facts and technical blockers, then continue already-authorized unfinished work without another
+    command; a stale dependency blocker is not a user stop. Never stop after merely saving session
+    ids. Honor an explicit user stop and exact current failing gates. Do not replay completed stages
+    or full runs. Save compact launch capsules for every unfinished agent; ending a session is
+    not task cancellation. After checkpoint reading the orchestrator MUST select resume_saved_agents
+    and relaunch/reattach eligible unfinished agents through current role/model events, retaining
+    unit ids, bounded context, checklist and correction counters. Never replace that dispatch with
+    in-session product work or status-only reporting; do not duplicate live jobs or resume explicitly
+    user-paused/cancelled units. See ops/session-checkpoint.yaml and ops/agent-resume.yaml.
   role_and_trigger_compliance: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: every action in the assigned stage] Role limits and central events BIND. MUST: use only
     the concrete cards already selected for the current event and stay inside the constraints of
@@ -412,7 +426,7 @@ laws:
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: every agent dispatch, every launched agent unit and
     every answer] The AI Logger is the main exchange channel: every role writes and reads it, as
     `ops/logger-exchange.yaml` spells out. The session model opens ONE logger session per session,
-    right after the two startup reads (`common.startup_contract.logger_session`), and that id is
+    after the checkpoint read, which follows the two startup reads (`common.startup_contract.logger_session`), and that id is
     passed to every unit and every child dispatch. The launcher writes the complete task as one
     logger message and launches with the three-line prompt of that card; the agent reads the task
     with `message_get`, writes its whole answer as one reply message, and its final message is the

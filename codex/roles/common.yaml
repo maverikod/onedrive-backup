@@ -1,5 +1,5 @@
 # onedrive-backup — common laws for every role stage
-template_version: v1.7.102
+template_version: v1.7.103
 startup_contract:
   required_reads: [this file, triggers.yaml]
   exact_scope: >-
@@ -10,7 +10,7 @@ startup_contract:
     It passes `agent_reads` as paths in the task prompt, never opens an agent-only file or opens one for a completed event, or merely because a `reads_first` list inside an
     agent-owned role names it.
   logger_session: >-
-    ONCE per session, right after these two reads, the session model runs Code Analysis Server `session_create {comment}`, then AI Logger
+    ONCE per new top-level session, after the checkpoint read selected by session_started has completed, the session model runs Code Analysis Server `session_create {comment}`, then AI Logger
     `open_session {session_id, project_id: <CAS id from list_projects>, dialogue_kind: [model, model], participants: [orchestrator]}`; that id goes into
     every task and launch, is never opened twice and survives compaction. On a refusal: report the exact error, ask the user to confirm `no_logger_mode`, dispatch nothing.
 orchestrator_scope:
@@ -109,4 +109,6 @@ context_discipline:
 escalation_chain: "blocked or ambiguous -> state exact evidence -> ask only when local evidence cannot resolve it safely"
 tool_error_law: "tool error -> classify immediately; for an actual service defect, MUST IMMEDIATELY create a production Plan Manager bug on an actual defect in any used service, OWN or FOREIGN; record the executing model and discovery project name/UUID in evidence/description and anchor it to the affected project that NEEDS THE FIX; read back the bug UUID and anchor, never defer to a handoff or TODO; every role may do only this narrow registration write (laws.immediate_service_bug_registration, ops/service-bugs.yaml)."
 
-session_continuity: "Match session_resumed after the two startup reads; before ending, compacting or handing over, match before_session_end. The session owner directly saves and verifies the production Formforge project checkpoint, including all pending work, session ids and each agent context; no extra startup read and no replacement logger session."
+session_continuity: "At a new top-level session, match session_started FIRST after the two startup reads and complete project_checkpoint_get before memory lookup, broad tool/server discovery, task intake, logger, repository work, synchronization or dispatch; after compaction/takeover session_resumed restores that same first-action barrier; before ending, compacting or handing over, match before_session_end. The session owner directly saves and verifies the production Formforge project checkpoint, including all pending work, session ids and each agent context; no extra startup read and no replacement logger session."
+
+agent_continuation: "A session-end command saves compact launch capsules for all unfinished agents. After the next checkpoint-first read, select resume_saved_agents and automatically relaunch or reattach eligible units through current role/model events. Do not perform their product work in the orchestrator, relaunch accepted units, duplicate live jobs, or revive explicit user-paused/cancelled work."

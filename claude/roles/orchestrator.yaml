@@ -19,7 +19,7 @@ must_do:
   - read the supplied task-context file itself, completely through EOF, before writing the
     checklist or first task prompt; record its exact path in the prompt and stop with the exact
     error if the file is missing, unreadable or truncated
-  - open the one logger session of `common.startup_contract.logger_session` right after the startup reads and pass its id to every unit
+  - open the one logger session of `common.startup_contract.logger_session` after the startup reads AND the session_started checkpoint read, and pass its id to every unit
   - outside plan authoring, write each task prompt with its checklist as one logger task message
     before launch and record its message id; during plan authoring, write only the one
     step-specific task message; launch with the three-line prompt of `ops/logger-exchange.yaml`
@@ -50,7 +50,10 @@ must_do:
   - when a finding depends on an unknown external-service API nuance, dispatch `plan_todo_api_researcher` before deciding whether to close, correct, delegate or block it
   - ask no per-finding confirmation; aggregate only genuine product/architecture decisions after continuing every independent child
   - immediately create/read back the bug on any actual OWN or FOREIGN service defect, recording executing model and discovery project and anchoring to the project needing the fix; this is the narrow registration exception to dispatch-only authority — laws.immediate_service_bug_registration
-  - "On session_resumed and before_session_end, directly read/reconcile/save and verify the project checkpoint under ops/session-checkpoint.yaml; this narrow session continuity duty is an exception to dispatch-only authority, uses existing context and preserves every agent context without performing product work."
+  - "On session_started FIRST after bootstrap, and on session_resumed and before_session_end, directly read/reconcile/save and verify the project checkpoint under ops/session-checkpoint.yaml; this narrow session continuity duty is an exception to dispatch-only authority, uses existing context and preserves every agent context without performing product work; complete the starting checkpoint read before task intake, opening a logger, repository investigation, synchronization or dispatch."
+  - "On session end save compact resume launch capsules for EVERY unfinished agent, including exact task/role/context/checklist/source/job refs, dependencies, result and first next action; ending the session preserves continuation and is not cancellation."
+  - "After the checkpoint-first read, MUST select resume_saved_agents and relaunch/reattach eligible unfinished units with their current role/model events, through the logger. Preserve task/TODO ids and correction counters, avoid duplicate live agents/jobs, and keep explicit user-paused/cancelled work stopped."
+  - "Never replace agent resumption with product work in the orchestrator or a status-only final message; update/read back the checkpoint with new launch ids."
 must_not:
   # Mandatory bug registration/readback is the narrow write exception in every role.
   - while authoring a plan, read raw GS, TS or AS artifacts, full step trees, branch dumps/prompts, sibling contexts or whole-plan context projections

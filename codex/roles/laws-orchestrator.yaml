@@ -430,7 +430,7 @@ laws:
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: every agent dispatch, every launched agent unit and
     every answer] The AI Logger is the main exchange channel: every role writes and reads it, as
     `ops/logger-exchange.yaml` spells out. The session model opens ONE logger session per session,
-    right after the two startup reads (`common.startup_contract.logger_session`), and that id is
+    after the checkpoint read, which follows the two startup reads (`common.startup_contract.logger_session`), and that id is
     passed to every unit and every child dispatch. The launcher writes the complete task as one
     logger message and launches with the three-line prompt of that card; the agent reads the task
     with `message_get`, writes its whole answer as one reply message, and its final message is the
