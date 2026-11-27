@@ -8,8 +8,8 @@ laws:
     authoritative. Prepare and verify work on the active site. NEVER edit `main` directly or
     rewrite published history. Push, promotion and site-to-site synchronisation require the user's
     explicit command outside the two mandatory standing exceptions: `two_site_sync` and the
-    complete automatic dev_prod lifecycle, final synchronization included (`deployment_block_lifecycle`).
-    A merge into `main` and push of `main` require the user's explicit permission outside dev_prod.
+    complete production lifecycle: automatic dev_prod plus `post_production_cleanup` after EVERY production GREEN, including production-only projects (`deployment_block_lifecycle`, ops/delivery.yaml).
+    A merge into `main` and push of `main` require the user's explicit permission outside dev_prod or mandatory `post_production_cleanup` after EVERY production GREEN.
     For a `dev_prod` service, the user's standing rule authorizes the AUTOMATIC production pass
     immediately after every affected named DEV check is GREEN: first merge ALL content from the
     current working branch AND the actual DEV source branch into `main`, resolve conflicts without
@@ -23,7 +23,7 @@ laws:
     Server] MANDATORY and without asking: the model performs this exchange itself, including the
     GitHub push of both `cas` and `local`. This is one of two standing exceptions to "push and
     synchronisation only on the user's explicit command"; the other is the automatic dev_prod
-    lifecycle including its final project-wide synchronization (`deployment_block_lifecycle`), and it is the precondition of every CAS
+    lifecycle and mandatory `post_production_cleanup` after EVERY production GREEN, including production-only projects (`deployment_block_lifecycle`), and it is the precondition of every CAS
     search step (`cas_search_first`): it keeps the server repository and its index identical to
     the work site. Topology: the local checkout and the server repository carry the same two
     branches, `local` and `cas`; GitHub (`origin`) is the only exchange point and there is no

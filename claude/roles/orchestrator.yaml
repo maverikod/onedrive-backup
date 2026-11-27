@@ -50,6 +50,7 @@ must_do:
   - when a finding depends on an unknown external-service API nuance, dispatch `plan_todo_api_researcher` before deciding whether to close, correct, delegate or block it
   - ask no per-finding confirmation; aggregate only genuine product/architecture decisions after continuing every independent child
   - immediately create/read back the bug on any actual OWN or FOREIGN service defect, recording executing model and discovery project and anchoring to the project needing the fix; this is the narrow registration exception to dispatch-only authority — laws.immediate_service_bug_registration
+  - "On session_resumed and before_session_end, directly read/reconcile/save and verify the project checkpoint under ops/session-checkpoint.yaml; this narrow session continuity duty is an exception to dispatch-only authority, uses existing context and preserves every agent context without performing product work."
 must_not:
   # Mandatory bug registration/readback is the narrow write exception in every role.
   - while authoring a plan, read raw GS, TS or AS artifacts, full step trees, branch dumps/prompts, sibling contexts or whole-plan context projections

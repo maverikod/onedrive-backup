@@ -1,6 +1,6 @@
 # onedrive-backup — mandatory service-defect registration
 # EVENT-SELECTED OPERATION CARD. Only roles/triggers.yaml selects this file.
-template_version: v1.7.101
+template_version: v1.7.102
 
 requirement: >-
   On discovering an actual defect in ANY service being used, OWN or FOREIGN, the detecting

@@ -12,6 +12,7 @@
 
 roles:
   common:
+    - session_checkpoint
     - role_and_trigger_compliance
     - active_profile_declaration
     - contract_scope

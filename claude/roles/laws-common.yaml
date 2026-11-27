@@ -53,6 +53,21 @@ variables:
                           # separate DEV and PRODUCTION installations; see `dev_prod_instances`. Only the user sets it.
 
 laws:
+  session_checkpoint: >-
+    [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before ending, compacting or handing over a session,
+    and when starting or resuming project work] MUST preserve a self-contained project checkpoint
+    in production Formforge: read project_checkpoint_get, reconcile still-relevant unfinished work,
+    save ALL done/stages/plans with project_checkpoint_save, then read back and compare. Record
+    the objective, user constraints/decisions, EVERYTHING in progress and exact next actions,
+    available conversation/runtime/AI Logger/Plan Manager session and job ids, TODO/bug/plan ids,
+    repository branches/commits/worktrees/private state, named acceptance and deployment receipts,
+    blockers and brief context for EACH agent (id/session, task, result, open work and evidence).
+    Never fabricate an id, treat in-progress work as done, or erase another session's pending work.
+    A replacement has no history or undo; no TODO, local file or dry run substitutes for persistence.
+    The session owner, including an orchestrator, performs only this narrow checkpoint read/write
+    directly; this is not a report or a replacement for the AI Logger exchange. Before resuming,
+    read the checkpoint after the two startup reads and current event selection; refresh mutable
+    facts without replaying completed stages or full runs. See ops/session-checkpoint.yaml.
   role_and_trigger_compliance: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: every action in the assigned stage] Role limits and central events BIND. MUST: use only
     the concrete cards already selected for the current event and stay inside the constraints of
@@ -197,7 +212,7 @@ laws:
     the user's explicit command, with two standing exceptions that need no separate command: the mandatory `cas`+`local` exchange of
     `two_site_sync`, and the complete production pass and final project-wide synchronization of
     `dev_prod_instances` and `deployment_block_lifecycle`, which the standing automatic DEV-to-production rule already authorizes
-    after targeted DEV GREEN. Inside that exchange the integration branch is
+    after targeted DEV GREEN, plus mandatory `post_production_cleanup` after EVERY production GREEN, including production-only projects. Inside that exchange the integration branch is
     merged and its conflicts resolved, while the other site's non-integration branch (the server's
     `local` when the work site is local, the local `cas` when the work site is CAS) is a disposable
     mirror: overwrite it from GitHub without analysing or preserving them, its differences being
@@ -206,11 +221,11 @@ laws:
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: before a CAS-backed operation in the `local` profile] Ordinary local reads, edits,
     builds and tests never require branch synchronisation or mirror attestation. Current local
     content reaches CAS through `two_site_sync`, once before each block; outside that exchange do
-    not push or synchronise without the user's explicit command, except the automatic dev_prod production pass after targeted DEV GREEN and its mandatory final synchronization after production GREEN. Read-only agents use the local checkout directly and do not attest
+    not push or synchronise without the user's explicit command, except the automatic dev_prod production pass after targeted DEV GREEN and mandatory `post_production_cleanup` after EVERY production GREEN, including production-only projects. Read-only agents use the local checkout directly and do not attest
     local/CAS refs.
   branch_sync_after_every_step: >-
     [APPLIES AFTER THIS CARD IS EVENT-SELECTED: after a local step] Report the local result and leave remote and CAS refs untouched
-    until the next `two_site_sync`, except the automatic dev_prod production pass after targeted DEV GREEN and its mandatory final synchronization after production GREEN.
+    until the next `two_site_sync`, except the automatic dev_prod production pass after targeted DEV GREEN and mandatory `post_production_cleanup` after EVERY production GREEN, including production-only projects.
     Outside those two exceptions, push or synchronise only when the user explicitly commands it. Never imply that a local
     commit or prepared release was pushed.
   worktree_location: >-
@@ -314,6 +329,14 @@ laws:
     production ONLY FROM `main`, deploy and run the SAME named checks as the GREEN DEV set.
     No extra production command and no stop at ready-for-production. A full pipeline runs ONLY
     on an explicit user command for that run and target (`full_pipeline_user_permission`).
+    AFTER EVERY PRODUCTION GREEN, WITHOUT EXCEPTION, inventory ALL project branches and LOCAL
+    worktrees again; merge remaining accepted project branches/worktree commits into their owning
+    working branch and main where required, prove source-commit ancestry, then DELETE every merged
+    clean linked worktree with normal git worktree remove. Inspect ignored/untracked content too;
+    preserve private/unrelated files and record a blocked removal instead of forcing it. Never
+    delete the authoritative checkout or move immutable release snapshots. If integration changes
+    accepted content, return through affected DEV and production checks before completion. This
+    cleanup repeats on EVERY production GREEN, even when an earlier DEV cleanup already ran.
     AFTER PRODUCTION GREEN on that SAME set, perform FULL SYNCHRONIZATION of EVERY repository
     of this project: the local checkout, GitHub origin and registered CAS mirror (and any other
     configured replica). Inventory and account for every branch/ref and remaining worktree,

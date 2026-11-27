@@ -250,7 +250,7 @@ laws:
     Server] MANDATORY and without asking: the model performs this exchange itself, including the
     GitHub push of both `cas` and `local`. This is one of two standing exceptions to "push and
     synchronisation only on the user's explicit command"; the other is the automatic dev_prod
-    lifecycle including its final project-wide synchronization (`deployment_block_lifecycle`), and it is the precondition of every CAS
+    lifecycle and mandatory `post_production_cleanup` after EVERY production GREEN, including production-only projects (`deployment_block_lifecycle`), and it is the precondition of every CAS
     search step (`cas_search_first`): it keeps the server repository and its index identical to
     the work site. Topology: the local checkout and the server repository carry the same two
     branches, `local` and `cas`; GitHub (`origin`) is the only exchange point and there is no

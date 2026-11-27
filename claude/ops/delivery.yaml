@@ -142,7 +142,18 @@ two_site_exchange:
     The mandatory `cas`+`local` exchange through GitHub runs before every block without asking; the
     exact steps and the index-settled gate are `ops/cas-tools.yaml` block `two_site_sync`. Server-side
     git runs only through the CAS git commands.
-  main: "main is not an exchange branch. Outside dev_prod, merge/push main needs explicit user permission and affected checks GREEN. With dev_prod true, targeted DEV GREEN requires mandatory immediate production: merge ALL current-branch AND actual DEV-source content into main, push main, build production only from main. A full pipeline is OPTIONAL in DEV, production and libraries. NEVER run it without explicit user permission for that run and target, including through build, deploy, startup or CI wrappers. Targeted GREEN never authorizes a full run and missing full-run permission never blocks production or delivery. Record full_pipeline: not_run_not_authorized when permission is absent."
+  main: "main is not an exchange branch. Outside dev_prod or mandatory post_production_cleanup after EVERY production GREEN (including production-only projects), merge/push main needs explicit user permission and affected checks GREEN. With dev_prod true, targeted DEV GREEN requires mandatory immediate production: merge ALL current-branch AND actual DEV-source content into main, push main, build production only from main. A full pipeline is OPTIONAL in DEV, production and libraries. NEVER run it without explicit user permission for that run and target, including through build, deploy, startup or CI wrappers. Targeted GREEN never authorizes a full run and missing full-run permission never blocks production or delivery. Record full_pipeline: not_run_not_authorized when permission is absent."
+
+post_production_cleanup:
+  applies_after_event_selection: EVERY production GREEN, including production-only projects; never skip because DEV cleanup ran
+  authority: Mandatory standing user instruction; merge, normal merged-worktree removal and full project synchronization need no additional command.
+  steps:
+    - Inventory ALL project branches/refs and LOCAL worktrees, including dirty, untracked and ignored files; classify immutable release snapshots and preserve private/unrelated work.
+    - Integrate all remaining accepted project branch/worktree content into the owning local/cas working branch and main where required, preserving accepted changes; record every source commit and prove ancestry, never substitute a file snapshot or patch-equivalence claim.
+    - If integration changes the accepted candidate, return through the affected named DEV and production checks; a production-only project uses its approved production checks. A full pipeline still requires explicit permission for that run/target.
+    - DELETE every merged clean linked worktree with normal git worktree remove after ancestry proof; remove only merged disposable task refs with normal git branch -d. Never force-remove, delete the authoritative checkout, discard private files or move immutable release branches/tags; record exact blockers and preserved paths.
+    - Fully synchronize EVERY repository of this project (local, GitHub and registered CAS/other replicas), publish and fetch corresponding agreed refs, and prove exact matching commit/tree ids and zero ahead/behind while preserving intentional working/main topology.
+    - Report completion only after cleanup disposition and replica readback, then update the session checkpoint with the final state and any remaining work.
 
 dev_prod:
   promotion_contract:
@@ -181,6 +192,8 @@ dev_prod:
       command for an additional check set changes only that set; it is never needed for promotion.
       A full pipeline is OPTIONAL and runs ONLY on an explicit user command for that run/target.
     production_green: >-
+      First perform the ENTIRE post_production_cleanup block on EVERY production GREEN: merge
+      remaining accepted branches/worktrees, prove ancestry and DELETE merged clean linked trees.
       Immediately fully synchronize EVERY repository of this project: local, GitHub origin, CAS
       when registered and other configured replicas. Inventory all branch/tag refs and remaining
       worktrees, preserve private work, integrate unique accepted content non-destructively, push

@@ -1,5 +1,5 @@
 # onedrive-backup — orchestrator event registry for Codex
-template_version: v1.7.101
+template_version: v1.7.102
 mode_aliases: {planning: [planning, plan], plan_todo_repair: [plan_todo_repair, plan-todo-repair, "исправление TODO после проверки плана"], analysis: [analysis, inspect], stupid_mode: [stupid_mode, stupid-mode, single-model, "Режим тупого"], no_logger_mode: [no_logger_mode, no-logger, "без логгера", "Режим без логгера"], prompt_development: [prompt_development, prompt-development, autonomy], refactoring: [refactoring, implement]}
 registry_contract:
   purpose: This complete startup registry selects files by event; it is not permission to read every path.
@@ -18,6 +18,9 @@ registry_contract:
     - an empty `orchestrator_reads` means the startup contract already contains all authority needed
     - after compaction, reread only the entrypoint, common and this registry, then the manuals for the next event; do not replay manuals from completed events
 events:
+  session_resumed: {"when": "first project work in a new session, after compaction, or when taking over from another session or model", "orchestrator_reads": ["codex/ops/session-checkpoint.yaml"], "agent_reads": [], "action": "the session owner directly reads the current project checkpoint from production Formforge, restores pending work and agent context, and refreshes mutable facts through the selected owners; no extra startup read or new session is required"}
+  before_session_end: {"when": "before ending the work session, preparing compaction, handing over to another model/session, or a known shutdown/context-loss boundary", "orchestrator_reads": ["codex/ops/session-checkpoint.yaml"], "agent_reads": ["codex/ops/session-checkpoint.yaml"], "action": "the session owner MUST directly reconcile and save all in-progress work, known session/entity ids and brief context of every agent in the production Formforge project checkpoint, then verify by readback before the closing handoff; a failed save is reported as unsaved"}
+  production_green_cleanup: {"when": "EVERY production run finishes GREEN on its required named checks (including a production-only project)", "orchestrator_reads": ["codex/roles/orchestrator.yaml", "codex/ops/model-selection.yaml"], "agent_reads": ["codex/ops/delivery.yaml"], "action": "MUST dispatch the complete post_production_cleanup block immediately on EVERY production GREEN, merge accepted project branches/worktrees, prove ancestry, delete merged clean linked worktrees and synchronize ALL project repositories with ref/tree readback; no separate user command or full pipeline is required"}
   task_intake:
     when: every new user request
     orchestrator_reads: []
@@ -139,7 +142,7 @@ events:
   pipeline_result:
     when: an agent returns a mapped pipeline RED or GREEN result
     orchestrator_reads: [codex/roles/orchestrator.yaml, codex/ops/model-selection.yaml]
-    action: route RED to the corrective rank of `laws.cheapest_capable_model`; on complete-block DEV GREEN with dev_prod true MUST dispatch merged-worktree cleanup then production from main and the same named checks; on production GREEN MUST dispatch full project repository synchronization before reporting (laws.deployment_block_lifecycle); other GREEN routes to the next planned unit
+    action: route RED to the corrective rank of `laws.cheapest_capable_model`; on complete-block DEV GREEN with dev_prod true MUST dispatch merged-worktree cleanup then production from main and the same named checks; on production GREEN MUST dispatch post_production_cleanup (merge branches/worktrees, delete merged clean trees, full project repository synchronization) before reporting (laws.deployment_block_lifecycle); other GREEN routes to the next planned unit
   requested_risk_report:
     when: after pipeline evidence, the user requests a human-readable risk report
     orchestrator_reads: [codex/roles/orchestrator.yaml, codex/ops/model-selection.yaml]
@@ -163,13 +166,13 @@ events:
     when: a push, pull, fetch, remote update, version release or package publication is requested
     orchestrator_reads: [codex/roles/orchestrator.yaml]
     agent_reads: [codex/ops/delivery.yaml]
-    gate: the mandatory `cas` and `local` push inside `laws.two_site_sync` needs no command and `main` is never part of it; the automatic dev_prod production pass immediately after targeted DEV GREEN requires merging ALL current and DEV source content into main and pushing main, plus full project synchronization after production GREEN; for every other remote change the user must explicitly authorize the remote-changing operation
+    gate: the mandatory `cas` and `local` push inside `laws.two_site_sync` needs no command and `main` is never part of it; the automatic dev_prod production pass immediately after targeted DEV GREEN requires merging ALL current and DEV source content into main and pushing main, plus full project synchronization after production GREEN; mandatory post_production_cleanup after EVERY production GREEN (including production-only projects) is also already authorized; for every other remote change the user must explicitly authorize the remote-changing operation
     action: dispatch the selected modifying owner; the orchestrator performs no git or publication command
   site_synchronization:
     when: local-to-CAS or CAS-to-local synchronization is requested, final project synchronization after production GREEN is due, or the mandatory `laws.two_site_sync` exchange is due before the first agent unit of a block
     orchestrator_reads: [codex/roles/orchestrator.yaml]
     agent_reads: [codex/ops/cas-tools.yaml]
-    gate: the mandatory `laws.two_site_sync` exchange and full project repository synchronization after production GREEN under `laws.deployment_block_lifecycle` need no separate command; for every other site change the user must explicitly authorize the site-changing operation
+    gate: the mandatory `laws.two_site_sync` exchange and full project repository synchronization after production GREEN under `laws.deployment_block_lifecycle` need no separate command; mandatory post_production_cleanup after EVERY production GREEN (including production-only projects) is also already authorized; for every other site change the user must explicitly authorize the site-changing operation
     action: dispatch the selected modifying owner; the orchestrator performs no transfer command
   tool_failure:
     when: a tool returns misuse, denial, transport, infrastructure or server failure

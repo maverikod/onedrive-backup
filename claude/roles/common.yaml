@@ -1,5 +1,5 @@
 # onedrive-backup — common laws for every role stage
-template_version: v1.7.101
+template_version: v1.7.102
 startup_contract:
   required_reads: [this file, triggers.yaml]
   exact_scope: >-
@@ -110,3 +110,5 @@ context_discipline:
 
 escalation_chain: "blocked or ambiguous -> state exact evidence -> ask only when local evidence cannot resolve it safely"
 tool_error_law: "tool error -> classify immediately; for an actual service defect, MUST IMMEDIATELY create a production Plan Manager bug on an actual defect in any used service, OWN or FOREIGN; record the executing model and discovery project name/UUID in evidence/description and anchor it to the affected project that NEEDS THE FIX; read back the bug UUID and anchor, never defer to a handoff or TODO; every role may do only this narrow registration write (laws.immediate_service_bug_registration, ops/service-bugs.yaml)."
+
+session_continuity: "Match session_resumed after the two startup reads; before ending, compacting or handing over, match before_session_end. The session owner directly saves and verifies the production Formforge project checkpoint, including all pending work, session ids and each agent context; no extra startup read and no replacement logger session."
